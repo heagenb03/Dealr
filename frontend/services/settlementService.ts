@@ -55,9 +55,6 @@ export function validateSettlements(balances: PlayerBalance[]): Validation {
   if (!Array.isArray(balances) || balances.length === 0) {
     validation.errors.push('No player balances available for validation.');
     return validation;
-  } else if(balances.length < 2) {
-    validation.errors.push('At least two players are required to validate settlements.');
-    return validation;
   } else if (playersWithNoActivity.length > 0) {
     validation.errors.push(`Players with no activity: ${playersWithNoActivity.map(p => p.playerName).join(', ')}.`);
     return validation;
@@ -74,6 +71,6 @@ export function validateSettlements(balances: PlayerBalance[]): Validation {
   if (validation.errors.length === 0) {
     validation.isValid = true;
   }
-  
+
   return validation;
 }
