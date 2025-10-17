@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { GameProvider } from '@/contexts/GameContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -49,11 +50,32 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <GameProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen 
+            name="game/new" 
+            options={{ 
+              presentation: 'modal',
+              title: 'New Game'
+            }} 
+          />
+          <Stack.Screen 
+            name="game/active" 
+            options={{ 
+              title: 'Active Game'
+            }} 
+          />
+          <Stack.Screen 
+            name="game/summary" 
+            options={{ 
+              title: 'Game Summary'
+            }} 
+          />
+        </Stack>
+      </ThemeProvider>
+    </GameProvider>
   );
 }
