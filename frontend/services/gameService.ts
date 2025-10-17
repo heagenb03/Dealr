@@ -1,5 +1,5 @@
-import { Game, Transaction, Player, PlayerBalance, GameSummary } from '@/types/game';
-import { calculateOptimalSettlements } from './settlementService';
+import { Game, Transaction, Player, PlayerBalance, GameSummary, Validation } from '@/types/game';
+import { calculateOptimalSettlements, validateSettlements } from './settlementService';
 
 export class GameService {
   static calculateBalances(game: Game): PlayerBalance[] {
@@ -27,7 +27,7 @@ export class GameService {
         }
       }
     });
-    
+
     return Array.from(balances.values());
   }
   
@@ -35,7 +35,7 @@ export class GameService {
     const balances = this.calculateBalances(game);
     const settlements = calculateOptimalSettlements(balances);
     const totalPot = balances.reduce((sum, b) => sum + b.totalBuyins, 0);
-    
+
     return {
       game,
       balances,
@@ -71,6 +71,10 @@ export class GameService {
     
     game.players.push(player);
     return player;
+  }
+  
+  static validateGame(balances: PlayerBalance[]): Validation {
+    return validateSettlements(balances);
   }
   
   static completeGame(game: Game): void {
