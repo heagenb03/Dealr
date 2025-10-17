@@ -62,6 +62,43 @@ export default function ActiveGameScreen() {
   };
   
   const handleCompleteGame = () => {
+    const balances = GameService.calculateBalances(activeGame);
+    const validation = GameService.validateGame(balances);
+    
+    if (!validation.isValid) {
+      Alert.alert(
+        'Cannot Complete Game',
+        `Please fix the following issues:\n\n${validation.errors.join('\n\n')}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    if (validation.warnings.length > 0) {
+      Alert.alert(
+        'Game Data Warning',
+        `The following issues were detected:\n\n${validation.warnings.join('\n\n')}\n\nDo you want to complete the game anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Complete Anyway',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                GameService.completeGame(activeGame);
+                await updateGame(activeGame);
+                router.push('/game/summary' as any);
+              } catch (error) {
+                Alert.alert('Error', 'Failed to complete game. Please try again.');
+                console.error('Error completing game:', error);
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
     Alert.alert(
       'Complete Game',
       'Are you sure you want to complete this game? You can view settlements afterward.',
@@ -70,9 +107,14 @@ export default function ActiveGameScreen() {
         {
           text: 'Complete',
           onPress: async () => {
-            GameService.completeGame(activeGame);
-            await updateGame(activeGame);
-            router.push('/game/summary' as any);
+            try {
+              GameService.completeGame(activeGame);
+              await updateGame(activeGame);
+              router.push('/game/summary' as any);
+            } catch (error) {
+              Alert.alert('Error', 'Failed to complete game. Please try again.');
+              console.error('Error completing game:', error);
+            }
           }
         }
       ]
@@ -157,7 +199,7 @@ export default function ActiveGameScreen() {
         </View>
         
         {/* Complete Game Button */}
-        {activeGame.players.length > 0 && activeGame.transactions.length > 0 && (
+        {activeGame.players.length > 1 && activeGame.transactions.length > 0 && (
           <TouchableOpacity 
             style={styles.completeButton}
             onPress={handleCompleteGame}
@@ -432,5 +474,44 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  validationBox: {
+    flexDirection: 'row',
+    backgroundColor: '#3a0a0a',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: '#FF3B30',
+  },
+  validationWarningBox: {
+    backgroundColor: '#3a2a0a',
+    borderColor: '#FF9500',
+  },
+  validationIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  validationContent: {
+    flex: 1,
+  },
+  validationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#fff',
+  },
+  validationError: {
+    fontSize: 14,
+    color: '#FF3B30',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  validationWarning: {
+    fontSize: 14,
+    color: '#FF9500',
+    marginBottom: 4,
+    lineHeight: 20,
   },
 });
