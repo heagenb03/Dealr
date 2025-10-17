@@ -78,7 +78,7 @@ export class GameService {
     game.completedAt = new Date();
   }
   
-  createGame(name: string): Game {
+  static createGame(name: string): Game {
     return {
       id: `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name,
