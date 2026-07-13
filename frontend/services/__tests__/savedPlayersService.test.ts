@@ -4,9 +4,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // background fetch never touch a real Firebase instance.
 jest.mock('@/services/firebaseService', () => ({
   saveSavedPlayersToFirestore: jest.fn(() => Promise.resolve()),
-  fetchSavedPlayersFromFirestore: jest.fn(() => Promise.resolve([])),
+  fetchSavedPlayersFromFirestore: jest.fn(() => Promise.resolve({ players: [], tombstones: {} })),
   isFirestoreOfflineError: jest.fn(() => false),
 }));
+
+/** Wrap a players array (and optional tombstones) as the Firestore saved-players doc. */
+const remoteDoc = (players: SavedPlayer[], tombstones: Record<string, number> = {}) => ({
+  players,
+  tombstones,
+});
 
 import {
   getSavedPlayers,
@@ -33,7 +39,7 @@ import {
   legacyIdFor,
   newSavedPlayerId,
 } from '@/services/savedPlayersService';
-import { fetchSavedPlayersFromFirestore } from '@/services/firebaseService';
+import { fetchSavedPlayersFromFirestore, saveSavedPlayersToFirestore } from '@/services/firebaseService';
 
 const LEGACY_KEY = 'saved_player_names';
 const A = 'userA';
@@ -42,7 +48,7 @@ const B = 'userB';
 beforeEach(async () => {
   await AsyncStorage.clear();
   jest.clearAllMocks();
-  (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValue([]);
+  (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValue(remoteDoc([]));
 });
 
 describe('account isolation (the bug)', () => {
@@ -297,10 +303,12 @@ describe('loadSavedPlayers', () => {
   it('returns local immediately and delivers the union-merged remote via onRemoteUpdate', async () => {
     await savePlayer(A, 'Alice');
     await savePlayer(A, 'Bob');
-    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce([
-      { id: 'legacy:alice', name: 'Alice', updatedAt: 1 },
-      { id: 'sp_carol', name: 'Carol', updatedAt: 2 },
-    ]);
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(
+      remoteDoc([
+        { id: 'legacy:alice', name: 'Alice', updatedAt: 1 },
+        { id: 'sp_carol', name: 'Carol', updatedAt: 2 },
+      ]),
+    );
     const merged = await new Promise<SavedPlayer[]>((resolve, reject) => {
       loadSavedPlayers(A, resolve).catch(reject);
     });
@@ -324,7 +332,7 @@ describe('loadSavedPlayers', () => {
       name: `Remote${i + 1}`,
       updatedAt: 100000 + i,
     }));
-    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(remoteEntries);
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(remoteDoc(remoteEntries));
 
     const merged = await new Promise<SavedPlayer[]>((resolve, reject) => {
       loadSavedPlayers(A, resolve).catch(reject);
@@ -345,9 +353,9 @@ describe('duplicate-name regression (id-less remote / corrupted local)', () => {
     // Firestore holds a pre-refactor, id-less copy of the SAME person. Without coercing
     // the remote list, unionMerge keys it under `undefined` and keeps it alongside the
     // coerced-local 'legacy:alice' — two rows named 'Alice'.
-    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce([
-      { name: 'Alice', updatedAt: 1 },
-    ]);
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(
+      remoteDoc([{ name: 'Alice', updatedAt: 1 } as SavedPlayer]),
+    );
     const merged = await new Promise<SavedPlayer[]>((resolve, reject) => {
       loadSavedPlayers(A, resolve).catch(reject);
     });
@@ -377,7 +385,9 @@ describe('duplicate-name regression (id-less remote / corrupted local)', () => {
     // so the two collapse to one on merge. (createSavedPlayer's random id would NOT: that is
     // reserved for the explicit "Add separate person" path.)
     await savePlayer(A, 'Alice'); // deterministic legacy:alice, local-only
-    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce([{ name: 'Alice', updatedAt: 1 }]);
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(
+      remoteDoc([{ name: 'Alice', updatedAt: 1 } as SavedPlayer]),
+    );
     const merged = await new Promise<SavedPlayer[]>((resolve, reject) => {
       loadSavedPlayers(A, resolve).catch(reject);
     });
@@ -472,6 +482,91 @@ describe('id-addressed CRUD', () => {
     if (!a.ok || !b.ok || !c.ok) throw new Error('setup');
     await deleteSavedPlayersByIds(A, [a.id, c.id]);
     expect((await getSavedPlayers(A)).map(p => p.name)).toEqual(['B']);
+  });
+});
+
+describe('delete resurrection (tombstones)', () => {
+  it('a deleted player is not resurrected by a stale remote fetch', async () => {
+    const res = await createSavedPlayer(A, 'Alice');
+    if (!res.ok) throw new Error('setup');
+    const id = res.id;
+
+    // The race: the delete's remote push has not propagated, so the background
+    // fetch still returns the pre-delete list (Alice present, no tombstone).
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(
+      remoteDoc([{ id, name: 'Alice', updatedAt: 1 }]),
+    );
+
+    await deleteSavedPlayerById(A, id);
+    expect(await getSavedPlayerNames(A)).toEqual([]); // gone locally after delete
+
+    const merged = await new Promise<SavedPlayer[]>((resolve, reject) => {
+      loadSavedPlayers(A, resolve).catch(reject);
+    });
+    // The local tombstone drops the stale remote copy — Alice stays gone.
+    expect(merged.some(p => p.name === 'Alice')).toBe(false);
+    expect(await getSavedPlayerNames(A)).toEqual([]);
+  });
+
+  it('a remote tombstone deletes an entry that still exists locally (cross-device delete)', async () => {
+    // This device still has Alice; another device deleted her and the delete arrives
+    // as a remote tombstone newer than Alice's updatedAt.
+    await AsyncStorage.setItem(
+      `saved_player_names:${A}`,
+      JSON.stringify([{ id: 'sp_alice', name: 'Alice', updatedAt: 5 }]),
+    );
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(
+      remoteDoc([], { sp_alice: 10 }),
+    );
+    const merged = await new Promise<SavedPlayer[]>((resolve, reject) => {
+      loadSavedPlayers(A, resolve).catch(reject);
+    });
+    expect(merged.some(p => p.id === 'sp_alice')).toBe(false);
+    expect(await getSavedPlayerNames(A)).toEqual([]);
+  });
+
+  it('a re-add after delete survives (the newer add supersedes the tombstone)', async () => {
+    await savePlayer(A, 'Alice'); // id legacy:alice
+    await deleteSavedPlayer(A, 'Alice'); // tombstone legacy:alice
+    expect(await getSavedPlayerNames(A)).toEqual([]);
+
+    await savePlayer(A, 'Alice'); // re-add, newer updatedAt clears the tombstone
+    expect(await getSavedPlayerNames(A)).toEqual(['Alice']);
+
+    // A stale remote fetch (Alice absent) must NOT delete the fresh re-add.
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(remoteDoc([]));
+    const merged = await new Promise<SavedPlayer[]>((resolve, reject) => {
+      loadSavedPlayers(A, resolve).catch(reject);
+    });
+    expect(merged.some(p => p.name === 'Alice')).toBe(true);
+  });
+
+  it('the delete is pushed to Firestore with a tombstone for the removed id', async () => {
+    const res = await createSavedPlayer(A, 'Alice');
+    if (!res.ok) throw new Error('setup');
+    (saveSavedPlayersToFirestore as jest.Mock).mockClear();
+    await deleteSavedPlayerById(A, res.id);
+    const [, players, tombstones] = (saveSavedPlayersToFirestore as jest.Mock).mock.calls.at(-1)!;
+    expect(players).toEqual([]);
+    expect(tombstones[res.id]).toEqual(expect.any(Number));
+  });
+
+  it('prunes a tombstone once a live re-add supersedes it', async () => {
+    await AsyncStorage.setItem(
+      `saved_player_names:${A}`,
+      JSON.stringify([{ id: 'sp_alice', name: 'Alice', updatedAt: 20 }]),
+    );
+    // Remote carries an OLD tombstone for the same id (delete predates the current entry).
+    (fetchSavedPlayersFromFirestore as jest.Mock).mockResolvedValueOnce(
+      remoteDoc([{ id: 'sp_alice', name: 'Alice', updatedAt: 20 }], { sp_alice: 10 }),
+    );
+    (saveSavedPlayersToFirestore as jest.Mock).mockClear();
+    await new Promise<SavedPlayer[]>((resolve, reject) => {
+      loadSavedPlayers(A, resolve).catch(reject);
+    });
+    const [, players, tombstones] = (saveSavedPlayersToFirestore as jest.Mock).mock.calls.at(-1)!;
+    expect(players.map((p: SavedPlayer) => p.name)).toEqual(['Alice']);
+    expect(tombstones).toEqual({}); // superseded tombstone pruned
   });
 });
 

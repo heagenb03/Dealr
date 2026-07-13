@@ -12,6 +12,22 @@ const LEGACY_KEY = 'saved_player_names';
 function keyFor(uid: string): string {
   return `saved_player_names:${uid}`;
 }
+/** Per-account local key for deletion tombstones (see Tombstones). */
+function tombstonesKeyFor(uid: string): string {
+  return `saved_player_tombstones:${uid}`;
+}
+
+/**
+ * id -> deletedAt (epoch ms). A tombstone records that an entry was deleted so the
+ * offline-first union merge can DROP a stale remote copy instead of resurrecting it —
+ * a union alone cannot represent a deletion (an absent id is indistinguishable from
+ * "never existed"). A tombstone only wins while it is newer than the entry's own
+ * updatedAt, so a later re-add of the same id survives.
+ */
+export type Tombstones = Record<string, number>;
+
+/** Cap on retained tombstones (newest-by-deletedAt) to bound stored/synced size. */
+const TOMBSTONE_CAP = 500;
 
 /** Free tier: max saved players. Pro tier: effectively unlimited (bounds storage). */
 export const FREE_SAVED_CAP = 15;
@@ -126,9 +142,41 @@ async function writeLocal(uid: string, players: SavedPlayer[]): Promise<void> {
   await AsyncStorage.setItem(keyFor(uid), JSON.stringify(players));
 }
 
-/** Push the full list to Firestore (fire-and-forget; offline is swallowed). */
-function pushRemote(uid: string, players: SavedPlayer[]): void {
-  saveSavedPlayersToFirestore(uid, players).catch(err => {
+/** Read the uid-scoped tombstone map ({} when absent or malformed). */
+async function readTombstones(uid: string): Promise<Tombstones> {
+  const raw = await AsyncStorage.getItem(tombstonesKeyFor(uid));
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Tombstones = {};
+    for (const [id, ts] of Object.entries(parsed)) {
+      if (typeof ts === 'number') out[id] = ts;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+async function writeTombstones(uid: string, tombstones: Tombstones): Promise<void> {
+  await AsyncStorage.setItem(tombstonesKeyFor(uid), JSON.stringify(tombstones));
+}
+
+/**
+ * Write players + tombstones to local storage and fire-and-forget to Firestore.
+ * Every mutating op funnels through here so local and remote never diverge on which
+ * entries are deleted.
+ */
+async function commit(uid: string, players: SavedPlayer[], tombstones: Tombstones): Promise<void> {
+  await writeLocal(uid, players);
+  await writeTombstones(uid, tombstones);
+  pushRemote(uid, players, tombstones);
+}
+
+/** Push the full list + tombstones to Firestore (fire-and-forget; offline is swallowed). */
+function pushRemote(uid: string, players: SavedPlayer[], tombstones: Tombstones): void {
+  saveSavedPlayersToFirestore(uid, players, tombstones).catch(err => {
     if (isFirestoreOfflineError(err)) {
       console.debug('savedPlayers: skipping Firestore save — device offline');
       return;
@@ -137,11 +185,59 @@ function pushRemote(uid: string, players: SavedPlayer[]): void {
   });
 }
 
+/** True when a tombstone deletes this entry — i.e. the delete is newer than the entry. */
+function isTombstoned(entry: SavedPlayer, tombstones: Tombstones): boolean {
+  const deletedAt = tombstones[entry.id];
+  return deletedAt !== undefined && deletedAt > (entry.updatedAt ?? 0);
+}
+
+/** Merge two tombstone maps, keeping the greater deletedAt per id. */
+function mergeTombstones(a: Tombstones, b: Tombstones): Tombstones {
+  const out: Tombstones = { ...a };
+  for (const [id, ts] of Object.entries(b)) {
+    if (out[id] === undefined || ts > out[id]) out[id] = ts;
+  }
+  return out;
+}
+
+/** Drop the tombstone for an id that is being (re)written as a live entry. */
+function clearTombstone(tombstones: Tombstones, id: string): Tombstones {
+  if (tombstones[id] === undefined) return tombstones;
+  const { [id]: _removed, ...rest } = tombstones;
+  return rest;
+}
+
+/**
+ * Drop tombstones superseded by a live entry (a re-add newer than the delete), then cap
+ * to the newest TOMBSTONE_CAP by deletedAt so the map can't grow without bound.
+ */
+function pruneTombstones(tombstones: Tombstones, livePlayers: SavedPlayer[]): Tombstones {
+  const liveById = new Map(livePlayers.map(p => [p.id, p]));
+  const kept: Tombstones = {};
+  for (const [id, deletedAt] of Object.entries(tombstones)) {
+    const live = liveById.get(id);
+    if (live && (live.updatedAt ?? 0) >= deletedAt) continue; // re-added after the delete
+    kept[id] = deletedAt;
+  }
+  const ids = Object.keys(kept);
+  if (ids.length <= TOMBSTONE_CAP) return kept;
+  ids.sort((x, y) => kept[y] - kept[x]);
+  const capped: Tombstones = {};
+  for (const id of ids.slice(0, TOMBSTONE_CAP)) capped[id] = kept[id];
+  return capped;
+}
+
 /**
  * Union two lists by id. For an id in both, keep the entry with the greater updatedAt
- * (missing → 0). Result sorted by updatedAt desc so the most recently touched entry sorts first.
+ * (missing → 0). Any entry deleted by a newer tombstone is dropped, so a stale remote
+ * copy of a just-deleted player is not resurrected. Result sorted by updatedAt desc so
+ * the most recently touched entry sorts first.
  */
-export function unionMerge(local: SavedPlayer[], remote: SavedPlayer[]): SavedPlayer[] {
+export function unionMerge(
+  local: SavedPlayer[],
+  remote: SavedPlayer[],
+  tombstones: Tombstones = {},
+): SavedPlayer[] {
   const byId = new Map<string, SavedPlayer>();
   for (const entry of [...remote, ...local]) {
     const existing = byId.get(entry.id);
@@ -149,7 +245,9 @@ export function unionMerge(local: SavedPlayer[], remote: SavedPlayer[]): SavedPl
       byId.set(entry.id, entry);
     }
   }
-  return Array.from(byId.values()).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return Array.from(byId.values())
+    .filter(entry => !isTombstoned(entry, tombstones))
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 }
 
 /**
@@ -218,8 +316,8 @@ export async function createSavedPlayer(
     const entry: SavedPlayer = { id: newSavedPlayerId(), name: trimmed, updatedAt: Date.now() };
     if (preferredPayment) entry.preferredPayment = preferredPayment;
     const next = [entry, ...current];
-    await writeLocal(uid, next);
-    pushRemote(uid, next);
+    const tombstones = clearTombstone(await readTombstones(uid), entry.id);
+    await commit(uid, next, tombstones);
     return { ok: true, id: entry.id } as const;
   });
 }
@@ -249,8 +347,8 @@ export async function updateSavedPlayer(
     const pay = patch.preferredPayment ?? prev.preferredPayment;
     if (pay) updated.preferredPayment = pay;
     const next = current.map((p, i) => (i === idx ? updated : p));
-    await writeLocal(uid, next);
-    pushRemote(uid, next);
+    const tombstones = clearTombstone(await readTombstones(uid), id);
+    await commit(uid, next, tombstones);
     return true;
   });
 }
@@ -259,8 +357,8 @@ export async function deleteSavedPlayerById(uid: string, id: string): Promise<vo
   return enqueue(async () => {
     const current = await readLocal(uid);
     const next = current.filter(p => p.id !== id);
-    await writeLocal(uid, next);
-    pushRemote(uid, next);
+    const tombstones = { ...(await readTombstones(uid)), [id]: Date.now() };
+    await commit(uid, next, tombstones);
   });
 }
 
@@ -269,8 +367,10 @@ export async function deleteSavedPlayersByIds(uid: string, ids: string[]): Promi
     const idSet = new Set(ids);
     const current = await readLocal(uid);
     const next = current.filter(p => !idSet.has(p.id));
-    await writeLocal(uid, next);
-    pushRemote(uid, next);
+    const now = Date.now();
+    const tombstones = { ...(await readTombstones(uid)) };
+    for (const id of ids) tombstones[id] = now;
+    await commit(uid, next, tombstones);
   });
 }
 
@@ -298,8 +398,8 @@ export async function savePlayer(
     const pay = preferredPayment ?? existing?.preferredPayment;
     if (pay) merged.preferredPayment = pay;
     const deduped = [merged, ...current.filter(p => p.name.toLowerCase() !== lower)];
-    await writeLocal(uid, deduped);
-    pushRemote(uid, deduped);
+    const tombstones = clearTombstone(await readTombstones(uid), merged.id);
+    await commit(uid, deduped, tombstones);
   });
 }
 
@@ -314,8 +414,10 @@ export async function deleteSavedPlayer(uid: string, name: string): Promise<void
     const lower = name.toLowerCase();
     const current = await readLocal(uid);
     const next = current.filter(p => p.name.toLowerCase() !== lower);
-    await writeLocal(uid, next);
-    pushRemote(uid, next);
+    const now = Date.now();
+    const tombstones = { ...(await readTombstones(uid)) };
+    for (const p of current) if (p.name.toLowerCase() === lower) tombstones[p.id] = now;
+    await commit(uid, next, tombstones);
   });
 }
 
@@ -343,8 +445,10 @@ export async function deleteSavedPlayers(uid: string, names: string[]): Promise<
     const lowerSet = new Set(names.map(n => n.toLowerCase()));
     const current = await readLocal(uid);
     const next = current.filter(p => !lowerSet.has(p.name.toLowerCase()));
-    await writeLocal(uid, next);
-    pushRemote(uid, next);
+    const now = Date.now();
+    const tombstones = { ...(await readTombstones(uid)) };
+    for (const p of current) if (lowerSet.has(p.name.toLowerCase())) tombstones[p.id] = now;
+    await commit(uid, next, tombstones);
   });
 }
 
@@ -360,6 +464,7 @@ export async function addSavedPlayers(
 ): Promise<{ added: number; updated: number; skippedFull: number }> {
   return enqueue(async () => {
     const result = await readLocal(uid);
+    let tombstones = await readTombstones(uid);
     let added = 0;
     let updated = 0;
     let skippedFull = 0;
@@ -377,6 +482,7 @@ export async function addSavedPlayers(
             preferredPayment: entry.preferredPayment,
             updatedAt: now,
           };
+          tombstones = clearTombstone(tombstones, result[idx].id);
           updated++;
         }
         continue;
@@ -388,10 +494,10 @@ export async function addSavedPlayers(
       const fresh: SavedPlayer = { id: legacyIdFor(name), name, updatedAt: now };
       if (entry.preferredPayment) fresh.preferredPayment = entry.preferredPayment;
       result.unshift(fresh);
+      tombstones = clearTombstone(tombstones, fresh.id);
       added++;
     }
-    await writeLocal(uid, result);
-    pushRemote(uid, result);
+    await commit(uid, result, tombstones);
     return { added, updated, skippedFull };
   });
 }
@@ -414,20 +520,28 @@ export async function loadSavedPlayers(
         // Coerce/dedupe remote the same way local reads are: legacy Firestore docs hold
         // id-less entries, and unionMerge keys by id — an uncoerced `undefined` id would
         // sit alongside the coerced-local `legacy:<name>` twin and duplicate the person.
-        const remote = normalize(await fetchSavedPlayersFromFirestore(uid));
+        const remoteDoc = await fetchSavedPlayersFromFirestore(uid);
+        const remote = normalize(remoteDoc.players);
         if (signal?.aborted) return;
         const merged = await enqueue(async () => {
           const cur = await readLocal(uid);
+          // Merge tombstones from both sides so a delete on either device propagates and
+          // is honored here — otherwise a stale remote copy of a just-deleted entry would
+          // be resurrected by the union (a union cannot represent a deletion).
+          const tombstones = mergeTombstones(await readTombstones(uid), remoteDoc.tombstones);
           // Clamp to PRO_SAVED_CAP so the merged list never exceeds the Firestore
           // security rule's `players.size() <= 200` ceiling (keep in sync with that rule).
           // unionMerge already sorts by updatedAt desc, so this keeps the most-recently-touched names.
-          const m = unionMerge(cur, remote).slice(0, PRO_SAVED_CAP);
+          const m = unionMerge(cur, remote, tombstones).slice(0, PRO_SAVED_CAP);
+          // Drop tombstones superseded by a live re-add and cap growth before persisting.
+          const prunedTombstones = pruneTombstones(tombstones, m);
           await writeLocal(uid, m);
-          return m;
+          await writeTombstones(uid, prunedTombstones);
+          return { players: m, tombstones: prunedTombstones };
         });
-        pushRemote(uid, merged);
+        pushRemote(uid, merged.players, merged.tombstones);
         if (signal?.aborted) return;
-        onRemoteUpdate?.(merged);
+        onRemoteUpdate?.(merged.players);
       } catch (err) {
         if (signal?.aborted) return;
         if (isFirestoreOfflineError(err)) {

@@ -121,26 +121,28 @@ describe('deserializeFirestoreGame', () => {
 });
 
 describe('fetchSavedPlayersFromFirestore', () => {
-  it('returns the players array when the document exists', async () => {
+  it('returns players + tombstones when the document exists', async () => {
     (getDoc as jest.Mock).mockResolvedValueOnce({
       exists: () => true,
-      data: () => ({ players: [{ name: 'Alice', updatedAt: 5 }] }),
+      data: () => ({ players: [{ name: 'Alice', updatedAt: 5 }], tombstones: { sp_bob: 9 } }),
     });
-    const players = await fetchSavedPlayersFromFirestore('userA');
-    expect(players).toEqual([{ name: 'Alice', updatedAt: 5 }]);
+    expect(await fetchSavedPlayersFromFirestore('userA')).toEqual({
+      players: [{ name: 'Alice', updatedAt: 5 }],
+      tombstones: { sp_bob: 9 },
+    });
   });
 
-  it('returns [] when the document is missing', async () => {
+  it('returns empty players + {} tombstones when the document is missing', async () => {
     (getDoc as jest.Mock).mockResolvedValueOnce({ exists: () => false });
-    expect(await fetchSavedPlayersFromFirestore('userA')).toEqual([]);
+    expect(await fetchSavedPlayersFromFirestore('userA')).toEqual({ players: [], tombstones: {} });
   });
 
-  it('returns [] when players is not an array', async () => {
+  it('defaults players to [] and tombstones to {} when absent or malformed', async () => {
     (getDoc as jest.Mock).mockResolvedValueOnce({
       exists: () => true,
-      data: () => ({}),
+      data: () => ({ tombstones: [1, 2] }), // players missing; tombstones not a map
     });
-    expect(await fetchSavedPlayersFromFirestore('userA')).toEqual([]);
+    expect(await fetchSavedPlayersFromFirestore('userA')).toEqual({ players: [], tombstones: {} });
   });
 });
 

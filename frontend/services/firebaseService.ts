@@ -452,17 +452,39 @@ export function isFirestoreOfflineError(err: unknown): boolean {
 
 const SAVED_PLAYERS_DOC = 'list';
 
-/** Write the full saved-players list to /users/{uid}/savedPlayers/list. */
-export async function saveSavedPlayersToFirestore(uid: string, players: SavedPlayer[]): Promise<void> {
-  const ref = doc(db, 'users', uid, 'savedPlayers', SAVED_PLAYERS_DOC);
-  await setDoc(ref, { players: stripUndefined(players), syncedAt: serverTimestamp() });
+/** id -> deletedAt (epoch ms); a delete that must survive a stale-remote merge. */
+type SavedPlayerTombstones = Record<string, number>;
+
+/** The saved-players doc payload: the list plus deletion tombstones. */
+export interface SavedPlayersDoc {
+  players: SavedPlayer[];
+  tombstones: SavedPlayerTombstones;
 }
 
-/** Fetch the saved-players list (empty array when the doc is missing). */
-export async function fetchSavedPlayersFromFirestore(uid: string): Promise<SavedPlayer[]> {
+/**
+ * Write the full saved-players list (and deletion tombstones) to
+ * /users/{uid}/savedPlayers/list. Tombstones let a delete survive the offline-first
+ * union merge — see savedPlayersService.unionMerge.
+ */
+export async function saveSavedPlayersToFirestore(
+  uid: string,
+  players: SavedPlayer[],
+  tombstones: SavedPlayerTombstones = {},
+): Promise<void> {
+  const ref = doc(db, 'users', uid, 'savedPlayers', SAVED_PLAYERS_DOC);
+  await setDoc(ref, { players: stripUndefined(players), tombstones, syncedAt: serverTimestamp() });
+}
+
+/** Fetch the saved-players doc (empty list + no tombstones when the doc is missing). */
+export async function fetchSavedPlayersFromFirestore(uid: string): Promise<SavedPlayersDoc> {
   const ref = doc(db, 'users', uid, 'savedPlayers', SAVED_PLAYERS_DOC);
   const snap = await getDoc(ref);
-  if (!snap.exists()) return [];
+  if (!snap.exists()) return { players: [], tombstones: {} };
   const data = snap.data();
-  return Array.isArray(data.players) ? (data.players as SavedPlayer[]) : [];
+  const players = Array.isArray(data.players) ? (data.players as SavedPlayer[]) : [];
+  const tombstones =
+    data.tombstones && typeof data.tombstones === 'object' && !Array.isArray(data.tombstones)
+      ? (data.tombstones as SavedPlayerTombstones)
+      : {};
+  return { players, tombstones };
 }
