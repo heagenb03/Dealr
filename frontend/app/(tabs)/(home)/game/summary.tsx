@@ -342,6 +342,81 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
   );
 }
 
+// Banker-mode payout row — a flat "pay this player their stack" line with an
+// optional instant Pay button. No expand/collapse: the payer is always the banker,
+// so there is nothing to drill into.
+interface BankerPayoutRowProps {
+  recipient: string;
+  amount: number;
+  recipientPayment?: PreferredPayment;
+}
+
+function BankerPayoutRow({ recipient, amount, recipientPayment }: BankerPayoutRowProps) {
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { formatAmount } = useCurrency();
+
+  const hasHandle = !!recipientPayment?.handle?.trim();
+  const methodLabel = recipientPayment ? getPaymentMethodMeta(recipientPayment.method).label : '';
+  const displayHandle = recipientPayment && hasHandle
+    ? formatHandleForDisplay(recipientPayment.method, recipientPayment.handle)
+    : '';
+  const canPay =
+    !!recipientPayment &&
+    !!buildPaymentUri(recipientPayment.method, recipientPayment.handle, amount, 'x');
+
+  const handleCopyHandle = useCallback(() => {
+    if (!recipientPayment?.handle) return;
+    Clipboard.setStringAsync(
+      formatHandleForDisplay(recipientPayment.method, recipientPayment.handle),
+    ).catch(() => {});
+    setCopied(true);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 1200);
+  }, [recipientPayment]);
+
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
+
+  const handlePay = useCallback(() => {
+    if (!recipientPayment) return;
+    const uri = buildPaymentUri(recipientPayment.method, recipientPayment.handle, amount, '');
+    if (uri) Linking.openURL(uri).catch(() => {});
+  }, [recipientPayment, amount]);
+
+  return (
+    <View style={styles.payoutRow}>
+      <View style={styles.payoutInfo}>
+        <Text style={styles.recipientName}>{recipient}</Text>
+        {recipientPayment && hasHandle && (
+          <TouchableOpacity
+            onPress={handleCopyHandle}
+            accessibilityRole="button"
+            accessibilityLabel={copied ? 'Handle copied' : `Copy ${methodLabel} handle ${displayHandle}`}
+            style={styles.payeeBadgeTap}
+          >
+            <Text style={styles.payeeBadge} numberOfLines={1}>
+              {copied ? 'Copied ✓' : `${methodLabel} · ${displayHandle}`}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {recipientPayment && !hasHandle && (
+          <Text style={styles.payeeBadge} numberOfLines={1}>{methodLabel}</Text>
+        )}
+      </View>
+      <View style={styles.payoutRight}>
+        <Text style={styles.payoutAmount}>{formatAmount(amount)}</Text>
+        {canPay && (
+          <TouchableOpacity onPress={handlePay} style={styles.payButton}>
+            <Text style={styles.payButtonText}>Pay →</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
 // Fallback Banner Component
 function isRetryableFallback(error?: string, balances?: PlayerBalance[]): boolean {
   // 4xx = backend rejected (e.g. imbalance too large) — retry won't help
@@ -662,6 +737,11 @@ setSettlementResult(cachedResult);
     );
   }
 
+  const isBanker = activeGame.settlementMode === 'banker';
+  const bankerName = isBanker
+    ? activeGame.players.find(p => p.id === activeGame.bankerPlayerId)?.name
+    : undefined;
+
   const handleShare = async () => {
     try {
       const message = buildShareMessage({
@@ -670,6 +750,8 @@ setSettlementResult(cachedResult);
         grouped: groupedSettlements,
         paymentByName,
         formatAmount,
+        mode: activeGame.settlementMode,
+        bankerName,
       });
       await Share.share({ message });
     } catch (error) {
@@ -755,11 +837,11 @@ setSettlementResult(cachedResult);
         */}
         {/* Settlements */}
         <View style={styles.section}>
-          <HudSectionHeader label="SETTLEMENTS" />
+          <HudSectionHeader label={isBanker ? 'PAYOUTS' : 'SETTLEMENTS'} />
 
-          {activeGame.settlementMode === 'banker' && (
-            <Text style={styles.roundingNote}>
-              Banker: {activeGame.players.find(p => p.id === activeGame.bankerPlayerId)?.name ?? '—'}
+          {isBanker && (
+            <Text style={styles.bankerSubhead}>
+              {bankerName ?? '—'} holds the pot · pays out below
             </Text>
           )}
 
@@ -774,15 +856,28 @@ setSettlementResult(cachedResult);
             />
           )}
 
-          {/* Rounding distortion note */}
-          {distortion.maxDelta > 0 && (
+          {/* Rounding distortion note — net-based, so it does not describe banker
+              cash-out payouts; suppressed in banker mode. */}
+          {!isBanker && distortion.maxDelta > 0 && (
             <Text style={styles.roundingNote}>
               Rounded to {formatAmount(resolveCashUnit(summary.game.cashUnit, currency))} — largest change {formatAmount(distortion.maxDelta)}.
             </Text>
           )}
 
           {groupedSettlements.length === 0 ? (
-            <EmptyState label="All balanced" icon="checkmark-circle-outline" />
+            <EmptyState
+              label={isBanker ? 'Nothing to pay out' : 'All balanced'}
+              icon="checkmark-circle-outline"
+            />
+          ) : isBanker ? (
+            groupedSettlements.map((groupedSettlement, index) => (
+              <BankerPayoutRow
+                key={index}
+                recipient={groupedSettlement.recipient}
+                amount={groupedSettlement.totalAmount}
+                recipientPayment={paymentByName.get(groupedSettlement.recipient)}
+              />
+            ))
           ) : (
             groupedSettlements.map((groupedSettlement, index) => (
               <SettlementCard
@@ -1233,5 +1328,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.3,
     textAlign: 'center',
+  },
+  bankerSubhead: {
+    fontSize: 12,
+    color: 'rgba(176,114,187,0.75)',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 0.3,
+  },
+  payoutRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#161616',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#242424',
+    borderTopColor: 'rgba(176,114,187,0.15)',
+    gap: 12,
+  },
+  payoutInfo: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  payoutRight: {
+    alignItems: 'flex-end',
+    backgroundColor: 'transparent',
+    gap: 6,
+  },
+  payoutAmount: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontFamily: 'SpaceMono',
+    fontWeight: '600',
   },
 });
