@@ -33,3 +33,14 @@ export function filterSavedByQuery(saved: SavedPlayer[], query: string): SavedPl
   if (!q) return saved;
   return saved.filter(p => norm(p.name).includes(q));
 }
+
+/**
+ * Slim in-modal confirmation label shown after adds. Returns null until at
+ * least one player has been added (and a name is known), so the line only
+ * appears once there is something to confirm. Excludes the ✓ glyph — the
+ * caller renders that as styled prefix.
+ */
+export function formatAddedConfirmation(lastAddedName: string | null, count: number): string | null {
+  if (count < 1 || !lastAddedName) return null;
+  return `Added ${lastAddedName} · ${count} total`;
+}

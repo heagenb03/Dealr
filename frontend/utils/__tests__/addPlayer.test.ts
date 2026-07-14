@@ -1,4 +1,4 @@
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery } from '../addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation } from '../addPlayer';
 import type { Player } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
@@ -52,5 +52,22 @@ describe('filterSavedByQuery', () => {
   });
   it('no match returns []', () => {
     expect(filterSavedByQuery([saved('Gabe')], 'zzz')).toEqual([]);
+  });
+});
+
+describe('formatAddedConfirmation', () => {
+  it('returns null before any add (count 0)', () => {
+    expect(formatAddedConfirmation(null, 0)).toBeNull();
+    expect(formatAddedConfirmation('Mike', 0)).toBeNull();
+  });
+
+  it('returns null when there is no name, even if count > 0', () => {
+    expect(formatAddedConfirmation(null, 2)).toBeNull();
+    expect(formatAddedConfirmation('', 2)).toBeNull();
+  });
+
+  it('formats name and running total once at least one add', () => {
+    expect(formatAddedConfirmation('Mike', 1)).toBe('Added Mike · 1 total');
+    expect(formatAddedConfirmation('Gabe R.', 3)).toBe('Added Gabe R. · 3 total');
   });
 });
