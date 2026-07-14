@@ -1802,12 +1802,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   pickerAddedTag: { fontSize: 12, color: '#00D66F', fontFamily: 'SpaceMono' },
-  pickerEmpty: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.4)',
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
   pickHint: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
