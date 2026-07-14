@@ -121,6 +121,7 @@ function AuthNavigator() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="how-it-works" options={{ presentation: 'modal' }} />
           </Stack>
         </View>
       </GameProvider>

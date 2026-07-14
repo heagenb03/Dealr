@@ -468,6 +468,20 @@ export default function SettingsScreen() {
           <View style={styles.menuCard}>
             <TouchableOpacity
               style={styles.menuItem}
+              onPress={() => router.push('/how-it-works')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="book-outline" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>How It Works</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={handleHelpPress}
               activeOpacity={0.7}
             >
