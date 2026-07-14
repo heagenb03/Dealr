@@ -4,8 +4,8 @@ import { Text, View } from '@/components/Themed';
 export default function HistoryMonthHeader({ label }: { label: string }) {
   return (
     <View style={styles.container}>
-      <View style={styles.tick} />
       <Text style={styles.label}>{label}</Text>
+      <View style={styles.hairline} />
     </View>
   );
 }
@@ -14,15 +14,9 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
     marginTop: 6,
     marginBottom: 12,
-  },
-  tick: {
-    width: 3,
-    height: 12,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(176,114,187,0.5)',
   },
   label: {
     fontSize: 10,
@@ -30,5 +24,10 @@ const styles = StyleSheet.create({
     color: 'rgba(176,114,187,0.5)',
     textTransform: 'uppercase',
     letterSpacing: 2,
+  },
+  hairline: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(176,114,187,0.15)',
   },
 });
