@@ -468,7 +468,7 @@ export default function SettingsScreen() {
           <View style={styles.menuCard}>
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/how-it-works')}
+              onPress={() => router.push('/how-it-works' as any)}
               activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
