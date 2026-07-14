@@ -30,7 +30,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery } from '@/utils/addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation } from '@/utils/addPlayer';
 
 function HudSectionHeader({ label, onAction, actionIcon }: { label: string; onAction?: () => void; actionIcon?: string }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -217,6 +217,9 @@ export default function ActiveGameScreen() {
   const [renameSuggestions, setRenameSuggestions] = useState<SavedPlayer[]>([]);
   // Identity of the saved player the user picked from suggestions (null = typed freely).
   const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null);
+  // Running per-session confirmation for the stay-open Add Player modal.
+  const [addedCount, setAddedCount] = useState(0);
+  const [lastAddedName, setLastAddedName] = useState<string | null>(null);
   // Synchronous re-entry guard for commitAddPlayer (state-based `disabled` has a race window).
   const addingPlayerRef = useRef(false);
   const nameInputRef = useRef<TextInput>(null);
@@ -364,6 +367,8 @@ export default function ActiveGameScreen() {
     matchSavedByExactName(savedPlayers, newPlayerName).length === 0;
   const atPlayerCap = !isPro && activeGame.players.length >= 12;
 
+  const addedConfirmLabel = formatAddedConfirmation(lastAddedName, addedCount);
+
   const closeAddModal = () => {
     setNewPlayerName('');
     setNewPlayerBuyIn('');
@@ -481,6 +486,8 @@ export default function ActiveGameScreen() {
       refreshSavedNames(); // reflect the new/bumped saved entry + recency order
 
       // Reset for the next add; keep the modal open.
+      setAddedCount(c => c + 1);
+      setLastAddedName(name);
       setNewPlayerName('');
       setNewPlayerBuyIn('');
       setSelectedSavedId(null);
@@ -655,6 +662,8 @@ export default function ActiveGameScreen() {
     setShowSettlementModePicker(false);
     setPendingBankerDesignation(true);
     setNewPlayerName('');
+    setAddedCount(0);
+    setLastAddedName(null);
     setShowAddPlayer(true);
   };
 
@@ -881,6 +890,8 @@ export default function ActiveGameScreen() {
               } else {
                 refreshSavedNames();
                 setSavePlayerToggle(true); // toggle defaults ON each time the modal opens
+                setAddedCount(0);
+                setLastAddedName(null);
                 setShowAddPlayer(true);
               }
             }}
@@ -957,6 +968,10 @@ export default function ActiveGameScreen() {
       >
         {pendingBankerDesignation && (
           <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
+        )}
+
+        {addedConfirmLabel && (
+          <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
         )}
 
         <TextInput
@@ -1774,6 +1789,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#B072BB',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  addedConfirm: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#00D66F',
     textAlign: 'center',
     marginBottom: 10,
   },
