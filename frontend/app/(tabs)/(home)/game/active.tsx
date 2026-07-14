@@ -811,8 +811,12 @@ export default function ActiveGameScreen() {
               year: 'numeric'
             })}
           </Text>
-          <View style={styles.gameSetupCard}>
-            <Text style={styles.setupLabel}>Settlement</Text>
+        </View>
+
+        {/* Settlement */}
+        <View style={styles.section}>
+          <HudSectionHeader label="Settlement" />
+          <View style={styles.settlementCard}>
             <View style={styles.segment}>
               <TouchableOpacity
                 style={[styles.segmentBtn, activeGame.settlementMode !== 'banker' && styles.segmentBtnActive]}
@@ -835,31 +839,40 @@ export default function ActiveGameScreen() {
             </View>
 
             {activeGame.settlementMode === 'banker' && (
-              <TouchableOpacity
-                style={styles.bankerCaption}
-                onPress={() => setShowSettlementModePicker(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.bankerCaptionText}>
-                  {bankerName ? `Everyone settles with ${bankerName}` : 'Choose who the banker is'}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-              </TouchableOpacity>
+              <>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => setShowSettlementModePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="person-outline" size={18} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.menuItemLabel}>Banker</Text>
+                  </View>
+                  <View style={styles.menuItemRight}>
+                    <Text style={styles.menuItemValue}>
+                      {bankerName ? bankerName : 'Choose banker'}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                  </View>
+                </TouchableOpacity>
+              </>
             )}
 
-            <View style={styles.setupDivider} />
+            <View style={styles.menuDivider} />
 
             <TouchableOpacity
-              style={styles.roundingRow}
+              style={styles.menuItem}
               onPress={() => setShowCashUnitPicker(true)}
               activeOpacity={0.7}
             >
-              <View style={styles.roundingLeft}>
-                <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.5)" />
-                <Text style={styles.roundingLabel}>Rounding</Text>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="options-outline" size={18} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.menuItemLabel}>Rounding</Text>
               </View>
-              <View style={styles.roundingValueRow}>
-                <Text style={styles.roundingValue}>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>
                   {resolveCashUnit(activeGame.cashUnit, currency) === EXACT_CASH_UNIT
                     ? 'Exact'
                     : formatAmount(resolveCashUnit(activeGame.cashUnit, currency))}
@@ -1777,36 +1790,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 10,
   },
-  gameSetupCard: {
-    marginTop: 12,
+  settlementCard: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(176,114,187,0.2)',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#141414',
-  },
-  setupLabel: {
-    fontSize: 11, color: 'rgba(176,114,187,0.65)', textTransform: 'uppercase',
-    letterSpacing: 1.5, marginBottom: 8, marginLeft: 2,
+    overflow: 'hidden',
   },
   segment: {
     flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 10, padding: 3,
+    marginHorizontal: 20, marginTop: 16, marginBottom: 16,
   },
   segmentBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
   segmentBtnActive: { backgroundColor: '#49264F' },
   segmentText: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.5)' },
   segmentTextActive: { color: '#FFFFFF' },
-  bankerCaption: {
+  menuDivider: { height: 1, backgroundColor: 'rgba(176,114,187,0.1)', marginHorizontal: 20 },
+  menuItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginTop: 10, paddingHorizontal: 2,
+    paddingVertical: 16, paddingHorizontal: 20, backgroundColor: 'transparent',
   },
-  bankerCaptionText: { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
-  setupDivider: { height: 1, backgroundColor: 'rgba(176,114,187,0.12)', marginVertical: 12 },
-  roundingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  roundingLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  roundingLabel: { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
-  roundingValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  roundingValue: { fontSize: 14, color: '#B072BB', fontWeight: '500' },
+  menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'transparent' },
+  menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' },
+  menuItemLabel: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
+  menuItemValue: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
 });
