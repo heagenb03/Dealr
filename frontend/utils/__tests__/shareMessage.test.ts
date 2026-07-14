@@ -149,3 +149,52 @@ describe('payment annotations', () => {
     expect(withoutNote).toContain('• Ann: $5.00 from Bo\n');
   });
 });
+
+describe('buildShareMessage banker mode', () => {
+  function buildBanker(
+    grouped: GroupedSettlement[],
+    payments: Record<string, PreferredPayment> = {},
+    bankerName?: string,
+  ): string {
+    return buildShareMessage({
+      gameName: 'Friday Night Poker',
+      totalPot: 400,
+      grouped,
+      paymentByName: new Map(Object.entries(payments)),
+      formatAmount: usd,
+      mode: 'banker',
+      bankerName,
+    });
+  }
+
+  it('uses a banker payout heading and drops the "from" clause', () => {
+    const msg = buildBanker([group('Alice', [{ from: 'Alex', amount: 150 }])], {}, 'Alex');
+    expect(msg).toContain('Alex pays out:\n');
+    expect(msg).toContain('• Alice: $150.00\n');
+    expect(msg).not.toContain(' from ');
+    expect(msg).not.toContain('Settlements:');
+    expect(msg.endsWith(SHARE_FOOTER)).toBe(true);
+  });
+
+  it('renders the payment annotation on the payout line', () => {
+    const msg = buildBanker(
+      [group('Alice', [{ from: 'Alex', amount: 150 }])],
+      { Alice: { method: 'venmo', handle: 'alice-h' } },
+      'Alex',
+    );
+    expect(msg).toContain('• Alice (Venmo @alice-h): $150.00\n');
+  });
+
+  it('renders a nothing-to-pay-out line when there are no payouts', () => {
+    const msg = buildBanker([], {}, undefined);
+    expect(msg).toContain('Payouts:\n');
+    expect(msg).toContain('Nothing to pay out.\n');
+    expect(msg).not.toContain('•');
+  });
+
+  it('falls back to a plain "Payouts:" heading when the banker name is absent', () => {
+    const msg = buildBanker([group('Alice', [{ from: 'X', amount: 10 }])], {}, undefined);
+    expect(msg).toContain('Payouts:\n');
+    expect(msg).not.toContain('pays out:');
+  });
+});

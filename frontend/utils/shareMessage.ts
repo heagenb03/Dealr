@@ -49,11 +49,28 @@ export function buildShareMessage(opts: {
   grouped: GroupedSettlement[];
   paymentByName: Map<string, PreferredPayment>;
   formatAmount: (n: number) => string;
+  mode?: 'optimal' | 'banker';
+  bankerName?: string;
 }): string {
-  const { gameName, totalPot, grouped, paymentByName, formatAmount } = opts;
+  const { gameName, totalPot, grouped, paymentByName, formatAmount, mode, bankerName } = opts;
 
   let message = `${gameName}\n\n`;
   message += `Total Pot: ${formatAmount(totalPot)}\n\n`;
+
+  if (mode === 'banker') {
+    // Payer is always the banker, so per-line "from" clauses are noise — drop them.
+    message += bankerName ? `${bankerName} pays out:\n` : `Payouts:\n`;
+    if (grouped.length === 0) {
+      message += `Nothing to pay out.\n`;
+    } else {
+      grouped.forEach(({ recipient, totalAmount }) => {
+        message += `• ${recipient}${formatPaymentAnnotation(paymentByName.get(recipient))}: ${formatAmount(totalAmount)}\n`;
+      });
+    }
+    message += SHARE_FOOTER;
+    return message;
+  }
+
   message += `Settlements:\n`;
 
   if (grouped.length === 0) {
