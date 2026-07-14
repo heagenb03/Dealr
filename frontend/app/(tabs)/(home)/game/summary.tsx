@@ -4,7 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as StoreReview from 'expo-store-review';
 import { Text, View } from '@/components/Themed';
 import { useGame } from '@/contexts/GameContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useHelp } from '@/contexts/HelpContext';
+import HelpSheet from '@/components/HelpSheet';
+import { getSummaryTopicIds, getTopicsByIds } from '@/constants/helpTopics';
 import { GameService } from '@/services/gameService';
 import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
 import { PlayerBalance, SettlementResult } from '@/types/game';
@@ -496,6 +499,20 @@ export default function GameSummaryScreen() {
   const router = useRouter();
   const reduceMotion = useReduceMotion();
   const { formatAmount, currency } = useCurrency();
+  const { registerHelp } = useHelp();
+  const [helpVisible, setHelpVisible] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const unregister = registerHelp(() => setHelpVisible(true));
+      return unregister;
+    }, [registerHelp])
+  );
+
+  const handleSeeFullGuide = useCallback(() => {
+    setHelpVisible(false);
+    setTimeout(() => router.push('/how-it-works' as any), 250);
+  }, [router]);
 
   const summary = useMemo(
     () => (activeGame ? GameService.generateGameSummary(activeGame) : null),
@@ -923,6 +940,14 @@ setSettlementResult(cachedResult);
           accessibilityHint="Returns to the home screen"
         />
       </View>
+
+      <HelpSheet
+        visible={helpVisible}
+        title="Reading Results"
+        topics={getTopicsByIds(getSummaryTopicIds(activeGame.settlementMode))}
+        onClose={() => setHelpVisible(false)}
+        onSeeFullGuide={handleSeeFullGuide}
+      />
     </View>
   );
 }
