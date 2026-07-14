@@ -8,6 +8,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useHelp } from '@/contexts/HelpContext';
 import HelpSheet from '@/components/HelpSheet';
+import HelpHint from '@/components/HelpHint';
 import { ACTIVE_GAME_TOPIC_IDS, getTopicsByIds } from '@/constants/helpTopics';
 import { GameService } from '@/services/gameService';
 import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
@@ -159,6 +160,7 @@ function SolvingOverlay() {
 const PLAYERS_PAYWALL_MESSAGE = 'Upgrade to Pro for unlimited players per game.';
 const SAVED_CAP_PAYWALL_MESSAGE = `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
 const RECENT_LIMIT = 5;
+const HELP_HINT_SEEN_KEY = 'help_hint_seen';
 
 export default function ActiveGameScreen() {
   const { activeGame, updateGame, setActiveGame, createGame } = useGame();
@@ -167,12 +169,27 @@ export default function ActiveGameScreen() {
   const router = useRouter();
   const { registerHelp } = useHelp();
   const [helpVisible, setHelpVisible] = useState(false);
+  const [hintVisible, setHintVisible] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(HELP_HINT_SEEN_KEY).then((seen) => {
+      if (!seen) setHintVisible(true);
+    });
+  }, []);
+
+  const dismissHint = useCallback(() => {
+    setHintVisible(false);
+    AsyncStorage.setItem(HELP_HINT_SEEN_KEY, '1');
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      const unregister = registerHelp(() => setHelpVisible(true));
+      const unregister = registerHelp(() => {
+        setHelpVisible(true);
+        dismissHint();
+      });
       return unregister;
-    }, [registerHelp])
+    }, [registerHelp, dismissHint])
   );
 
   const handleSeeFullGuide = useCallback(() => {
@@ -818,6 +835,7 @@ export default function ActiveGameScreen() {
 
   return (
     <View style={styles.container}>
+      <HelpHint visible={hintVisible} onDismiss={dismissHint} />
       <ScrollView style={styles.scrollView}>
         {/* Game Info */}
         <View style={styles.header}>
