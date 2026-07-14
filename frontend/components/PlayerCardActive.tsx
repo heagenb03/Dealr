@@ -116,9 +116,7 @@ const PlayerCardActive: React.FC<PlayerCardActiveProps> = ({
               <Text style={styles.playerName}>{player.name}</Text>
               <Text style={styles.nameEditIcon}>✎</Text>
               {isBanker && (
-                <View style={styles.bankerBadge}>
-                  <Text style={styles.bankerBadgeText}>BANKER</Text>
-                </View>
+                <Text style={styles.bankerLabel}>BANKER</Text>
               )}
               {isBanker && (balance?.totalBuyins ?? 0) === 0 && (balance?.totalCashouts ?? 0) === 0 && (
                 <Text style={styles.notPlayingHint}>not playing</Text>
@@ -254,25 +252,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.35)',
   },
-  bankerBadge: {
+  bankerLabel: {
     marginLeft: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    backgroundColor: 'rgba(176,114,187,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(176,114,187,0.45)',
-  },
-  bankerBadgeText: {
     fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
     color: '#B072BB',
   },
   notPlayingHint: {
     marginLeft: 6,
-    fontSize: 10,
-    fontStyle: 'italic',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
     color: 'rgba(255,255,255,0.35)',
   },
 });
