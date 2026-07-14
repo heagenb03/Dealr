@@ -5,7 +5,7 @@ import {
   SettlementResult,
   Validation,
 } from '@/types/game';
-import { roundBalancesToUnit } from '@/utils/roundingUtils';
+import { roundBalancesToUnit, roundToUnit } from '@/utils/roundingUtils';
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const SETTLEMENT_ENDPOINT_PATH = '/settlements/optimal';
@@ -94,29 +94,27 @@ function createLocalSettlementResult(
 }
 
 /**
- * Star-topology settlement through a designated banker (home cash-game "the bank" model).
- * Every non-banker settles their entire net directly with the banker:
- *   net < 0 → player pays banker |net|;  net > 0 → banker pays player net.
- * The banker's own net is absorbed by being the hub (no self-line). Computed on-device only.
+ * Casino / "the bank" settlement for a home game where buy-ins are handed to the
+ * banker live and the banker holds the pot. At the end the banker pays each player
+ * their full cash-out (stack value) — NOT their net: a player who finished down
+ * still redeems whatever chips they have left. Losers are never chased at the end;
+ * their buy-ins are already in the pot. Computed on-device only.
+ *   for each non-banker with cash-out > 0:  { from: banker, to: player, amount: cashout }
  */
 export function calculateBankerSettlements(
   balances: PlayerBalance[],
   banker: { id: string; name: string },
   cashRoundingUnit?: number,
 ): SettlementResult {
-  const prepared =
-    typeof cashRoundingUnit === 'number' && cashRoundingUnit > 0
-      ? roundBalancesToUnit(balances, cashRoundingUnit)
-      : balances;
+  const unit =
+    typeof cashRoundingUnit === 'number' && cashRoundingUnit > 0 ? cashRoundingUnit : 0;
 
   const settlements: Settlement[] = [];
-  for (const b of prepared) {
+  for (const b of balances) {
     if (b.playerId === banker.id) continue;
-    const net = parseFloat(b.netBalance.toFixed(2));
-    if (net < 0) {
-      settlements.push({ from: b.playerName, to: banker.name, amount: Math.abs(net) });
-    } else if (net > 0) {
-      settlements.push({ from: banker.name, to: b.playerName, amount: net });
+    const cashout = parseFloat(roundToUnit(b.totalCashouts, unit).toFixed(2));
+    if (cashout > 0) {
+      settlements.push({ from: banker.name, to: b.playerName, amount: cashout });
     }
   }
 

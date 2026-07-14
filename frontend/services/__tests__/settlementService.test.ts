@@ -359,50 +359,42 @@ describe('getSettlements', () => {
   });
 });
 
-// ---- calculateBankerSettlements ----
+// ---- calculateBankerSettlements (casino / cash-out model) ----
 
 describe('calculateBankerSettlements', () => {
   const banker = { id: 'id_Bank', name: 'Bank' };
 
-  it('losers pay the banker, banker pays winners (net)', () => {
+  it('pays each non-banker their full cash-out (stack), not their net', () => {
     const balances = [
-      makeBalance('Bank', 0, 0),   // non-playing banker, net 0
-      makeBalance('L1', 30, 0),    // net -30
-      makeBalance('L2', 20, 0),    // net -20
-      makeBalance('W1', 0, 50),    // net +50
+      makeBalance('Bank', 0, 0),      // non-playing banker
+      makeBalance('Alice', 100, 150), // net +50, cash-out 150
+      makeBalance('Bob', 100, 50),    // net -50, but still redeems his $50 stack
     ];
     const { settlements, algorithm, source } = calculateBankerSettlements(balances, banker);
     expect(algorithm).toBe('client-banker-v1');
     expect(source).toBe('client');
-    expect(settlements).toContainEqual({ from: 'L1', to: 'Bank', amount: 30 });
-    expect(settlements).toContainEqual({ from: 'L2', to: 'Bank', amount: 20 });
-    expect(settlements).toContainEqual({ from: 'Bank', to: 'W1', amount: 50 });
-    expect(settlements).toHaveLength(3);
+    expect(settlements).toContainEqual({ from: 'Bank', to: 'Alice', amount: 150 });
+    expect(settlements).toContainEqual({ from: 'Bank', to: 'Bob', amount: 50 });
+    expect(settlements).toHaveLength(2);
   });
 
-  it('excludes the banker by id and skips zero-net players', () => {
+  it('omits busted players (cash-out 0) and never pays the banker itself', () => {
     const balances = [
-      makeBalance('Bank', 100, 150), // playing banker, net +50 — must NOT settle with self
-      makeBalance('Even', 40, 40),   // net 0 — skipped
-      makeBalance('L1', 50, 0),      // net -50
+      makeBalance('Bank', 100, 150), // playing banker — no self-row despite cash-out > 0
+      makeBalance('Cara', 100, 0),   // busted — no row
+      makeBalance('Alice', 50, 80),  // cash-out 80
     ];
     const { settlements } = calculateBankerSettlements(balances, banker);
-    expect(settlements).toEqual([{ from: 'L1', to: 'Bank', amount: 50 }]);
+    expect(settlements).toEqual([{ from: 'Bank', to: 'Alice', amount: 80 }]);
   });
 
-  it('excludes strictly by id — a balance sharing the banker\'s name but not its id is still settled', () => {
-    // makeBalance derives playerId as `id_${name}`, so it can't produce two
-    // different-id balances with the same name — a raw PlayerBalance literal
-    // is used here instead to get a name collision with a distinct id.
+  it('excludes strictly by id — a same-name, different-id player is still paid', () => {
     const dealerBanker = { id: 'id_Dealer', name: 'Dealer' };
     const balances = [
-      // Same NAME as the banker ('Dealer') but a DIFFERENT id — must NOT be
-      // excluded if exclusion is truly id-keyed. Because settlements are
-      // rendered by name, this produces a same-name self-loop
-      // ({from:'Dealer', to:'Dealer'}) — that self-loop is the discriminator:
-      // an id-keyed implementation keeps it (length 2 below), a name-keyed
-      // implementation would wrongly skip it (length 1).
-      { playerId: 'id_Dealer_2', playerName: 'Dealer', totalBuyins: 40, totalCashouts: 0, netBalance: -40 },
+      // Same NAME as the banker but a DIFFERENT id → must be paid (id-keyed
+      // exclusion), producing a same-name self-loop {from:'Dealer', to:'Dealer'}
+      // as the discriminator: an id-keyed impl keeps it, a name-keyed one drops it.
+      { playerId: 'id_Dealer_2', playerName: 'Dealer', totalBuyins: 0, totalCashouts: 40, netBalance: 40 },
       makeBalance('W1', 0, 40),
     ];
     const { settlements } = calculateBankerSettlements(balances, dealerBanker);
@@ -411,14 +403,23 @@ describe('calculateBankerSettlements', () => {
     expect(settlements).toContainEqual({ from: 'Dealer', to: 'W1', amount: 40 });
   });
 
-  it('rounds nets to the cash unit before building the star', () => {
+  it('rounds cash-outs to the cash unit', () => {
     const balances = [
       makeBalance('Bank', 0, 0),
-      makeBalance('L1', 53, 0),   // -53 → -55 at unit 5
-      makeBalance('W1', 0, 53),   // +53 → +55 at unit 5
+      makeBalance('Alice', 0, 53), // 53 → 55 at unit 5
     ];
     const { settlements } = calculateBankerSettlements(balances, banker, 5);
-    expect(settlements.every(s => s.amount % 5 === 0)).toBe(true);
+    expect(settlements).toEqual([{ from: 'Bank', to: 'Alice', amount: 55 }]);
+  });
+
+  it('returns no settlements when nobody has cashed out', () => {
+    const balances = [
+      makeBalance('Bank', 0, 0),
+      makeBalance('Alice', 50, 0),
+      makeBalance('Bob', 30, 0),
+    ];
+    const { settlements } = calculateBankerSettlements(balances, banker);
+    expect(settlements).toEqual([]);
   });
 });
 
