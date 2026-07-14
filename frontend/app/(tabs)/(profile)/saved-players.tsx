@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
@@ -63,9 +64,12 @@ export default function SavedPlayersScreen() {
       .then(setPlayers)
       .catch(() => Alert.alert('Error', 'Could not load saved players.'));
   }, [uid]);
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  // Reload on every focus (not just mount) so a saved player created elsewhere — e.g. the
+  // active-game add-player flow (active.tsx) writing to the same uid-scoped store — shows up
+  // when the user switches back to this already-mounted screen. `reload` is memoized on
+  // [uid], so this runs on first focus and again on each refocus. (bug: stale list until
+  // backing out and re-entering.)
+  useFocusEffect(reload);
 
   const sorted = [...players].sort((a, b) =>
     a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
