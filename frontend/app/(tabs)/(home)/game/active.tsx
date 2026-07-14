@@ -5,7 +5,10 @@ import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from '@/components/Themed';
 import { useGame } from '@/contexts/GameContext';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useHelp } from '@/contexts/HelpContext';
+import HelpSheet from '@/components/HelpSheet';
+import { ACTIVE_GAME_TOPIC_IDS, getTopicsByIds } from '@/constants/helpTopics';
 import { GameService } from '@/services/gameService';
 import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
 import { Player, PlayerBalance, Validation, PreferredPayment } from '@/types/game';
@@ -162,6 +165,21 @@ export default function ActiveGameScreen() {
   const { user, isPro } = useAuth();
   const { formatAmount, meta, currency } = useCurrency();
   const router = useRouter();
+  const { registerHelp } = useHelp();
+  const [helpVisible, setHelpVisible] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const unregister = registerHelp(() => setHelpVisible(true));
+      return unregister;
+    }, [registerHelp])
+  );
+
+  const handleSeeFullGuide = useCallback(() => {
+    // Dismiss this native modal BEFORE navigating (iOS single-modal rule).
+    setHelpVisible(false);
+    setTimeout(() => router.push('/how-it-works' as any), 250);
+  }, [router]);
 
   const uid = user?.uid ?? null;
   const refreshSavedNames = useCallback(() => {
@@ -1414,6 +1432,14 @@ export default function ActiveGameScreen() {
            that persists even when the parent screen is frozen/detached, which
            blocks all touch events on any screen pushed on top. */}
       {showSolvingModal && <SolvingOverlay />}
+
+      <HelpSheet
+        visible={helpVisible}
+        title="During a Game"
+        topics={getTopicsByIds(ACTIVE_GAME_TOPIC_IDS)}
+        onClose={() => setHelpVisible(false)}
+        onSeeFullGuide={handleSeeFullGuide}
+      />
 
     </View>
   );
