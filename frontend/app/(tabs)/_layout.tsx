@@ -11,6 +11,7 @@ import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { useNetwork } from '@/contexts/NetworkContext';
+import { HelpProvider, useHelp } from '@/contexts/HelpContext';
 
 const AMBER = 'rgba(255, 165, 0, 0.85)';
 const AMBER_BG = 'rgba(255, 165, 0, 0.08)';
@@ -32,6 +33,7 @@ function DynamicCashCageHeader() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isOnline } = useNetwork();
+  const { requestHelp } = useHelp();
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
@@ -148,13 +150,27 @@ function DynamicCashCageHeader() {
           />
         </View>
 
-        {/* Right column: Empty spacer (76px fixed width) */}
+        {/* Right column: Help (?) on game screens (76px fixed width) */}
         <View style={{
           width: 76,
           alignItems: 'flex-end',
           justifyContent: 'center',
           paddingRight: 16,
-        }} />
+        }}>
+          {isGameScreen && (
+            <TouchableOpacity
+              onPress={requestHelp}
+              style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+              activeOpacity={0.6}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Help"
+              accessibilityHint="Opens help for this screen"
+            >
+              <Ionicons name="help-circle-outline" size={24} color="#B072BB" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {showOfflineStrip && (
@@ -192,34 +208,36 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <Tabs
-      initialRouteName="(home)"
-      screenOptions={{
-        tabBarActiveTintColor: Colors.dark.tint,
-        tabBarInactiveTintColor: Colors.dark.tabIconDefault,
-        tabBarStyle: {
-          backgroundColor: '#0A0A0A',
-          borderTopColor: '#2A2A2A',
-        },
-        headerStyle: {
-          backgroundColor: '#0A0A0A',
-        },
-        header: () => <DynamicCashCageHeader />,
-      }}>
-      <Tabs.Screen
-        name="(home)"
-        options={{
-          tabBarLabel: 'Games',
-          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="(profile)"
-        options={{
-          tabBarLabel: 'Account',
-          tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
-        }}
-      />
-    </Tabs>
+    <HelpProvider>
+      <Tabs
+        initialRouteName="(home)"
+        screenOptions={{
+          tabBarActiveTintColor: Colors.dark.tint,
+          tabBarInactiveTintColor: Colors.dark.tabIconDefault,
+          tabBarStyle: {
+            backgroundColor: '#0A0A0A',
+            borderTopColor: '#2A2A2A',
+          },
+          headerStyle: {
+            backgroundColor: '#0A0A0A',
+          },
+          header: () => <DynamicCashCageHeader />,
+        }}>
+        <Tabs.Screen
+          name="(home)"
+          options={{
+            tabBarLabel: 'Games',
+            tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="(profile)"
+          options={{
+            tabBarLabel: 'Account',
+            tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
+          }}
+        />
+      </Tabs>
+    </HelpProvider>
   );
 }
