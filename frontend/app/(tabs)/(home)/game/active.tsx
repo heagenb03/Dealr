@@ -155,7 +155,7 @@ function SolvingOverlay() {
 
 const PLAYERS_PAYWALL_MESSAGE = 'Upgrade to Pro for unlimited players per game.';
 const SAVED_CAP_PAYWALL_MESSAGE = `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
-const PICKER_LIMIT = 25;
+const RECENT_LIMIT = 5;
 
 export default function ActiveGameScreen() {
   const { activeGame, updateGame, setActiveGame, createGame } = useGame();
@@ -357,7 +357,7 @@ export default function ActiveGameScreen() {
   const savedListFull = !canAddMoreSavedPlayers(savedPlayers.length, isPro);
   const trimmedName = newPlayerName.trim();
   const filteredSaved = filterSavedByQuery(savedPlayers, newPlayerName);
-  const visibleSaved = filteredSaved.slice(0, PICKER_LIMIT);
+  const visibleSaved = filteredSaved.slice(0, RECENT_LIMIT);
   const isTypedNew =
     trimmedName.length > 0 &&
     !selectedSavedId &&
@@ -1004,9 +1004,9 @@ export default function ActiveGameScreen() {
                 })}
               </View>
             )}
-            {filteredSaved.length > PICKER_LIMIT && (
+            {filteredSaved.length > RECENT_LIMIT && (
               <Text style={styles.pickHint}>
-                Showing {PICKER_LIMIT} of {filteredSaved.length} — type to narrow
+                Showing {RECENT_LIMIT} of {filteredSaved.length} — type to narrow
               </Text>
             )}
           </>
