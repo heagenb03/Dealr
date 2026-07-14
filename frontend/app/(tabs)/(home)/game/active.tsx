@@ -369,6 +369,10 @@ export default function ActiveGameScreen() {
 
   const addedConfirmLabel = formatAddedConfirmation(lastAddedName, addedCount);
 
+  const hasSubject = trimmedName.length > 0;
+  const committingTapped = selectedSavedId != null;            // decisive pick — list hidden
+  const committingTyped = hasSubject && selectedSavedId == null; // still searching / brand-new
+
   const closeAddModal = () => {
     setNewPlayerName('');
     setNewPlayerBuyIn('');
@@ -390,6 +394,13 @@ export default function ActiveGameScreen() {
   const handleNameChange = (text: string) => {
     setNewPlayerName(text);
     setSelectedSavedId(null);
+  };
+
+  // The '‹ Adding {name}' header taps back to Browse (un-picks the saved row).
+  const clearSubject = () => {
+    setNewPlayerName('');
+    setSelectedSavedId(null);
+    requestAnimationFrame(() => nameInputRef.current?.focus());
   };
 
   const commitAddPlayer = async () => {
@@ -974,51 +985,63 @@ export default function ActiveGameScreen() {
           <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
         )}
 
-        <TextInput
-          ref={nameInputRef}
-          style={styles.input}
-          value={newPlayerName}
-          onChangeText={handleNameChange}
-          placeholder="Search saved or type a name"
-          placeholderTextColor="#666"
-          autoFocus
-          autoCapitalize="words"
-          returnKeyType="next"
-        />
+        {/* Subject header (decisive pick) OR search field (Browse / typing). */}
+        {committingTapped ? (
+          <TouchableOpacity
+            style={styles.addingHeader}
+            onPress={clearSubject}
+            accessibilityRole="button"
+            accessibilityLabel="Back to saved players"
+          >
+            <Ionicons name="chevron-back" size={18} color="#B072BB" />
+            <Text style={styles.addingHeaderText}>
+              Adding <Text style={styles.addingHeaderName}>{trimmedName}</Text>
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TextInput
+            ref={nameInputRef}
+            style={styles.input}
+            value={newPlayerName}
+            onChangeText={handleNameChange}
+            placeholder="Search saved or type a name"
+            placeholderTextColor="#666"
+            autoFocus
+            autoCapitalize="words"
+            returnKeyType="next"
+          />
+        )}
 
-        {/* Pick-first saved list — hidden once a saved player is selected. */}
-        {!selectedSavedId && savedPlayers.length > 0 && (
+        {/* Pick-first saved list — Browse + typing only; hidden on decisive pick.
+            Collapses to nothing when a typed query matches no saved player. */}
+        {!committingTapped && savedPlayers.length > 0 && filteredSaved.length > 0 && (
           <>
             <Text style={styles.pickerLabel}>SAVED · {savedPlayers.length}</Text>
-            {filteredSaved.length === 0 ? (
-              <Text style={styles.pickerEmpty}>No saved players match “{trimmedName}”.</Text>
-            ) : (
-              <View style={styles.pickerList}>
-                {visibleSaved.map((p, index) => {
-                  const inGame = isNameTakenInGame(activeGame.players, p.name);
-                  const badge = savedBadge(p);
-                  return (
-                    <TouchableOpacity
-                      key={p.id}
-                      disabled={inGame || atPlayerCap}
-                      onPress={() => handleSelectSaved(p)}
-                      style={[
-                        styles.pickerRow,
-                        index === visibleSaved.length - 1 && styles.pickerRowLast,
-                        (inGame || atPlayerCap) && styles.pickerRowDisabled,
-                      ]}
-                    >
-                      <Text style={styles.pickerRowName}>{p.name}</Text>
-                      {inGame ? (
-                        <Text style={styles.pickerAddedTag}>Added ✓</Text>
-                      ) : badge ? (
-                        <Text style={styles.pickerRowBadge} numberOfLines={1}>{badge}</Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
+            <View style={styles.pickerList}>
+              {visibleSaved.map((p, index) => {
+                const inGame = isNameTakenInGame(activeGame.players, p.name);
+                const badge = savedBadge(p);
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    disabled={inGame || atPlayerCap}
+                    onPress={() => handleSelectSaved(p)}
+                    style={[
+                      styles.pickerRow,
+                      index === visibleSaved.length - 1 && styles.pickerRowLast,
+                      (inGame || atPlayerCap) && styles.pickerRowDisabled,
+                    ]}
+                  >
+                    <Text style={styles.pickerRowName}>{p.name}</Text>
+                    {inGame ? (
+                      <Text style={styles.pickerAddedTag}>Added ✓</Text>
+                    ) : badge ? (
+                      <Text style={styles.pickerRowBadge} numberOfLines={1}>{badge}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             {filteredSaved.length > RECENT_LIMIT && (
               <Text style={styles.pickHint}>
                 Showing {RECENT_LIMIT} of {filteredSaved.length} — type to narrow
@@ -1027,58 +1050,65 @@ export default function ActiveGameScreen() {
           </>
         )}
 
-        {selectedSavedId && (
-          <Text style={styles.pickHint}>Adding {trimmedName} — enter their buy-in (optional).</Text>
+        {/* Buy-in — only once a subject exists (Commit). */}
+        {hasSubject && (
+          <TextInput
+            ref={buyInInputRef}
+            style={styles.input}
+            value={newPlayerBuyIn}
+            onChangeText={setNewPlayerBuyIn}
+            placeholder="Buy-In"
+            placeholderTextColor="#666"
+            keyboardType="decimal-pad"
+            returnKeyType="done"
+            onSubmitEditing={commitAddPlayer}
+          />
         )}
 
-        <TextInput
-          ref={buyInInputRef}
-          style={styles.input}
-          value={newPlayerBuyIn}
-          onChangeText={setNewPlayerBuyIn}
-          placeholder="Buy-In"
-          placeholderTextColor="#666"
-          keyboardType="decimal-pad"
-          returnKeyType="done"
-          onSubmitEditing={commitAddPlayer}
-        />
-
-        {/* Save-player opt-in — only when adding a genuinely new name. */}
-        {isTypedNew &&
-          (savedListFull ? (
-            <TouchableOpacity
-              style={styles.saveToggleRow}
-              disabled={isPro}
-              onPress={() => {
-                setShowAddPlayer(false);
-                setPendingBankerDesignation(false);
-                setPaywallMessage(SAVED_CAP_PAYWALL_MESSAGE);
-                setShowPaywall(true);
-              }}
-            >
-              <Ionicons name="lock-closed" size={14} color="#B072BB" />
-              <Text style={styles.saveToggleFullText}>
-                Saved players full · {savedPlayers.length}/{savedCapFor(isPro)}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.saveToggleRow} onPress={() => setSavePlayerToggle(v => !v)}>
-              <Ionicons
-                name={savePlayerToggle ? 'checkbox' : 'square-outline'}
-                size={18}
-                color={savePlayerToggle ? '#B072BB' : '#666'}
-              />
-              <Text style={styles.saveToggleText}>Save player</Text>
-            </TouchableOpacity>
-          ))}
+        {/* Save-player opt-in — typing-a-new-name only, in a fixed-height slot so
+            crossing an exact saved-name match doesn't shift the Add button. */}
+        {committingTyped && (
+          <View style={styles.saveToggleSlot}>
+            {isTypedNew &&
+              (savedListFull ? (
+                <TouchableOpacity
+                  style={styles.saveToggleRow}
+                  disabled={isPro}
+                  onPress={() => {
+                    setShowAddPlayer(false);
+                    setPendingBankerDesignation(false);
+                    setPaywallMessage(SAVED_CAP_PAYWALL_MESSAGE);
+                    setShowPaywall(true);
+                  }}
+                >
+                  <Ionicons name="lock-closed" size={14} color="#B072BB" />
+                  <Text style={styles.saveToggleFullText}>
+                    Saved players full · {savedPlayers.length}/{savedCapFor(isPro)}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.saveToggleRow} onPress={() => setSavePlayerToggle(v => !v)}>
+                  <Ionicons
+                    name={savePlayerToggle ? 'checkbox' : 'square-outline'}
+                    size={18}
+                    color={savePlayerToggle ? '#B072BB' : '#666'}
+                  />
+                  <Text style={styles.saveToggleText}>Save player</Text>
+                </TouchableOpacity>
+              ))}
+          </View>
+        )}
 
         {atPlayerCap && (
           <Text style={styles.pickHint}>Free limit reached · 12 players. Upgrade to Pro for unlimited.</Text>
         )}
 
         <View style={styles.modalButtons}>
-          <ModalButton variant="cancel" title="Done" onPress={closeAddModal} />
-          <ModalButton variant="confirm" title="Add" onPress={commitAddPlayer} />
+          {hasSubject ? (
+            <ModalButton variant="confirm" title="Add" onPress={commitAddPlayer} />
+          ) : (
+            <ModalButton variant="cancel" title="Done" onPress={closeAddModal} />
+          )}
         </View>
       </AppModal>
 
@@ -1544,7 +1574,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 16,
   },
   saveToggleText: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
   saveToggleFullText: { fontSize: 13, color: '#B072BB', fontFamily: 'SpaceMono' },
@@ -1785,6 +1814,21 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 12,
   },
+  saveToggleSlot: {
+    width: '100%',
+    height: 30,
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  addingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  addingHeaderText: { fontSize: 15, color: 'rgba(255,255,255,0.7)' },
+  addingHeaderName: { color: '#FFFFFF', fontWeight: '700' },
   bankerPendingHint: {
     fontSize: 13,
     fontWeight: '600',
