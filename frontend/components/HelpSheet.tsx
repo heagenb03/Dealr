@@ -87,7 +87,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  scroll: { backgroundColor: 'transparent' },
+  // flexShrink lets the ScrollView yield height when the sheet clamps to its
+  // maxHeight (expanded topics overflow), giving it a bounded frame so
+  // contentSize > frame and it actually scrolls. Without it the ScrollView
+  // sizes to full content height, contentSize == frame, and iOS treats it as
+  // non-scrollable — lower content/the "See full guide" button become
+  // unreachable. flexShrink (not flex:1) keeps basis auto so collapsed content
+  // still sizes naturally and every topic row stays visible. Mirrors AppModal.
+  scroll: { backgroundColor: 'transparent', flexShrink: 1 },
   guideButton: {
     flexDirection: 'row',
     alignItems: 'center',
