@@ -13,6 +13,7 @@ jest.mock('firebase/auth', () => ({
   signInWithCredential: jest.fn(),
   signOut: jest.fn(),
   sendPasswordResetEmail: jest.fn(),
+  sendEmailVerification: jest.fn(),
   updateProfile: jest.fn(),
   updatePassword: jest.fn(),
   reauthenticateWithCredential: jest.fn(),
@@ -41,14 +42,16 @@ jest.mock('firebase/functions', () => ({
 }));
 
 import {
+  auth,
   deserializeFirestoreGame,
   fetchSavedPlayersFromFirestore,
   incrementProfileStats,
+  sendVerificationEmail,
   signInWithGoogleCredential,
   signInWithAppleCredential,
 } from '@/services/firebaseService';
 import { getDoc, setDoc, runTransaction, increment, updateDoc } from 'firebase/firestore';
-import { signInWithCredential } from 'firebase/auth';
+import { sendEmailVerification, signInWithCredential } from 'firebase/auth';
 
 describe('deserializeFirestoreGame', () => {
   const baseDoc = {
@@ -250,5 +253,22 @@ describe('incrementProfileStats — biggestPot', () => {
       totalMoneyTracked: { __increment: 150 },
       totalPlayersHosted: { __increment: 3 },
     }));
+  });
+});
+
+describe('sendVerificationEmail', () => {
+  afterEach(() => {
+    (auth as any).currentUser = null;
+  });
+
+  it('sends a verification email to the signed-in user', async () => {
+    (auth as any).currentUser = { uid: 'u1' };
+    await sendVerificationEmail();
+    expect(sendEmailVerification).toHaveBeenCalledWith({ uid: 'u1' });
+  });
+
+  it('throws when there is no signed-in user', async () => {
+    (auth as any).currentUser = null;
+    await expect(sendVerificationEmail()).rejects.toThrow('No authenticated user');
   });
 });

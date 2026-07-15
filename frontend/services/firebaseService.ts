@@ -7,6 +7,7 @@ import {
   signInWithCredential,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
   updatePassword,
   reauthenticateWithCredential,
@@ -165,6 +166,13 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
 export async function resetPassword(email: string): Promise<void> {
   await sendPasswordResetEmail(auth, email);
+}
+
+/** Send a verification email to the currently signed-in user. */
+export async function sendVerificationEmail(): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('No authenticated user');
+  await sendEmailVerification(currentUser);
 }
 
 // ---------------------------------------------------------------------------
