@@ -48,6 +48,8 @@ interface AuthContextType {
   emailVerified: boolean;
   /** reload() the current user and refresh emailVerified. Never throws; returns the resulting verified state. */
   refreshVerification: () => Promise<boolean>;
+  /** reload() the current user so newly linked providers appear in user.providerData. Never throws. */
+  reloadUser: () => Promise<void>;
   /** Firestore user document (tier, displayName, etc.) */
   userDoc: UserDocument | null;
   /** True until onAuthStateChanged fires for the first time — show splash, not auth screens */
@@ -252,6 +254,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Linking an OAuth provider does NOT fire onAuthStateChanged, so `user` keeps
+  // its stale providerData. reload() mutates providerData in place; the tick bump
+  // forces a provider re-render so consumers re-derive from the fresh array.
+  const [, setAuthTick] = useState(0);
+
+  const reloadUser = useCallback(async (): Promise<void> => {
+    const u = auth.currentUser;
+    if (!u) return;
+    try {
+      await u.reload();
+      setAuthTick((t) => t + 1);
+    } catch {
+      // offline / transient — leave state unchanged
+    }
+  }, []);
+
   // Paid Pro: Firestore tier or RevenueCat entitlement
   const paidPro = userDoc?.tier === 'pro' || rcIsPro;
 
@@ -299,6 +317,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         emailVerified,
         refreshVerification,
+        reloadUser,
         userDoc,
         isLoading,
         isPro,
