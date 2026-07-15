@@ -11,6 +11,7 @@ jest.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: jest.fn(),
   signInWithEmailAndPassword: jest.fn(),
   signInWithCredential: jest.fn(),
+  linkWithCredential: jest.fn(),
   signOut: jest.fn(),
   sendPasswordResetEmail: jest.fn(),
   sendEmailVerification: jest.fn(),
@@ -49,9 +50,11 @@ import {
   sendVerificationEmail,
   signInWithGoogleCredential,
   signInWithAppleCredential,
+  linkGoogleCredential,
+  linkAppleCredential,
 } from '@/services/firebaseService';
 import { getDoc, setDoc, runTransaction, increment, updateDoc } from 'firebase/firestore';
-import { sendEmailVerification, signInWithCredential } from 'firebase/auth';
+import { sendEmailVerification, signInWithCredential, linkWithCredential, GoogleAuthProvider } from 'firebase/auth';
 
 describe('deserializeFirestoreGame', () => {
   const baseDoc = {
@@ -270,5 +273,50 @@ describe('sendVerificationEmail', () => {
   it('throws when there is no signed-in user', async () => {
     (auth as any).currentUser = null;
     await expect(sendVerificationEmail()).rejects.toThrow('No authenticated user');
+  });
+});
+
+describe('account linking', () => {
+  afterEach(() => {
+    (auth as any).currentUser = null;
+    jest.clearAllMocks();
+  });
+
+  it('linkGoogleCredential links the google credential to the current user', async () => {
+    (auth as any).currentUser = { uid: 'u1' };
+    (GoogleAuthProvider.credential as jest.Mock).mockReturnValueOnce({ __g: true });
+    (linkWithCredential as jest.Mock).mockResolvedValueOnce({ user: { uid: 'u1', providerData: [{ providerId: 'google.com' }] } });
+
+    const user = await linkGoogleCredential('id-token');
+
+    expect(GoogleAuthProvider.credential).toHaveBeenCalledWith('id-token');
+    expect(linkWithCredential).toHaveBeenCalledWith({ uid: 'u1' }, { __g: true });
+    expect(user).toEqual({ uid: 'u1', providerData: [{ providerId: 'google.com' }] });
+  });
+
+  it('linkGoogleCredential throws when there is no signed-in user', async () => {
+    (auth as any).currentUser = null;
+    await expect(linkGoogleCredential('id-token')).rejects.toThrow('No authenticated user');
+  });
+
+  it('linkAppleCredential links the apple credential to the current user', async () => {
+    (auth as any).currentUser = { uid: 'u1' };
+    (linkWithCredential as jest.Mock).mockResolvedValueOnce({ user: { uid: 'u1' } });
+
+    const user = await linkAppleCredential('identity-token');
+
+    expect(linkWithCredential).toHaveBeenCalled();
+    expect(user).toEqual({ uid: 'u1' });
+  });
+
+  it('linkAppleCredential throws when there is no signed-in user', async () => {
+    (auth as any).currentUser = null;
+    await expect(linkAppleCredential('identity-token')).rejects.toThrow('No authenticated user');
+  });
+
+  it('propagates auth/credential-already-in-use so the UI can map it', async () => {
+    (auth as any).currentUser = { uid: 'u1' };
+    (linkWithCredential as jest.Mock).mockRejectedValueOnce({ code: 'auth/credential-already-in-use' });
+    await expect(linkGoogleCredential('id-token')).rejects.toMatchObject({ code: 'auth/credential-already-in-use' });
   });
 });

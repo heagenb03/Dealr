@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithCredential,
+  linkWithCredential,
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
@@ -215,6 +216,33 @@ export async function signInWithAppleCredential(
   // never fired and Apple accounts never got a doc. No-op if it already exists.
   await createUserDocument(result.user, fullName ?? undefined);
 
+  return result.user;
+}
+
+// ---------------------------------------------------------------------------
+// Account linking (Tier B)
+// Adds an OAuth provider to the ALREADY signed-in user. Under the project's
+// one-account-per-email + email-enumeration-protection config this is the only
+// reliable linking primitive (see firebase-auth-linking-constraints memory).
+// Email/password linking is intentionally unsupported (no add-password flow).
+// linkAppleCredential does NOT set displayName — linking must not overwrite the
+// existing account's name.
+// ---------------------------------------------------------------------------
+
+export async function linkGoogleCredential(idToken: string): Promise<User> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('No authenticated user');
+  const credential = GoogleAuthProvider.credential(idToken);
+  const result = await linkWithCredential(currentUser, credential);
+  return result.user;
+}
+
+export async function linkAppleCredential(identityToken: string): Promise<User> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('No authenticated user');
+  const provider = new OAuthProvider('apple.com');
+  const credential = provider.credential({ idToken: identityToken });
+  const result = await linkWithCredential(currentUser, credential);
   return result.user;
 }
 
