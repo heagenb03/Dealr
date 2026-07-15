@@ -76,14 +76,17 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user, userDoc, isPro, isTrialing, trialDaysRemaining, trialExpired, signOut, refreshUserDoc } = useAuth();
 
-  // Derive auth provider
-  const isEmailProvider = user?.providerData?.[0]?.providerId === 'password';
-  const providerLabel =
-    user?.providerData?.[0]?.providerId === 'google.com'
-      ? '(Google)'
-      : user?.providerData?.[0]?.providerId === 'apple.com'
-      ? '(Apple)'
-      : null;
+  // Derive auth providers from the full list. Reading only `providerData[0]` is
+  // unreliable: linking a provider (e.g. Google) appends an entry and Firebase
+  // does not guarantee order, so a positional check can hide the Change Password
+  // affordance from a linked account whose password credential still works.
+  const providerIds = user?.providerData?.map((p) => p.providerId) ?? [];
+  const hasPassword = providerIds.includes('password');
+  const providerLabel = providerIds.includes('google.com')
+    ? '(Google)'
+    : providerIds.includes('apple.com')
+    ? '(Apple)'
+    : null;
 
   const displayName = userDoc?.displayName || user?.displayName || '';
   const email = userDoc?.email || user?.email || '';
@@ -230,7 +233,7 @@ export default function SettingsScreen() {
     if (deleteConfirmInput !== 'DELETE') return;
     closeModal();
 
-    if (isEmailProvider) {
+    if (hasPassword) {
       // Email accounts require re-authentication before deletion
       openModal('deleteAccountReauth');
     } else {
@@ -238,7 +241,7 @@ export default function SettingsScreen() {
       // NOTE: Re-auth for Google/Apple requires additional implementation (Phase 1C)
       handleDeleteAccount();
     }
-  }, [deleteConfirmInput, isEmailProvider, closeModal, openModal, handleDeleteAccount]);
+  }, [deleteConfirmInput, hasPassword, closeModal, openModal, handleDeleteAccount]);
 
   const handleDeleteAccountWithReauth = useCallback(async () => {
     if (!reauthPassword) {
@@ -310,7 +313,7 @@ export default function SettingsScreen() {
               <View style={styles.menuItemRight}>
                 <Text style={styles.menuItemValue} numberOfLines={1}>
                   {email}
-                  {!isEmailProvider && providerLabel ? ` ${providerLabel}` : ''}
+                  {!hasPassword && providerLabel ? ` ${providerLabel}` : ''}
                 </Text>
               </View>
             </View>
@@ -413,8 +416,9 @@ export default function SettingsScreen() {
           <HudSectionHeader label="Account" centered={true} />
           <View style={styles.menuCard}>
             
-            {/* Change Password — only shown for email/password accounts */}
-            {isEmailProvider && (
+            {/* Change Password — shown whenever a password credential exists,
+                including linked accounts (email/password + Google/Apple). */}
+            {hasPassword && (
               <>
                 <TouchableOpacity
                   style={styles.menuItem}
