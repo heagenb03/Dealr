@@ -28,7 +28,6 @@ export default function SettlementModePicker({
         <Pressable style={styles.overlay} onPress={onClose}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.title}>Banker</Text>
-            <Text style={styles.hint}>Everyone settles up with this one person.</Text>
 
             {players.length === 0 ? (
               <TouchableOpacity style={styles.emptyRow} onPress={onAddSomeone} activeOpacity={0.7}>

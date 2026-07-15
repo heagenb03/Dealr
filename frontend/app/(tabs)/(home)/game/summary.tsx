@@ -318,12 +318,6 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
                     {payment.from}
                   </Text>
                   <View style={styles.paymentAmountRow}>
-                    <Ionicons
-                      name="arrow-down"
-                      size={11}
-                      color="rgba(176,114,187,0.4)"
-                      style={{ marginRight: 4, marginTop: 1 }}
-                    />
                     <Text style={styles.paymentAmountValue}>
                       {formatAmount(payment.amount)}
                     </Text>
@@ -858,7 +852,7 @@ setSettlementResult(cachedResult);
 
           {isBanker && (
             <Text style={styles.bankerSubhead}>
-              {bankerName ?? '—'} holds the pot · pays out below
+              {bankerName ?? '—'}, the banker, pays out below
             </Text>
           )}
 

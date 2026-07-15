@@ -26,9 +26,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'Direct vs Banker settlement',
     icon: 'git-compare-outline',
     paragraphs: [
-      'Cash Cage can settle a game two ways. You pick the mode before you settle.',
-      'Direct: the app finds the fewest possible payments between players. Winners get paid directly by losers, so the total number of transfers is as small as possible.',
-      'Banker: one player is the banker. Everyone who lost pays the banker, and the banker pays everyone who won. Use this when one person is handling all the cash.',
+      'Cash Cage can settle any game in two ways.',
+      'Direct: the app finds the fewest possible payments between the playing players where winners get paid directly by the losers. The summary will showcase exactly who owes who, and how much.',
+      'Banker: one player, playing or not, is a designated banker handeling all cash. The summary will showcase who the banker needs to pay, how much, and linked to their preferred payment method just like in a real table. Note it does takes the assumption that the banker has recieved all buy-ins previously to the game ending.',
     ],
   },
   {
@@ -36,9 +36,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'What does rounding mean?',
     icon: 'cash-outline',
     paragraphs: [
-      'Rounding snaps each payment to a cash-friendly amount so nobody is stuck making change.',
-      'A $5 unit rounds every transfer to the nearest $5. "Exact" keeps payments to the cent.',
-      'Because payments are rounded, the totals shown can shift a little from the raw buy-in and cash-out math. Cash Cage keeps the overall settlement balanced.',
+      'Rounding configures each payment to a friendly desired amount so nobody is stuck making change.',
+      'So A $5 unit rounds every payment to the nearest $5 while "Exact" keeps payments down to the cent. This is managed by the app to still ensure the total owed and total paid are equal, even if some individual payments are rounded up or down.',
     ],
   },
   {
@@ -46,9 +45,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'Saved players',
     icon: 'people-outline',
     paragraphs: [
-      'Players you add are remembered, so you can reuse them in future games without retyping names.',
-      'When adding a player, tap a saved name to drop them straight into the game.',
-      'Free accounts remember up to 15 players; Pro remembers up to 200. Manage or delete saved players any time from Account → Saved Players.',
+      'Players you add and their payment information are remembered, so you can reuse them in future games without retyping names.',
+      'These players can be saved during an active game, or added/deleted directly in the settings. Free accounts remember up to 15 players, and Pro remembers up to 200.',
     ],
   },
   {
@@ -57,9 +55,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     icon: 'swap-horizontal-outline',
     visual: 'swipe',
     paragraphs: [
-      'Swipe a player card to reveal quick actions — no menus needed.',
-      'Active players: swipe to rename, mark complete (cashed out and left), or delete.',
-      'Completed players: swipe to reactivate them back into the game, or delete.',
+      'Swipe a player card to reveal their quick actions.',
+      'Active players: tap to rename, swipe right to mark complete (cashed out and left), or swipe left to delete.',
+      'Completed players: swipe right to reactivate them back into the game, or swipe left to delete.',
     ],
   },
   {
@@ -67,8 +65,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'Sharing & getting paid',
     icon: 'share-social-outline',
     paragraphs: [
-      'Once a game is settled, tap Share to send the results — who pays who, and how much.',
-      'If players saved a preferred payment method (like Venmo or PayPal), Cash Cage includes their handle so everyone can pay up fast.',
+      'Once a game is settled, tap Share to send the results to see who pays who, and how much in any group chat.',
+      'If players saved a preferred payment method (like Venmo or PayPal), Cash Cage includes their handle in that message.',
     ],
   },
   {
@@ -76,8 +74,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'Why these payments?',
     icon: 'git-compare-outline',
     paragraphs: [
-      'These payments come from Direct settlement: the app minimized the number of transfers so the group settles in as few payments as possible.',
-      'Each row is one payment, from a player who owes to a player who is owed.',
+      'These payments come from the Direct or Player-to-Player settlement mode.', 
+      'Cash Cage minimized the number of transfers so the group settles in as few payments as possible.',
+      'Each player card shows exactly who and how much they need to get paid by.'
     ],
   },
   {
@@ -85,8 +84,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'Why these payments?',
     icon: 'person-outline',
     paragraphs: [
-      'These payments run through the banker. Everyone who lost pays the banker, and the banker pays out everyone who won.',
-      'That keeps all the cash flowing through one person.',
+      'These payments run through the designated banker via the Banker settlmenet mode',
+      'Eacgh player card shows exactly how much they cashed-out with and an easy pay button to send their payment to their preferred payment method.',
     ],
   },
 ];

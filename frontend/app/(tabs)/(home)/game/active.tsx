@@ -871,7 +871,7 @@ export default function ActiveGameScreen() {
 
         {/* Settlement */}
         <View style={styles.section}>
-          <HudSectionHeader label="Settlement" />
+          <HudSectionHeader label="Settings" />
           <View style={styles.settlementCard}>
             <View style={styles.segment}>
               <TouchableOpacity
