@@ -44,3 +44,29 @@ export function formatAddedConfirmation(lastAddedName: string | null, count: num
   if (count < 1 || !lastAddedName) return null;
   return `Added ${lastAddedName} · ${count} total`;
 }
+
+/**
+ * The single saved player whose name exactly matches `name`, or null when there
+ * is no match or 2+ legacy-duplicate matches (ambiguous — the caller must not
+ * auto-bind). Backs the "Using saved …" surface in the Add Players modal.
+ */
+export function singleExactSavedMatch(saved: SavedPlayer[], name: string): SavedPlayer | null {
+  const matches = matchSavedByExactName(saved, name);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * True when the just-added player is already shown as an in-game "Added ✓" row
+ * among the visible saved rows, making the confirmation banner redundant. Used
+ * to smart-suppress the banner: show it only when the add is NOT otherwise
+ * visible (e.g. a typed-new, non-saved name, or one past the visible limit).
+ */
+export function isLastAddVisibleInList(
+  lastAddedName: string | null,
+  visibleSaved: SavedPlayer[],
+  players: Player[],
+): boolean {
+  const target = norm(lastAddedName ?? '');
+  if (!target) return false;
+  return visibleSaved.some(p => norm(p.name) === target && isNameTakenInGame(players, p.name));
+}

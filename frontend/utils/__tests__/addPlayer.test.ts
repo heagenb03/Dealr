@@ -1,4 +1,4 @@
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation } from '../addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList } from '../addPlayer';
 import type { Player } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
@@ -69,5 +69,39 @@ describe('formatAddedConfirmation', () => {
   it('formats name and running total once at least one add', () => {
     expect(formatAddedConfirmation('Mike', 1)).toBe('Added Mike · 1 total');
     expect(formatAddedConfirmation('Gabe R.', 3)).toBe('Added Gabe R. · 3 total');
+  });
+});
+
+describe('singleExactSavedMatch', () => {
+  it('returns the saved player when exactly one exact match', () => {
+    const list = [saved('Mike'), saved('Gabe')];
+    expect(singleExactSavedMatch(list, 'mike')?.id).toBe('s_Mike');
+  });
+  it('returns null when there is no exact match', () => {
+    expect(singleExactSavedMatch([saved('Mike')], 'Mik')).toBeNull();
+  });
+  it('returns null for 2+ legacy duplicate exact matches (ambiguous)', () => {
+    const list = [{ id: 'a', name: 'Mike' }, { id: 'b', name: 'mike' }] as SavedPlayer[];
+    expect(singleExactSavedMatch(list, 'Mike')).toBeNull();
+  });
+  it('returns null for an empty/whitespace name', () => {
+    expect(singleExactSavedMatch([saved('Mike')], '  ')).toBeNull();
+  });
+});
+
+describe('isLastAddVisibleInList', () => {
+  const mike = saved('Mike');
+  it('true when last-added matches an in-game visible saved row', () => {
+    expect(isLastAddVisibleInList('Mike', [mike], [player('Mike')])).toBe(true);
+  });
+  it('false when the matching saved row is not in the game', () => {
+    expect(isLastAddVisibleInList('Mike', [mike], [player('Dave')])).toBe(false);
+  });
+  it('false when no visible saved row matches the name', () => {
+    expect(isLastAddVisibleInList('Dave', [mike], [player('Dave')])).toBe(false);
+  });
+  it('false when lastAddedName is null or whitespace', () => {
+    expect(isLastAddVisibleInList(null, [mike], [player('Mike')])).toBe(false);
+    expect(isLastAddVisibleInList('  ', [mike], [player('Mike')])).toBe(false);
   });
 });
