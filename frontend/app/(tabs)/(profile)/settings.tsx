@@ -6,6 +6,7 @@ import {
   Linking,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -19,12 +20,15 @@ import {
   updateUserPassword,
   reauthenticateUser,
   callDeleteUserData,
+  linkGoogleCredential,
+  linkAppleCredential,
 } from '@/services/firebaseService';
 import { getCustomerManagementURL } from '@/services/revenueCatService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import CurrencyPickerModal from '@/components/CurrencyPickerModal';
 import { getTrialLabel } from '@/utils/trialUtils';
+import { useOAuthPrompt, isOAuthCancel } from '@/hooks/useOAuthPrompt';
 
 // ---------------------------------------------------------------------------
 // Error message helper
@@ -51,6 +55,11 @@ function friendlyFirebaseError(err: any): string {
     case 'auth/user-not-found':
     case 'auth/user-disabled':
       return 'Account not found or disabled. Please contact support.';
+    case 'auth/credential-already-in-use':
+    case 'auth/account-exists-with-different-credential':
+      return 'That account is already linked to a different Cash Cage account.';
+    case 'auth/provider-already-linked':
+      return 'That provider is already connected.';
     default:
       return 'Something went wrong. Please try again.';
   }
@@ -74,7 +83,7 @@ type ActiveModal =
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, userDoc, isPro, isTrialing, trialDaysRemaining, trialExpired, signOut, refreshUserDoc } = useAuth();
+  const { user, userDoc, isPro, isTrialing, trialDaysRemaining, trialExpired, signOut, refreshUserDoc, reloadUser } = useAuth();
 
   // Derive auth providers from the full list. Reading only `providerData[0]` is
   // unreliable: linking a provider (e.g. Google) appends an entry and Firebase
@@ -82,11 +91,41 @@ export default function SettingsScreen() {
   // affordance from a linked account whose password credential still works.
   const providerIds = user?.providerData?.map((p) => p.providerId) ?? [];
   const hasPassword = providerIds.includes('password');
-  const providerLabel = providerIds.includes('google.com')
-    ? '(Google)'
-    : providerIds.includes('apple.com')
-    ? '(Apple)'
-    : null;
+
+  const { promptGoogle, promptApple, googleReady, appleAvailable } = useOAuthPrompt();
+  const [linkingProvider, setLinkingProvider] = useState<null | 'google' | 'apple'>(null);
+
+  const handleLinkGoogle = useCallback(async () => {
+    if (linkingProvider) return;
+    setLinkingProvider('google');
+    try {
+      const idToken = await promptGoogle();
+      await linkGoogleCredential(idToken);
+      await reloadUser();
+    } catch (err) {
+      if (!isOAuthCancel(err)) {
+        Alert.alert('Link failed', friendlyFirebaseError(err));
+      }
+    } finally {
+      setLinkingProvider(null);
+    }
+  }, [linkingProvider, promptGoogle, reloadUser]);
+
+  const handleLinkApple = useCallback(async () => {
+    if (linkingProvider) return;
+    setLinkingProvider('apple');
+    try {
+      const { identityToken } = await promptApple();
+      await linkAppleCredential(identityToken);
+      await reloadUser();
+    } catch (err) {
+      if (!isOAuthCancel(err)) {
+        Alert.alert('Link failed', friendlyFirebaseError(err));
+      }
+    } finally {
+      setLinkingProvider(null);
+    }
+  }, [linkingProvider, promptApple, reloadUser]);
 
   const displayName = userDoc?.displayName || user?.displayName || '';
   const email = userDoc?.email || user?.email || '';
@@ -313,7 +352,6 @@ export default function SettingsScreen() {
               <View style={styles.menuItemRight}>
                 <Text style={styles.menuItemValue} numberOfLines={1}>
                   {email}
-                  {!hasPassword && providerLabel ? ` ${providerLabel}` : ''}
                 </Text>
               </View>
             </View>
@@ -415,7 +453,73 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <HudSectionHeader label="Account" centered={true} />
           <View style={styles.menuCard}>
-            
+
+            {/* Sign-in methods */}
+            <View style={styles.menuItem}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="mail-outline" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Email &amp; Password</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>{hasPassword ? 'Connected' : 'Not connected'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.menuDivider} />
+
+            {/* Google */}
+            <View style={styles.menuItem}>
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="logo-google" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Google</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                {providerIds.includes('google.com') ? (
+                  <Text style={[styles.menuItemValue, styles.providerConnected]}>Connected</Text>
+                ) : linkingProvider === 'google' ? (
+                  <ActivityIndicator size="small" color="#B072BB" />
+                ) : (
+                  <TouchableOpacity
+                    onPress={handleLinkGoogle}
+                    disabled={!googleReady || !!linkingProvider}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.menuItemValue, styles.menuItemLabelPurple]}>Connect</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Apple — link only on iOS; on other platforms show the row only if already connected */}
+            {(appleAvailable || providerIds.includes('apple.com')) && (
+              <>
+                <View style={styles.menuDivider} />
+                <View style={styles.menuItem}>
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="logo-apple" size={24} color="#B072BB" />
+                    <Text style={styles.menuItemLabel}>Apple</Text>
+                  </View>
+                  <View style={styles.menuItemRight}>
+                    {providerIds.includes('apple.com') ? (
+                      <Text style={[styles.menuItemValue, styles.providerConnected]}>Connected</Text>
+                    ) : linkingProvider === 'apple' ? (
+                      <ActivityIndicator size="small" color="#B072BB" />
+                    ) : (
+                      <TouchableOpacity
+                        onPress={handleLinkApple}
+                        disabled={!!linkingProvider}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.menuItemValue, styles.menuItemLabelPurple]}>Connect</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </>
+            )}
+
+            <View style={styles.menuDivider} />
+
             {/* Change Password — shown whenever a password credential exists,
                 including linked accounts (email/password + Google/Apple). */}
             {hasPassword && (
@@ -844,6 +948,9 @@ const styles = StyleSheet.create({
   menuItemValueTrial: {
     color: '#FFB547',
     fontWeight: '600',
+  },
+  providerConnected: {
+    color: '#00D66F',
   },
   menuDivider: {
     height: 1,
