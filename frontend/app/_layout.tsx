@@ -13,6 +13,7 @@ import { GameProvider } from '@/contexts/GameContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
+import { needsVerification } from '@/utils/emailVerification';
 
 export {
   ErrorBoundary,
@@ -77,7 +78,7 @@ export default function RootLayout() {
 // ---------------------------------------------------------------------------
 
 function AuthNavigator() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, emailVerified } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
@@ -89,20 +90,26 @@ function AuthNavigator() {
     }
   }, [isLoading]);
 
-  // Redirect based on auth state once it has resolved
+  // Redirect based on auth + verification state once auth has resolved
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = (segments as string[])[0] === '(auth)';
+    const seg0 = (segments as string[])[0];
+    const inAuthGroup = seg0 === '(auth)';
+    const onVerifyScreen = seg0 === 'verify-email';
+    const mustVerify = needsVerification(user, emailVerified);
 
     if (!user && !inAuthGroup) {
       // Not signed in and not on an auth screen — go to login
       router.replace('/(auth)/login' as any);
-    } else if (user && inAuthGroup) {
-      // Signed in but still on an auth screen — go to main app
+    } else if (mustVerify && !onVerifyScreen) {
+      // Signed in but email not verified — block behind the verify screen
+      router.replace('/verify-email' as any);
+    } else if (user && !mustVerify && (inAuthGroup || onVerifyScreen)) {
+      // Verified (or OAuth) but still on an auth/verify screen — go to main app
       router.replace('/(tabs)' as any);
     }
-  }, [user, isLoading, segments]);
+  }, [user, isLoading, emailVerified, segments]);
 
   // Neutral loading state — splash screen is still showing above this
   if (isLoading) {
@@ -121,6 +128,7 @@ function AuthNavigator() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="verify-email" />
             <Stack.Screen name="how-it-works" options={{ presentation: 'modal' }} />
           </Stack>
         </View>
