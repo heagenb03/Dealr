@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,6 +44,10 @@ interface UserDocument {
 interface AuthContextType {
   /** Firebase Auth user — null if signed out */
   user: User | null;
+  /** Whether the current user's email is verified (reactive; survives reload()). */
+  emailVerified: boolean;
+  /** reload() the current user and refresh emailVerified. Never throws; returns the resulting verified state. */
+  refreshVerification: () => Promise<boolean>;
   /** Firestore user document (tier, displayName, etc.) */
   userDoc: UserDocument | null;
   /** True until onAuthStateChanged fires for the first time — show splash, not auth screens */
@@ -74,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userDoc, setUserDoc] = useState<UserDocument | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [rcIsPro, setRcIsPro] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   const fetchUserDoc = async (uid: string, attempt = 0): Promise<void> => {
     try {
@@ -172,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+      setEmailVerified(firebaseUser?.emailVerified ?? false);
 
       if (firebaseUser) {
         // Start (or restart) the live user-doc subscription — this is what keeps
@@ -230,6 +236,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // reload() rejects with auth/network-request-failed when offline. This is called
+  // from the verify screen's AppState handler and its "I've verified" button, so it
+  // must never throw — on failure it leaves emailVerified unchanged and reports the
+  // last-known state, letting the screen show its offline/error state.
+  const refreshVerification = useCallback(async (): Promise<boolean> => {
+    const u = auth.currentUser;
+    if (!u) return false;
+    try {
+      await u.reload();
+      setEmailVerified(u.emailVerified);
+      return u.emailVerified;
+    } catch {
+      return auth.currentUser?.emailVerified ?? false;
+    }
+  }, []);
+
   // Paid Pro: Firestore tier or RevenueCat entitlement
   const paidPro = userDoc?.tier === 'pro' || rcIsPro;
 
@@ -275,6 +297,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        emailVerified,
+        refreshVerification,
         userDoc,
         isLoading,
         isPro,
