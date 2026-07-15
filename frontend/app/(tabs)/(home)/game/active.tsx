@@ -34,7 +34,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation } from '@/utils/addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList } from '@/utils/addPlayer';
 
 function HudSectionHeader({ label, onAction, actionIcon }: { label: string; onAction?: () => void; actionIcon?: string }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -1030,7 +1030,7 @@ export default function ActiveGameScreen() {
           <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
         )}
 
-        {addedConfirmLabel && (
+        {addedConfirmLabel && !isLastAddVisibleInList(lastAddedName, visibleSaved, activeGame.players) && (
           <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
         )}
 
@@ -1092,9 +1092,7 @@ export default function ActiveGameScreen() {
               })}
             </View>
             {filteredSaved.length > RECENT_LIMIT && (
-              <Text style={styles.pickHint}>
-                Showing {RECENT_LIMIT} of {filteredSaved.length} — type to narrow
-              </Text>
+              <Text style={styles.pickMoreHint}>+{filteredSaved.length - RECENT_LIMIT} more ›</Text>
             )}
           </>
         )}
@@ -1865,11 +1863,18 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 12,
   },
+  pickMoreHint: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    alignSelf: 'flex-end',
+    marginBottom: 12,
+  },
   saveToggleSlot: {
     width: '100%',
     height: 30,
     justifyContent: 'center',
     marginBottom: 16,
+    backgroundColor: 'transparent',
   },
   addingHeader: {
     flexDirection: 'row',
