@@ -248,6 +248,10 @@ export default function ActiveGameScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallMessage, setPaywallMessage] = useState(PLAYERS_PAYWALL_MESSAGE);
   const [savePlayerToggle, setSavePlayerToggle] = useState(true);
+  // User explicitly chose "Add as new" on a typed name that exactly matches a
+  // saved player — suppresses the auto-bind so no saved identity/payment is
+  // inherited. Reset on name edit, modal close, and after each add.
+  const [forceUnlinked, setForceUnlinked] = useState(false);
   const [savedPlayers, setSavedPlayers] = useState<SavedPlayer[]>([]);
   const [renameSuggestions, setRenameSuggestions] = useState<SavedPlayer[]>([]);
   // Identity of the saved player the user picked from suggestions (null = typed freely).
@@ -405,6 +409,9 @@ export default function ActiveGameScreen() {
   const addedConfirmLabel = formatAddedConfirmation(lastAddedName, addedCount);
 
   const hasSubject = trimmedName.length > 0;
+  // The single saved player an untapped typed name exactly matches (else null).
+  // Mutually exclusive with isTypedNew (which excludes exact matches).
+  const typedExactMatch = selectedSavedId == null ? singleExactSavedMatch(savedPlayers, newPlayerName) : null;
   const committingTapped = selectedSavedId != null;            // decisive pick — list hidden
   const committingTyped = hasSubject && selectedSavedId == null; // still searching / brand-new
 
@@ -413,6 +420,7 @@ export default function ActiveGameScreen() {
     setNewPlayerBuyIn('');
     setSelectedSavedId(null);
     setSavePlayerToggle(true);
+    setForceUnlinked(false);
     setShowAddPlayer(false);
     setPendingBankerDesignation(false);
   };
@@ -429,6 +437,7 @@ export default function ActiveGameScreen() {
   const handleNameChange = (text: string) => {
     setNewPlayerName(text);
     setSelectedSavedId(null);
+    setForceUnlinked(false);
   };
 
   // The '‹ Adding {name}' header taps back to Browse (un-picks the saved row).
@@ -479,7 +488,7 @@ export default function ActiveGameScreen() {
     let bound: SavedPlayer | null = selectedSavedId
       ? savedPlayers.find(p => p.id === selectedSavedId) ?? null
       : null;
-    if (!bound) {
+    if (!bound && !forceUnlinked) {
       const exact = matchSavedByExactName(savedPlayers, name);
       if (exact.length === 1) {
         bound = exact[0];
@@ -538,6 +547,7 @@ export default function ActiveGameScreen() {
       setNewPlayerBuyIn('');
       setSelectedSavedId(null);
       setSavePlayerToggle(true);
+      setForceUnlinked(false);
       requestAnimationFrame(() => nameInputRef.current?.focus());
     } finally {
       addingPlayerRef.current = false;
@@ -1116,8 +1126,8 @@ export default function ActiveGameScreen() {
             crossing an exact saved-name match doesn't shift the Add button. */}
         {committingTyped && (
           <View style={styles.saveToggleSlot}>
-            {isTypedNew &&
-              (savedListFull ? (
+            {isTypedNew ? (
+              savedListFull ? (
                 <TouchableOpacity
                   style={styles.saveToggleRow}
                   disabled={isPro}
@@ -1142,7 +1152,25 @@ export default function ActiveGameScreen() {
                   />
                   <Text style={styles.saveToggleText}>Save player</Text>
                 </TouchableOpacity>
-              ))}
+              )
+            ) : typedExactMatch ? (
+              forceUnlinked ? (
+                <TouchableOpacity style={styles.identityRow} onPress={() => setForceUnlinked(false)}>
+                  <Ionicons name="close-circle-outline" size={16} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.identityUnlinkedText} numberOfLines={1}>Adding as new · not linked</Text>
+                  <Text style={styles.identityAction}>Undo</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.identityRow} onPress={() => setForceUnlinked(true)}>
+                  <Ionicons name="arrow-forward" size={14} color="#B072BB" />
+                  <Text style={styles.identityUsingText} numberOfLines={1}>
+                    Using saved {typedExactMatch.name}
+                    {savedBadge(typedExactMatch) ? ` · ${savedBadge(typedExactMatch)}` : ''}
+                  </Text>
+                  <Text style={styles.identityAction}>Add as new</Text>
+                </TouchableOpacity>
+              )
+            ) : null}
           </View>
         )}
 
@@ -1632,6 +1660,15 @@ const styles = StyleSheet.create({
   },
   saveToggleText: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
   saveToggleFullText: { fontSize: 13, color: '#B072BB', fontFamily: 'SpaceMono' },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  identityUsingText: { fontSize: 13, color: 'rgba(176,114,187,0.9)', flexShrink: 1 },
+  identityUnlinkedText: { fontSize: 13, color: 'rgba(255,255,255,0.55)', flexShrink: 1 },
+  identityAction: { marginLeft: 'auto', fontSize: 13, fontWeight: '600', color: '#B072BB' },
   validationBox: {
     flexDirection: 'row',
     backgroundColor: '#2A0A0A',
