@@ -13,9 +13,11 @@ import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { HelpProvider, useHelp } from '@/contexts/HelpContext';
 
-const AMBER = 'rgba(255, 165, 0, 0.85)';
-const AMBER_BG = 'rgba(255, 165, 0, 0.08)';
-const AMBER_BORDER = 'rgba(255, 165, 0, 0.15)';
+// Offline strip — neutral, palette-derived (see constants/Colors.ts) + one soft brand accent
+const OFFLINE_BG = '#1A1A1A';                     // Colors.dark.card
+const OFFLINE_BORDER = '#2A2A2A';                 // Colors.dark.border
+const OFFLINE_ICON = 'rgba(176, 114, 187, 0.7)';  // soft Colors.dark.purp — single brand accent
+const OFFLINE_TEXT = '#9DA0A6';                   // muted grey
 
 export const unstable_settings = {
   initialRouteName: '(home)',
@@ -180,14 +182,14 @@ function DynamicCashCageHeader() {
           justifyContent: 'space-between',
           paddingHorizontal: 14,
           height: 32,
-          backgroundColor: AMBER_BG,
+          backgroundColor: OFFLINE_BG,
           borderTopWidth: 1,
-          borderTopColor: AMBER_BORDER,
+          borderTopColor: OFFLINE_BORDER,
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-            <Ionicons name="cloud-offline-outline" size={13} color={AMBER} style={{ marginTop: 1 }} />
-            <Text style={{ color: AMBER, fontSize: 11, fontWeight: '500', letterSpacing: 0.2 }}>
-              You're offline · changes are saved locally
+            <Ionicons name="cloud-offline-outline" size={13} color={OFFLINE_ICON} style={{ marginTop: 1 }} />
+            <Text style={{ color: OFFLINE_TEXT, fontSize: 11, fontWeight: '500', letterSpacing: 0.2 }}>
+              You're offline · changes saved on this device
             </Text>
           </View>
           <TouchableOpacity
@@ -196,7 +198,7 @@ function DynamicCashCageHeader() {
             accessibilityLabel="Dismiss offline banner"
             accessibilityRole="button"
           >
-            <Ionicons name="close" size={14} color={AMBER} />
+            <Ionicons name="close" size={14} color={OFFLINE_TEXT} />
           </TouchableOpacity>
         </View>
       )}
