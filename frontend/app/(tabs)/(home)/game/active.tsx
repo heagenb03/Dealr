@@ -509,7 +509,7 @@ export default function ActiveGameScreen() {
       if (uid) {
         if (bound) {
           updateSavedPlayer(uid, bound.id, {}).catch(() => {}); // recency bump
-        } else if (savePlayerToggle && !savedListFull) {
+        } else if (savePlayerToggle && !savedListFull && !forceUnlinked) {
           const res = await createSavedPlayer(uid, name, undefined, savedCapFor(isPro));
           if (res.ok) savedId = res.id;
         }
