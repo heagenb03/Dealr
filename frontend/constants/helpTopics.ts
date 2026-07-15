@@ -58,8 +58,8 @@ export const HELP_TOPICS: HelpTopic[] = [
     visual: 'swipe',
     paragraphs: [
       'Swipe a player card to reveal quick actions — no menus needed.',
-      'Active players: swipe to rename, mark complete (cashed out and left), or delete.',
-      'Completed players: swipe to reactivate them back into the game, or delete.',
+      'Active players: swipe one way to mark them complete (they cashed out and left), and the other way to delete. To rename, just tap their name.',
+      'Completed players: swipe to reactivate them back into the game, or to delete.',
     ],
   },
   {
