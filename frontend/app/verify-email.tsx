@@ -53,7 +53,7 @@ export default function VerifyEmailScreen() {
   // Send helper --------------------------------------------------------------
   const doSend = useCallback(async () => {
     if (!isOnline) {
-      setNotice('You’re offline — connect to the internet to verify.');
+      setNotice('You’re offline. Connect to the internet to verify.');
       return;
     }
     setSending(true);
@@ -63,10 +63,10 @@ export default function VerifyEmailScreen() {
       setSentAt(Date.now());
     } catch (err: any) {
       if (err?.code === 'auth/too-many-requests') {
-        setNotice('Too many attempts — try again in a few minutes.');
+        setNotice('Too many attempts. Try again in a few minutes.');
         setSentAt(Date.now()); // start the cooldown so the button isn’t spammable
       } else if (err?.code === 'auth/network-request-failed') {
-        setNotice('You’re offline — connect to the internet to verify.');
+        setNotice('You’re offline. Connect to the internet to verify.');
       } else {
         setNotice('Couldn’t send the email. Please try again.');
       }
@@ -106,7 +106,7 @@ export default function VerifyEmailScreen() {
     const verified = await refreshVerification();
     setChecking(false);
     if (!verified) {
-      setNotice('Not verified yet — check your inbox (and spam).');
+      setNotice('Not verified yet. Check your inbox and spam.');
     }
     // If verified, AuthNavigator redirects into the app automatically (Task 5).
   }, [refreshVerification]);
@@ -128,24 +128,13 @@ export default function VerifyEmailScreen() {
         <Text style={styles.body}>We sent a verification link to</Text>
         <Text style={styles.email}>{user?.email ?? 'your email'}</Text>
         <Text style={styles.body}>
-          Tap the link, then come back — we’ll let you in automatically.
+          Tap the link, then come back and we’ll let you in automatically.
         </Text>
-
-        {showIntro && (
-          <View style={styles.introCard}>
-            <Text style={styles.introText}>
-              We added email verification to keep your account secure. It only takes a moment.
-            </Text>
-            <TouchableOpacity onPress={dismissIntro} activeOpacity={0.7}>
-              <Text style={styles.introDismiss}>Got it</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         {!isOnline && (
           <View style={styles.offlineBanner}>
             <Ionicons name="cloud-offline-outline" size={16} color="#C04657" />
-            <Text style={styles.offlineText}>You’re offline — connect to verify.</Text>
+            <Text style={styles.offlineText}>You’re offline. Connect to verify.</Text>
           </View>
         )}
 
@@ -160,7 +149,7 @@ export default function VerifyEmailScreen() {
           {checking ? (
             <ActivityIndicator color="#0A0A0A" />
           ) : (
-            <Text style={styles.primaryButtonText}>I’ve verified — continue</Text>
+            <Text style={styles.primaryButtonText}>I’ve verified. Continue</Text>
           )}
         </TouchableOpacity>
 
