@@ -18,6 +18,7 @@ const OFFLINE_BG = '#1A1A1A';                     // Colors.dark.card
 const OFFLINE_BORDER = '#2A2A2A';                 // Colors.dark.border
 const OFFLINE_ICON = 'rgba(176, 114, 187, 0.7)';  // soft Colors.dark.purp — single brand accent
 const OFFLINE_TEXT = '#9DA0A6';                   // muted grey
+const OFFLINE_STRIP_HEIGHT = 32;
 
 export const unstable_settings = {
   initialRouteName: '(home)',
@@ -50,6 +51,39 @@ function DynamicCashCageHeader() {
   }, [isOnline]);
 
   const showOfflineStrip = !isOnline && !offlineDismissed;
+
+  // Animated appear/disappear. `stripMounted` keeps the strip rendered through
+  // its exit spring so it can slide away on reconnect (not just on manual dismiss).
+  const offlineAnim = useRef(new Animated.Value(0)).current;
+  const [stripMounted, setStripMounted] = useState(showOfflineStrip);
+
+  useEffect(() => {
+    if (showOfflineStrip) {
+      setStripMounted(true);
+      if (reduceMotion) {
+        offlineAnim.setValue(1);
+      } else {
+        Animated.spring(offlineAnim, {
+          toValue: 1,
+          tension: 120,
+          friction: 14,
+          useNativeDriver: false,
+        }).start();
+      }
+    } else if (reduceMotion) {
+      offlineAnim.setValue(0);
+      setStripMounted(false);
+    } else {
+      Animated.spring(offlineAnim, {
+        toValue: 0,
+        tension: 120,
+        friction: 14,
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        if (finished) setStripMounted(false);
+      });
+    }
+  }, [showOfflineStrip, reduceMotion, offlineAnim]);
 
   const animateScaleDown = useCallback((scaleValue: number = 0.9) => {
     if (!reduceMotion) {
@@ -175,32 +209,46 @@ function DynamicCashCageHeader() {
         </View>
       </View>
 
-      {showOfflineStrip && (
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: 14,
-          height: 32,
-          backgroundColor: OFFLINE_BG,
-          borderTopWidth: 1,
-          borderTopColor: OFFLINE_BORDER,
+      {stripMounted && (
+        <Animated.View style={{
+          overflow: 'hidden',
+          height: offlineAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, OFFLINE_STRIP_HEIGHT],
+            extrapolate: 'clamp',
+          }),
+          opacity: offlineAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 1],
+            extrapolate: 'clamp',
+          }),
         }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-            <Ionicons name="cloud-offline-outline" size={13} color={OFFLINE_ICON} style={{ marginTop: 1 }} />
-            <Text style={{ color: OFFLINE_TEXT, fontSize: 11, fontWeight: '500', letterSpacing: 0.2 }}>
-              You're offline · changes saved on this device
-            </Text>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 14,
+            height: OFFLINE_STRIP_HEIGHT,
+            backgroundColor: OFFLINE_BG,
+            borderTopWidth: 1,
+            borderTopColor: OFFLINE_BORDER,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <Ionicons name="cloud-offline-outline" size={13} color={OFFLINE_ICON} style={{ marginTop: 1 }} />
+              <Text style={{ color: OFFLINE_TEXT, fontSize: 11, fontWeight: '500', letterSpacing: 0.2 }}>
+                You're offline · changes saved on this device
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setOfflineDismissed(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Dismiss offline banner"
+              accessibilityRole="button"
+            >
+              <Ionicons name="close" size={14} color={OFFLINE_TEXT} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={() => setOfflineDismissed(true)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityLabel="Dismiss offline banner"
-            accessibilityRole="button"
-          >
-            <Ionicons name="close" size={14} color={OFFLINE_TEXT} />
-          </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
     </View>
   );
