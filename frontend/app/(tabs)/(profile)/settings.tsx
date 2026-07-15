@@ -347,24 +347,6 @@ export default function SettingsScreen() {
               </View>
               <Ionicons name="chevron-forward" size={20} color="#666" />
             </TouchableOpacity>
-
-            {/* Change Password — only shown for email/password accounts */}
-            {isEmailProvider && (
-              <>
-                <View style={styles.menuDivider} />
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => openModal('changePassword')}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.menuItemLeft}>
-                    <Ionicons name="lock-closed-outline" size={24} color="#B072BB" />
-                    <Text style={styles.menuItemLabel}>Change Password</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#666" />
-                </TouchableOpacity>
-              </>
-            )}
           </View>
         </View>
 
@@ -430,6 +412,26 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <HudSectionHeader label="Account" centered={true} />
           <View style={styles.menuCard}>
+            
+            {/* Change Password — only shown for email/password accounts */}
+            {isEmailProvider && (
+              <>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => openModal('changePassword')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="lock-closed-outline" size={24} color="#B072BB" />
+                    <Text style={styles.menuItemLabel}>Change Password</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              </>
+            )}
+
+            <View style={styles.menuDivider} />
+
             {/* Sign Out */}
             <TouchableOpacity
               style={styles.menuItem}
