@@ -95,7 +95,7 @@ export class SyncService {
         } catch (err) {
           if (signal?.aborted) return;
           // Offline errors are expected — the app is offline-first and the user
-          // sees the OfflineBanner, so downgrade to a silent debug log.
+          // sees the offline strip in the tab header, so downgrade to a silent debug log.
           if (isFirestoreOfflineError(err)) {
             console.debug('SyncService: skipping background sync — device offline');
             return;

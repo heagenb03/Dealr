@@ -84,7 +84,7 @@ export const db = initializeFirestore(app, {
 });
 
 // Suppress the raw Firebase offline warning — the app handles offline state
-// gracefully via NetworkContext/OfflineBanner, so this noisy log is not useful.
+// gracefully via NetworkContext and the offline strip in the tab header, so this noisy log is not useful.
 const _originalWarn = console.warn;
 console.warn = (...args: any[]) => {
   if (
