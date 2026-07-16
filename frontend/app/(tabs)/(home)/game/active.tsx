@@ -1013,14 +1013,44 @@ export default function ActiveGameScreen() {
             <TouchableOpacity
               onPress={toggleSettings}
               activeOpacity={0.7}
-              style={styles.settingsSummaryTap}
+              style={styles.settingsSummaryRow}
               accessibilityRole="button"
               accessibilityLabel={`Settings: ${settingsSummary}`}
               accessibilityHint="Expands the game settings section"
             >
-              <Text style={styles.settingsSummaryText} numberOfLines={1}>
-                {settingsSummary}
-              </Text>
+              {/* Mode group (shrinks + ellipsizes for long banker names) */}
+              <View style={[styles.settingsSummaryGroup, styles.settingsSummaryModeGroup]}>
+                <Ionicons
+                  name={activeGame.settlementMode === 'banker' ? 'person-outline' : 'swap-horizontal'}
+                  size={15}
+                  color="rgba(255,255,255,0.5)"
+                />
+                {activeGame.settlementMode === 'banker' ? (
+                  <Text style={styles.settingsSummaryLabel} numberOfLines={1}>
+                    Banker
+                    <Text style={styles.settingsSummaryValue}>
+                      {bankerName ? ` · ${bankerName}` : ' · Choose banker'}
+                    </Text>
+                  </Text>
+                ) : (
+                  <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                    Direct
+                  </Text>
+                )}
+              </View>
+
+              {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
+              {(activeGame.settlementMode !== 'banker' || !!bankerName) && (
+                <>
+                  <Text style={styles.settingsSummaryDot}>·</Text>
+                  <View style={styles.settingsSummaryGroup}>
+                    <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                      {roundingLabel}
+                    </Text>
+                  </View>
+                </>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -2037,6 +2067,19 @@ const styles = StyleSheet.create({
   menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' },
   menuItemLabel: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
   menuItemValue: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
-  settingsSummaryTap: { paddingVertical: 8 },
-  settingsSummaryText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', lineHeight: 20 },
+  settingsSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  settingsSummaryGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'transparent',
+  },
+  settingsSummaryModeGroup: { flexShrink: 1, minWidth: 0 },
+  settingsSummaryLabel: { fontSize: 15, color: 'rgba(255,255,255,0.5)' },
+  settingsSummaryValue: { fontSize: 15, color: 'rgba(255,255,255,0.75)' },
+  settingsSummaryDot: { fontSize: 15, color: 'rgba(255,255,255,0.3)', marginHorizontal: 10 },
 });
