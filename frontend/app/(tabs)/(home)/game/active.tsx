@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -249,8 +249,29 @@ export default function ActiveGameScreen() {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const reduceMotionEnabled = useReduceMotion();
   const [settingsExpanded, setSettingsExpanded] = useState((activeGame?.players.length ?? 0) === 0);
+  // True once the initial collapse state has been seeded off the first non-null `activeGame`.
+  // Synchronous-mount paths (fresh game, native resume) are already seeded correctly by the
+  // useState initializer above, so this starts true for them and the layout effect below is a
+  // no-op. Only the async-load path (activeGame starts null on cold start / deep link / web
+  // refresh) starts false, deferring the seed to the layout effect.
+  const hasSeededSettings = useRef(activeGame != null);
   // True once the user (or the one-time auto-collapse) has decided; blocks any further auto-collapse.
   const hasToggledSettings = useRef((activeGame?.players.length ?? 0) > 0);
+
+  // Silently seeds the collapse state off the first non-null `activeGame`, synchronously before
+  // paint. This exists solely for the async-load path: without it, `settingsExpanded` would still
+  // hold its initial (expanded) value from the null-activeGame mount, so the settings card would
+  // paint expanded for one frame before the animated auto-collapse effect below kicks in. Seeding
+  // here (no LayoutAnimation) forces React to re-render with the correct value before anything is
+  // painted, so a resumed game with players never visibly flashes expanded.
+  useLayoutEffect(() => {
+    if (hasSeededSettings.current || activeGame == null) return;
+    hasSeededSettings.current = true;
+    if (activeGame.players.length > 0) {
+      hasToggledSettings.current = true;
+      setSettingsExpanded(false);
+    }
+  }, [activeGame]);
 
   useEffect(() => {
     const count = activeGame?.players.length ?? 0;
@@ -2012,7 +2033,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 16, paddingHorizontal: 20, backgroundColor: 'transparent',
   },
-  menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'transparent' },
+  menuItemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'transparent' },
   menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' },
   menuItemLabel: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
   menuItemValue: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
