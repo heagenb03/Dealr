@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Animated } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,8 +35,13 @@ import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUti
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList } from '@/utils/addPlayer';
+import { formatSettingsSummary } from '@/utils/settingsSummary';
 
-function HudSectionHeader({ label, onAction, actionIcon }: { label: string; onAction?: () => void; actionIcon?: string }) {
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function HudSectionHeader({ label, onAction, actionIcon, accessibilityLabel = 'Add player', accessibilityHint = 'Opens the add player dialog' }: { label: string; onAction?: () => void; actionIcon?: string; accessibilityLabel?: string; accessibilityHint?: string }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
 
@@ -100,8 +105,8 @@ function HudSectionHeader({ label, onAction, actionIcon }: { label: string; onAc
             ]}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel="Add player"
-            accessibilityHint="Opens the add player dialog"
+            accessibilityLabel={accessibilityLabel}
+            accessibilityHint={accessibilityHint}
           >
             <Ionicons
               name={actionIcon as any}
@@ -243,6 +248,24 @@ export default function ActiveGameScreen() {
   const [playerToDelete, setPlayerToDelete] = useState<Player | null>(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const reduceMotionEnabled = useReduceMotion();
+  const [settingsExpanded, setSettingsExpanded] = useState((activeGame?.players.length ?? 0) === 0);
+  // True once the user (or the one-time auto-collapse) has decided; blocks any further auto-collapse.
+  const hasToggledSettings = useRef((activeGame?.players.length ?? 0) > 0);
+
+  useEffect(() => {
+    const count = activeGame?.players.length ?? 0;
+    if (!hasToggledSettings.current && count > 0) {
+      hasToggledSettings.current = true;
+      if (!reduceMotionEnabled) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setSettingsExpanded(false);
+    }
+  }, [activeGame?.players.length, reduceMotionEnabled]);
+
+  const toggleSettings = useCallback(() => {
+    hasToggledSettings.current = true; // manual interaction disables future auto-collapse
+    if (!reduceMotionEnabled) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSettingsExpanded(v => !v);
+  }, [reduceMotionEnabled]);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renamedPlayerName, setRenamedPlayerName] = useState('');
   const [showPaywall, setShowPaywall] = useState(false);
@@ -691,6 +714,16 @@ export default function ActiveGameScreen() {
       ? activeGame.players.find(p => p.id === activeGame.bankerPlayerId)?.name
       : undefined;
 
+  const roundingLabel =
+    resolveCashUnit(activeGame.cashUnit, currency) === EXACT_CASH_UNIT
+      ? 'Exact'
+      : formatAmount(resolveCashUnit(activeGame.cashUnit, currency));
+  const settingsSummary = formatSettingsSummary(
+    activeGame.settlementMode === 'banker',
+    bankerName,
+    roundingLabel,
+  );
+
   const applySettlementMode = async (mode: 'optimal' | 'banker', bankerId?: string) => {
     GameService.setSettlementMode(activeGame, mode, bankerId);
     await updateGame(activeGame);
@@ -879,74 +912,96 @@ export default function ActiveGameScreen() {
           </Text>
         </View>
 
-        {/* Settlement */}
+        {/* Settlement / Settings */}
         <View style={styles.section}>
-          <HudSectionHeader label="Settings" />
-          <View style={styles.settlementCard}>
-            <View style={styles.segment}>
+          <HudSectionHeader
+            label="Settings"
+            onAction={settingsExpanded ? toggleSettings : undefined}
+            actionIcon={settingsExpanded ? 'chevron-up' : undefined}
+            accessibilityLabel="Collapse settings"
+            accessibilityHint="Collapses the game settings section"
+          />
+
+          {settingsExpanded ? (
+            <View style={styles.settlementCard}>
+              <View style={styles.segment}>
+                <TouchableOpacity
+                  style={[styles.segmentBtn, activeGame.settlementMode !== 'banker' && styles.segmentBtnActive]}
+                  onPress={handleTapDirect}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.segmentText, activeGame.settlementMode !== 'banker' && styles.segmentTextActive]}>
+                    Direct
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.segmentBtn, activeGame.settlementMode === 'banker' && styles.segmentBtnActive]}
+                  onPress={handleTapBanker}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.segmentText, activeGame.settlementMode === 'banker' && styles.segmentTextActive]}>
+                    Banker
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {activeGame.settlementMode === 'banker' && (
+                <>
+                  <View style={styles.menuDivider} />
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={() => setShowSettlementModePicker(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <Ionicons name="person-outline" size={18} color="rgba(255,255,255,0.5)" />
+                      <Text style={styles.menuItemLabel}>Banker</Text>
+                    </View>
+                    <View style={styles.menuItemRight}>
+                      <Text style={styles.menuItemValue}>
+                        {bankerName ? bankerName : 'Choose banker'}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                    </View>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <View style={styles.menuDivider} />
+
               <TouchableOpacity
-                style={[styles.segmentBtn, activeGame.settlementMode !== 'banker' && styles.segmentBtnActive]}
-                onPress={handleTapDirect}
-                activeOpacity={0.8}
+                style={styles.menuItem}
+                onPress={() => setShowCashUnitPicker(true)}
+                activeOpacity={0.7}
               >
-                <Text style={[styles.segmentText, activeGame.settlementMode !== 'banker' && styles.segmentTextActive]}>
-                  Direct
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.segmentBtn, activeGame.settlementMode === 'banker' && styles.segmentBtnActive]}
-                onPress={handleTapBanker}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.segmentText, activeGame.settlementMode === 'banker' && styles.segmentTextActive]}>
-                  Banker
-                </Text>
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="options-outline" size={18} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.menuItemLabel}>Rounding</Text>
+                </View>
+                <View style={styles.menuItemRight}>
+                  <Text style={styles.menuItemValue}>{roundingLabel}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                </View>
               </TouchableOpacity>
             </View>
-
-            {activeGame.settlementMode === 'banker' && (
-              <>
-                <View style={styles.menuDivider} />
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => setShowSettlementModePicker(true)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.menuItemLeft}>
-                    <Ionicons name="person-outline" size={18} color="rgba(255,255,255,0.5)" />
-                    <Text style={styles.menuItemLabel}>Banker</Text>
-                  </View>
-                  <View style={styles.menuItemRight}>
-                    <Text style={styles.menuItemValue}>
-                      {bankerName ? bankerName : 'Choose banker'}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-                  </View>
-                </TouchableOpacity>
-              </>
-            )}
-
-            <View style={styles.menuDivider} />
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => setShowCashUnitPicker(true)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="options-outline" size={18} color="rgba(255,255,255,0.5)" />
-                <Text style={styles.menuItemLabel}>Rounding</Text>
-              </View>
-              <View style={styles.menuItemRight}>
-                <Text style={styles.menuItemValue}>
-                  {resolveCashUnit(activeGame.cashUnit, currency) === EXACT_CASH_UNIT
-                    ? 'Exact'
-                    : formatAmount(resolveCashUnit(activeGame.cashUnit, currency))}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-              </View>
-            </TouchableOpacity>
-          </View>
+          ) : (
+            <View style={styles.settlementCard}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={toggleSettings}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Settings: ${settingsSummary}`}
+                accessibilityHint="Expands the game settings section"
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="options-outline" size={18} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.settingsSummaryText} numberOfLines={1}>{settingsSummary}</Text>
+                </View>
+                <Ionicons name="chevron-down" size={16} color="rgba(255,255,255,0.4)" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Active Players List */}
@@ -1961,4 +2016,5 @@ const styles = StyleSheet.create({
   menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' },
   menuItemLabel: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
   menuItemValue: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
+  settingsSummaryText: { fontSize: 15, color: 'rgba(255,255,255,0.8)', flexShrink: 1 },
 });
