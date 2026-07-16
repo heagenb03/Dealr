@@ -538,7 +538,7 @@ export default function SettingsScreen() {
               </>
             )}
 
-            <View style={styles.menuDivider} />
+            {hasPassword && <View style={styles.menuDivider} />}
 
             {/* Sign Out */}
             <TouchableOpacity
