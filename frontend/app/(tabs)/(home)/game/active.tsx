@@ -1013,6 +1013,7 @@ export default function ActiveGameScreen() {
             <TouchableOpacity
               onPress={toggleSettings}
               activeOpacity={0.7}
+              style={styles.settingsSummaryTap}
               accessibilityRole="button"
               accessibilityLabel={`Settings: ${settingsSummary}`}
               accessibilityHint="Expands the game settings section"
@@ -2036,5 +2037,6 @@ const styles = StyleSheet.create({
   menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'transparent' },
   menuItemLabel: { fontSize: 16, color: '#FFFFFF', fontWeight: '500' },
   menuItemValue: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
+  settingsSummaryTap: { paddingVertical: 8 },
   settingsSummaryText: { fontSize: 15, color: 'rgba(255,255,255,0.6)', lineHeight: 20 },
 });
