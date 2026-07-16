@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,42 +8,13 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as AppleAuthentication from 'expo-apple-authentication';
 
 import { signInWithEmail, signInWithGoogleCredential, signInWithAppleCredential } from '@/services/firebaseService';
-
-// expo-web-browser and expo-auth-session both require the ExpoWebBrowser native
-// module, which is unavailable in Expo Go (requires a development build).
-// Using dynamic require() instead of static imports lets us catch the native
-// module error at module load time, so the component can still export and
-// email/password sign-in works in Expo Go. OAuth requires a dev build.
-type GoogleAuthHook = (config: {
-  clientId?: string;
-  iosClientId?: string;
-  androidClientId?: string;
-  webClientId?: string;
-}) => [
-  unknown,
-  { type: string; params: { id_token?: string } } | null,
-  () => Promise<void>,
-];
-
-let useGoogleAuth: GoogleAuthHook = (_config) => [null, null, async () => {}];
-
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('expo-web-browser').maybeCompleteAuthSession();
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  useGoogleAuth = require('expo-auth-session/providers/google').useIdTokenAuthRequest;
-} catch {
-  // ExpoWebBrowser native module not available (Expo Go) — OAuth disabled,
-  // email/password sign-in still works.
-}
+import { useOAuthPrompt, isOAuthCancel } from '@/hooks/useOAuthPrompt';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -57,37 +28,7 @@ export default function LoginScreen() {
   const [appleLoading, setAppleLoading] = useState(false);
   const signingIn = useRef(false);
 
-  // Google Sign-In via expo-auth-session (unavailable in Expo Go — requires dev build)
-  // Native platforms need platform-specific client IDs; Web client IDs reject custom scheme redirects.
-  const [request, response, promptAsync] = useGoogleAuth({
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  });
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { id_token } = response.params;
-      if (id_token) {
-        signInWithGoogleCredential(id_token)
-          .catch((err) => {
-            console.error('Google sign-in error:', err);
-            Alert.alert('Sign-in failed', 'Google sign-in could not be completed. Please try again.');
-            setGoogleLoading(false);
-            signingIn.current = false;
-          });
-        // Don't reset loading on success — AuthNavigator will unmount this screen
-      }
-    } else if (response?.type === 'error') {
-      Alert.alert('Sign-in failed', 'Google sign-in was cancelled or failed.');
-      setGoogleLoading(false);
-      signingIn.current = false;
-    } else if (response !== null) {
-      // Cancelled/dismissed — reset loading and guard
-      setGoogleLoading(false);
-      signingIn.current = false;
-    }
-  }, [response]);
+  const { promptGoogle, promptApple, googleReady, appleAvailable } = useOAuthPrompt();
 
   const handleEmailSignIn = async () => {
     if (signingIn.current) return;
@@ -113,11 +54,14 @@ export default function LoginScreen() {
     signingIn.current = true;
     setGoogleLoading(true);
     try {
-      await promptAsync();
-      // promptAsync resolves when the OAuth browser dismisses, before
-      // response state updates. Keep loading true — the useEffect on
-      // `response` handles both success and error/cancel paths.
-    } catch {
+      const idToken = await promptGoogle();
+      await signInWithGoogleCredential(idToken);
+      // Don't reset loading on success — AuthNavigator unmounts this screen.
+    } catch (err) {
+      if (!isOAuthCancel(err)) {
+        console.error('Google sign-in error:', err);
+        Alert.alert('Sign-in failed', 'Google sign-in could not be completed. Please try again.');
+      }
       setGoogleLoading(false);
       signingIn.current = false;
     }
@@ -125,30 +69,18 @@ export default function LoginScreen() {
 
   const handleAppleSignIn = async () => {
     if (signingIn.current) return;
-    if (Platform.OS !== 'ios') {
+    if (!appleAvailable) {
       Alert.alert('Not available', 'Apple Sign-In is only available on iOS.');
       return;
     }
     signingIn.current = true;
     setAppleLoading(true);
     try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      if (!credential.identityToken) {
-        throw new Error('Apple did not return an identity token.');
-      }
-      const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
-        .filter(Boolean)
-        .join(' ') || null;
-
-      await signInWithAppleCredential(credential.identityToken, fullName);
-      // Don't reset loading — AuthNavigator will unmount this screen
-    } catch (err: any) {
-      if (err.code !== 'ERR_REQUEST_CANCELED') {
+      const { identityToken, fullName } = await promptApple();
+      await signInWithAppleCredential(identityToken, fullName);
+      // Don't reset loading on success — AuthNavigator unmounts this screen.
+    } catch (err) {
+      if (!isOAuthCancel(err)) {
         console.error('Apple sign-in error:', err);
         Alert.alert('Sign-in failed', 'Apple sign-in could not be completed. Please try again.');
       }
@@ -257,9 +189,9 @@ export default function LoginScreen() {
         {/* Social sign-in */}
         <View style={styles.socialButtons}>
           <TouchableOpacity
-            style={[styles.socialButton, (googleLoading || !request) && styles.buttonDisabled]}
+            style={[styles.socialButton, (googleLoading || !googleReady) && styles.buttonDisabled]}
             onPress={handleGoogleSignIn}
-            disabled={googleLoading || !request}
+            disabled={googleLoading || !googleReady}
             activeOpacity={0.8}
           >
             {googleLoading ? (
@@ -272,7 +204,7 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          {Platform.OS === 'ios' && (
+          {appleAvailable && (
             <TouchableOpacity
               style={[styles.socialButton, appleLoading && styles.buttonDisabled]}
               onPress={handleAppleSignIn}
