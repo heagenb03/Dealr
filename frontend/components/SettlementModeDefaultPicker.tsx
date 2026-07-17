@@ -14,8 +14,8 @@ interface Props {
 }
 
 const OPTIONS: { mode: SettlementMode; label: string; sub: string }[] = [
-  { mode: 'optimal', label: 'Direct', sub: 'Players settle peer-to-peer' },
-  { mode: 'banker', label: 'Banker', sub: 'One player is the hub — assign them in-game' },
+  { mode: 'optimal', label: 'Direct', sub: 'Settle player-to-player' },
+  { mode: 'banker', label: 'Banker', sub: 'One player is the banker. Assign them in-game' },
 ];
 
 export default function SettlementModeDefaultPicker({
