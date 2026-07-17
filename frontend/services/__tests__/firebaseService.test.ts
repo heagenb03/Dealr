@@ -124,6 +124,16 @@ describe('deserializeFirestoreGame', () => {
     });
     expect(game.players[0].savedPlayerId).toBe('sp_123');
   });
+
+  it('round-trips statsCounted (must be in the deserialize whitelist)', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, statsCounted: true });
+    expect(game.statsCounted).toBe(true);
+  });
+
+  it('leaves statsCounted undefined when absent in the document', () => {
+    const game = deserializeFirestoreGame(baseDoc);
+    expect(game.statsCounted).toBeUndefined();
+  });
 });
 
 describe('fetchSavedPlayersFromFirestore', () => {

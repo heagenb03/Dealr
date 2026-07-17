@@ -57,6 +57,11 @@ export interface Game {
   cachedSettlements?: SettlementResult;
   transactionHash?: string;
 
+  /** True once this game has been counted toward profile stats (set on first
+   *  completion). Guards against double-counting when a game is reopened and
+   *  re-completed. Absent on games completed before this feature. */
+  statsCounted?: boolean;
+
   // Cloud sync — set by Firestore serverTimestamp on each write
   syncedAt?: Date;
 }

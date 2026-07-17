@@ -443,6 +443,7 @@ export function deserializeFirestoreGame(data: Record<string, any>): Game {
     currency: data.currency,
     settlementMode: data.settlementMode,
     bankerPlayerId: data.bankerPlayerId,
+    statsCounted: data.statsCounted,
   };
 }
 
