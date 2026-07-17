@@ -288,10 +288,12 @@ export function validateSettlements(
   validation.netDifference = Math.abs(validation.totalBuyins - validation.totalCashouts);
 
   if (validation.netDifference > tolerance) {
+    const buyinsHigher = validation.totalBuyins > validation.totalCashouts;
+    const direction = buyinsHigher
+      ? `Buy-ins are ${formatMoney(validation.netDifference)} more than cash-outs`
+      : `Cash-outs are ${formatMoney(validation.netDifference)} more than buy-ins`;
     validation.warnings.push(
-      `Total buy-ins of ${formatMoney(validation.totalBuyins)} with total cash outs of ${formatMoney(validation.totalCashouts)}. A ${formatMoney(validation.netDifference)} difference.
-      Double check transactions and chip-counts.
-      \n If you proceed, settlement algorithm may have poor results.`
+      `${direction}, over your ${formatMoney(tolerance)} limit (In ${formatMoney(validation.totalBuyins)} · Out ${formatMoney(validation.totalCashouts)}). Proceeding will produce non-optimized settlements.`
     );
   }
 
