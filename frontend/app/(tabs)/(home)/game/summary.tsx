@@ -28,6 +28,9 @@ import { PreferredPayment } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { buildPaymentUri, formatHandleForDisplay } from '@/utils/paymentLinks';
 import { buildShareMessage } from '@/utils/shareMessage';
+import AppModal, { appModalStyles } from '@/components/AppModal';
+import ModalButton from '@/components/ModalButton';
+import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
 
 // HUD Section Header Component
 function HudSectionHeader({ label }: { label: string }) {
@@ -439,21 +442,23 @@ function isRetryableFallback(error?: string, balances?: PlayerBalance[], toleran
 interface FallbackBannerProps {
   onDismiss: () => void;
   onRetry: () => void;
+  onReopen: () => void;
   isRetrying: boolean;
   errorMessage?: string;
   balances?: PlayerBalance[];
   tolerance: number;
+  formatAmount: (n: number) => string;
 }
 
-function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances, tolerance }: FallbackBannerProps) {
+function FallbackBanner({ onDismiss, onRetry, onReopen, isRetrying, errorMessage, balances, tolerance, formatAmount }: FallbackBannerProps) {
   const retryable = isRetryableFallback(errorMessage, balances, tolerance);
 
+  const totalBuyins = (balances ?? []).reduce((sum, b) => sum + b.totalBuyins, 0);
+  const totalCashouts = (balances ?? []).reduce((sum, b) => sum + b.totalCashouts, 0);
+  const netDifference = Math.abs(totalBuyins - totalCashouts);
+
   const icon = retryable ? 'cellular-outline' : 'alert-circle-outline';
-  const text = isRetrying
-    ? 'Optimizing settlements...'
-    : retryable
-      ? "Couldn't reach server. Settlements are non-optimized"
-      : "Totals didn't balance. Settlements are non-optimized";
+  const text = fallbackBannerCopy(retryable, isRetrying, netDifference, tolerance, formatAmount);
 
   return (
     <View style={styles.fallbackBanner} accessibilityRole="alert">
@@ -476,6 +481,17 @@ function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances
               <Ionicons name="refresh-outline" size={16} color="#B072BB" />
             </TouchableOpacity>
           )
+        )}
+        {!retryable && (
+          <TouchableOpacity
+            onPress={onReopen}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Reopen game to fix amounts"
+          >
+            <Text style={styles.fallbackReopenText}>Reopen to fix</Text>
+          </TouchableOpacity>
         )}
         <TouchableOpacity
           onPress={onDismiss}
@@ -526,6 +542,7 @@ export default function GameSummaryScreen() {
   const [isLoadingSettlements, setIsLoadingSettlements] = useState(false);
   const [lastError, setLastError] = useState<string | undefined>();
   const [showFallbackBanner, setShowFallbackBanner] = useState(false);
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const balancesRef = useRef<PlayerBalance[]>(summary?.balances ?? []);
   const cashUnitRef = useRef<number | undefined>(summary?.game.cashUnit);
 
@@ -733,6 +750,14 @@ setSettlementResult(cachedResult);
     }
   };
 
+  const handleReopen = async () => {
+    if (!activeGame) return;
+    setShowReopenConfirm(false);
+    GameService.reopenGame(activeGame);
+    await updateGame(activeGame);
+    router.replace('/game/active' as any);
+  };
+
   const activeSettlementResult: SettlementResult | null =
     settlementResult ?? (summary ? {
       settlements: summary.settlements,
@@ -876,9 +901,11 @@ setSettlementResult(cachedResult);
             <FallbackBanner
               onDismiss={() => setShowFallbackBanner(false)}
               onRetry={handleRetry}
+              onReopen={() => setShowReopenConfirm(true)}
               isRetrying={isLoadingSettlements}
               errorMessage={lastError}
               balances={summary.balances}
+              formatAmount={formatAmount}
               tolerance={resolveTolerance(
                 summary.game.imbalanceTolerance,
                 (summary.game.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
@@ -945,6 +972,17 @@ setSettlementResult(cachedResult);
 
       {/* Actions */}
       <View style={styles.actions}>
+        {activeGame.status === 'completed' && (
+          <View style={styles.reopenButtonSpacing}>
+            <Button
+              onPress={() => setShowReopenConfirm(true)}
+              title="Reopen Game"
+              variant="secondary"
+              fullWidth
+              accessibilityHint="Reopen this game to edit buy-ins and cash-outs"
+            />
+          </View>
+        )}
         <Button
           onPress={() => router.push('/')}
           title="Done"
@@ -953,6 +991,24 @@ setSettlementResult(cachedResult);
           accessibilityHint="Returns to the home screen"
         />
       </View>
+
+      <AppModal
+        visible={showReopenConfirm}
+        onClose={() => setShowReopenConfirm(false)}
+        dismissOnBackdrop={false}
+        contentStyle={appModalStyles.centeredContent}
+      >
+        <Ionicons name="refresh-circle-outline" size={48} color="#B072BB" style={styles.reopenIcon} />
+        <Text style={appModalStyles.title}>Reopen this game?</Text>
+        <Text style={styles.reopenModalText}>
+          You'll be able to edit buy-ins and cash-outs, then complete it again.
+          {'\n\n'}Your lifetime stats won't change.
+        </Text>
+        <View style={styles.reopenModalButtons}>
+          <ModalButton variant="cancel" title="Cancel" onPress={() => setShowReopenConfirm(false)} />
+          <ModalButton variant="confirm" title="Reopen" onPress={handleReopen} />
+        </View>
+      </AppModal>
 
       <HelpSheet
         visible={helpVisible}
@@ -1322,6 +1378,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: 'transparent',
+  },
+  fallbackReopenText: {
+    color: '#B072BB',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  reopenIcon: {
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  reopenModalText: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  reopenModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  reopenButtonSpacing: {
+    marginBottom: 12,
   },
   roundingNote: {
     fontSize: 12,
