@@ -324,6 +324,38 @@ describe('GameService.completeGame', () => {
   });
 });
 
+// ---- reopenGame ----
+
+describe('GameService.reopenGame', () => {
+  it('sets status back to active', () => {
+    const game = createTestGame({ status: 'completed' });
+    GameService.reopenGame(game);
+    expect(game.status).toBe('active');
+  });
+
+  it('clears cached settlements and hash so the next completion re-solves', () => {
+    const game = createTestGame({
+      status: 'completed',
+      cachedSettlements: {
+        settlements: [],
+        algorithm: 'server-milp-v1',
+        source: 'server',
+        generatedAt: '2026-07-17T00:00:00Z',
+      } as SettlementResult,
+      transactionHash: 'abc123',
+    });
+    GameService.reopenGame(game);
+    expect(game.cachedSettlements).toBeUndefined();
+    expect(game.transactionHash).toBeUndefined();
+  });
+
+  it('leaves statsCounted set so re-completion does not double-count', () => {
+    const game = createTestGame({ status: 'completed', statsCounted: true });
+    GameService.reopenGame(game);
+    expect(game.statsCounted).toBe(true);
+  });
+});
+
 // ---- generateGameSummary ----
 
 describe('GameService.generateGameSummary', () => {

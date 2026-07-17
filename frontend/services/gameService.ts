@@ -229,7 +229,18 @@ export class GameService {
   static completeGame(game: Game): void {
     game.status = 'completed';
   }
-  
+
+  /**
+   * Reopen a completed game for editing. Flips status back to active and clears
+   * the cached settlement so the next completion re-solves from corrected data.
+   * Deliberately leaves statsCounted untouched — that flag is what prevents a
+   * re-completion from double-counting profile stats.
+   */
+  static reopenGame(game: Game): void {
+    game.status = 'active';
+    GameService.clearSettlementCache(game);
+  }
+
   static createGame(
     name: string,
     defaults?: { cashUnit?: number; settlementMode?: 'optimal' | 'banker' },
