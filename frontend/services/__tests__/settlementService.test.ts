@@ -170,6 +170,9 @@ describe('validateSettlements', () => {
     expect(msg).toContain('more than cash-outs');
     expect(msg).toContain('your $2.50 limit');
     expect(msg).toContain('non-optimized settlements');
+    expect(msg).toBe(
+      'Buy-ins are $3.00 more than cash-outs, over your $2.50 limit (In $150.00 · Out $147.00). Proceeding will produce non-optimized settlements.'
+    );
   });
 
   it('returns warning for imbalance > $2.50 (cash-outs higher, direction flips)', () => {
