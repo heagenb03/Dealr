@@ -8,7 +8,6 @@ import { CurrencyCode } from '@/constants/Currencies';
 import {
   getToleranceOptions,
   resolveTolerance,
-  toleranceSemantic,
   EXACT_TOLERANCE,
 } from '@/constants/Tolerances';
 
@@ -34,19 +33,15 @@ export default function TolerancePickerModal({
   const labelFor = (t: number) =>
     t === EXACT_TOLERANCE ? `Exact (${formatAmount(0)})` : formatAmount(t);
 
-  const subLabelFor = (t: number) => {
-    const semantic = toleranceSemantic(t, currency);
-    if (t === EXACT_TOLERANCE) return 'Warn on any imbalance';
-    const tag = semantic ? `${semantic} · ` : '';
-    return `${tag}Warn if off by more than ${formatAmount(t)}`;
-  };
-
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Pressable style={styles.overlay} onPress={onClose}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.title}>Imbalance Tolerance</Text>
+            <Text style={styles.subtitle}>
+              Warn me at cash-out if total buy-ins and cash-outs are off by more than this.
+            </Text>
             <FlatList
               data={options}
               keyExtractor={(item) => item.toString()}
@@ -61,7 +56,9 @@ export default function TolerancePickerModal({
                 >
                   <View style={styles.rowText}>
                     <Text style={styles.label}>{labelFor(item)}</Text>
-                    <Text style={styles.subLabel}>{subLabelFor(item)}</Text>
+                    {item === EXACT_TOLERANCE && (
+                      <Text style={styles.subLabel}>Warn on any imbalance</Text>
+                    )}
                   </View>
                   {item === selected && (
                     <Ionicons name="checkmark" size={20} color="#B072BB" />
@@ -96,9 +93,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  subtitle: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 12,
+    paddingHorizontal: 24,
   },
   row: {
     flexDirection: 'row',

@@ -39,6 +39,9 @@ export default function CashUnitPickerModal({
         <Pressable style={styles.overlay} onPress={onClose}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.title}>Rounding</Text>
+            <Text style={styles.subtitle}>
+              Settle in whole bills or chips instead of exact change.
+            </Text>
             <FlatList
               data={options}
               keyExtractor={(item) => item.toString()}
@@ -55,7 +58,7 @@ export default function CashUnitPickerModal({
                     <Text style={styles.label}>{labelFor(item)}</Text>
                     {item !== EXACT_CASH_UNIT && (
                       <Text style={styles.subLabel}>
-                        ±{formatAmount(item / 2)} per player
+                        up to {formatAmount(item / 2)} off exact
                       </Text>
                     )}
                   </View>
@@ -97,9 +100,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  subtitle: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 12,
+    paddingHorizontal: 24,
   },
   row: {
     flexDirection: 'row',
