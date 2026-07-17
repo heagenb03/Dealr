@@ -21,6 +21,8 @@ import { runOnJS } from 'react-native-reanimated';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { computeRoundingDistortion } from '@/utils/roundingUtils';
 import { resolveCashUnit } from '@/constants/CashUnits';
+import { resolveTolerance } from '@/constants/Tolerances';
+import { DEFAULT_CURRENCY, CurrencyCode } from '@/constants/Currencies';
 import * as Clipboard from 'expo-clipboard';
 import { PreferredPayment } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
@@ -636,7 +638,13 @@ setSettlementResult(cachedResult);
     (async () => {
       try {
         const result = await getSettlements(summary.balances, {
-          settings: { cashRoundingUnit: resolveCashUnit(summary.game.cashUnit, currency) },
+          settings: {
+            cashRoundingUnit: resolveCashUnit(summary.game.cashUnit, currency),
+            imbalanceTolerance: resolveTolerance(
+              summary.game.imbalanceTolerance,
+              (summary.game.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+            ),
+          },
         });
         if (cancelled) return;
 
@@ -689,7 +697,13 @@ setSettlementResult(cachedResult);
     try {
       const result = await getSettlements(balancesRef.current, {
         timeoutMs: 5000,
-        settings: { cashRoundingUnit: resolveCashUnit(cashUnitRef.current, currency) },
+        settings: {
+          cashRoundingUnit: resolveCashUnit(cashUnitRef.current, currency),
+          imbalanceTolerance: resolveTolerance(
+            summary.game.imbalanceTolerance,
+            (summary.game.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+          ),
+        },
       });
       setSettlementResult(result);
 

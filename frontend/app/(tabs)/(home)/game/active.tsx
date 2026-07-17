@@ -698,7 +698,13 @@ export default function ActiveGameScreen() {
               resolveCashUnit(activeGame.cashUnit, currency),
             )
           : await getSettlements(balances, {
-              settings: { cashRoundingUnit: resolveCashUnit(activeGame.cashUnit, currency) },
+              settings: {
+                cashRoundingUnit: resolveCashUnit(activeGame.cashUnit, currency),
+                imbalanceTolerance: resolveTolerance(
+                  activeGame.imbalanceTolerance,
+                  (activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+                ),
+              },
             });
 
       GameService.cacheSettlements(activeGame, result);
