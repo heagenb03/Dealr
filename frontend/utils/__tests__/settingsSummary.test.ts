@@ -15,4 +15,12 @@ describe('formatSettingsSummary', () => {
     expect(formatSettingsSummary(true, 'Alex', '$5')).toBe('Banker · Alex · $5');
     expect(formatSettingsSummary(true, 'Alex', 'Exact')).toBe('Banker · Alex · Exact');
   });
+
+  it('appends the tolerance label when one is provided', () => {
+    expect(formatSettingsSummary(false, undefined, '$5', '±$10')).toBe('Direct · $5 · ±$10');
+  });
+
+  it('omits the tolerance segment when no label is provided (default tolerance)', () => {
+    expect(formatSettingsSummary(false, undefined, '$5')).toBe('Direct · $5');
+  });
 });

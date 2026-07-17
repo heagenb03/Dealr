@@ -7,8 +7,10 @@ export function formatSettingsSummary(
   isBanker: boolean,
   bankerName: string | undefined,
   roundingLabel: string,
+  toleranceLabel?: string,
 ): string {
-  if (!isBanker) return `Direct · ${roundingLabel}`;
-  if (!bankerName) return 'Banker · Choose banker';
-  return `Banker · ${bankerName} · ${roundingLabel}`;
+  const tol = toleranceLabel ? ` · ${toleranceLabel}` : '';
+  if (!isBanker) return `Direct · ${roundingLabel}${tol}`;
+  if (!bankerName) return `Banker · Choose banker${tol}`;
+  return `Banker · ${bankerName} · ${roundingLabel}${tol}`;
 }

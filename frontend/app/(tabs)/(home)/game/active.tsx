@@ -24,7 +24,8 @@ import Button from '@/components/Button';
 import ModalButton from '@/components/ModalButton';
 import PaywallModal from '@/components/PaywallModal';
 import CashUnitPickerModal from '@/components/CashUnitPickerModal';
-import { resolveTolerance } from '@/constants/Tolerances';
+import TolerancePickerModal from '@/components/TolerancePickerModal';
+import { resolveTolerance, getDefaultTolerance } from '@/constants/Tolerances';
 import { DEFAULT_CURRENCY, CurrencyCode } from '@/constants/Currencies';
 import SettlementModePicker from '@/components/SettlementModePicker';
 import PaymentEditorModal from '@/components/PaymentEditorModal';
@@ -316,6 +317,7 @@ export default function ActiveGameScreen() {
   const [validationResult, setValidationResult] = useState<Validation | null>(null);
   const [showSolvingModal, setShowSolvingModal] = useState(false);
   const [showCashUnitPicker, setShowCashUnitPicker] = useState(false);
+  const [showTolerancePicker, setShowTolerancePicker] = useState(false);
   const [showSettlementModePicker, setShowSettlementModePicker] = useState(false);
   const [showDistortionModal, setShowDistortionModal] = useState(false);
   const [distortions, setDistortions] = useState<PlayerDistortion[]>([]);
@@ -748,10 +750,27 @@ export default function ActiveGameScreen() {
     resolveCashUnit(activeGame.cashUnit, currency) === EXACT_CASH_UNIT
       ? 'Exact'
       : formatAmount(resolveCashUnit(activeGame.cashUnit, currency));
+
+  const gameCurrency = (activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY;
+  const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, gameCurrency);
+  // Expanded-row value (always shown, plain like the Rounding value).
+  const toleranceValueLabel =
+    resolvedTolerance === 0 ? 'Exact' : formatAmount(resolvedTolerance);
+  // Visible caption segment + a11y label: ONLY when explicitly overridden away
+  // from the currency default (keeps default games' summary unchanged).
+  const toleranceLabel =
+    activeGame.imbalanceTolerance !== undefined &&
+    resolvedTolerance !== getDefaultTolerance(gameCurrency)
+      ? resolvedTolerance === 0
+        ? 'Exact'
+        : `±${formatAmount(resolvedTolerance)}`
+      : undefined;
+
   const settingsSummary = formatSettingsSummary(
     activeGame.settlementMode === 'banker',
     bankerName,
     roundingLabel,
+    toleranceLabel,
   );
 
   const applySettlementMode = async (mode: 'optimal' | 'banker', bankerId?: string) => {
@@ -1017,6 +1036,23 @@ export default function ActiveGameScreen() {
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
                 </View>
               </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => setShowTolerancePicker(true)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="git-compare-outline" size={18} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.menuItemLabel}>Imbalance tolerance</Text>
+                </View>
+                <View style={styles.menuItemRight}>
+                  <Text style={styles.menuItemValue}>{toleranceValueLabel}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                </View>
+              </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity
@@ -1060,6 +1096,20 @@ export default function ActiveGameScreen() {
                   </View>
                 </>
               )}
+
+              {/* Tolerance — only when overridden; same visibility gate as rounding */}
+              {toleranceLabel !== undefined &&
+                (activeGame.settlementMode !== 'banker' || !!bankerName) && (
+                  <>
+                    <Text style={styles.settingsSummaryDot}>·</Text>
+                    <View style={styles.settingsSummaryGroup}>
+                      <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
+                      <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                        {toleranceLabel}
+                      </Text>
+                    </View>
+                  </>
+                )}
             </TouchableOpacity>
           )}
         </View>
@@ -1566,6 +1616,19 @@ export default function ActiveGameScreen() {
           await updateGame(activeGame);
         }}
         onClose={() => setShowCashUnitPicker(false)}
+      />
+
+      {/* Imbalance Tolerance Picker Modal */}
+      <TolerancePickerModal
+        visible={showTolerancePicker}
+        currentTolerance={activeGame.imbalanceTolerance}
+        currency={(activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY}
+        onSelect={async (tol) => {
+          activeGame.imbalanceTolerance = tol;
+          GameService.clearSettlementCache(activeGame);
+          await updateGame(activeGame);
+        }}
+        onClose={() => setShowTolerancePicker(false)}
       />
 
       <SettlementModePicker
