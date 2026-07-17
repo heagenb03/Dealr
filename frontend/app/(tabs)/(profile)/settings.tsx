@@ -29,8 +29,10 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import CurrencyPickerModal from '@/components/CurrencyPickerModal';
 import CashUnitPickerModal from '@/components/CashUnitPickerModal';
 import SettlementModeDefaultPicker from '@/components/SettlementModeDefaultPicker';
+import TolerancePickerModal from '@/components/TolerancePickerModal';
 import { useGameDefaults } from '@/contexts/GameDefaultsContext';
 import { resolveCashUnit, EXACT_CASH_UNIT } from '@/constants/CashUnits';
+import { resolveTolerance, EXACT_TOLERANCE } from '@/constants/Tolerances';
 import { CurrencyCode } from '@/constants/Currencies';
 import { getTrialLabel } from '@/utils/trialUtils';
 import { useOAuthPrompt, isOAuthCancel } from '@/hooks/useOAuthPrompt';
@@ -140,11 +142,12 @@ export default function SettingsScreen() {
   // ---------------------------------------------------------------------------
 
   const { currency, setCurrency, meta, formatAmount } = useCurrency();
-  const { defaultCashUnit, defaultSettlementMode, setDefaultCashUnit, setDefaultSettlementMode } =
+  const { defaultCashUnit, defaultSettlementMode, defaultTolerance, setDefaultCashUnit, setDefaultSettlementMode, setDefaultTolerance } =
     useGameDefaults();
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [showRoundingPicker, setShowRoundingPicker] = useState(false);
   const [showModePicker, setShowModePicker] = useState(false);
+  const [showTolerancePicker, setShowTolerancePicker] = useState(false);
 
   const [showPaywall, setShowPaywall] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
@@ -328,6 +331,9 @@ export default function SettingsScreen() {
   const roundingDefaultLabel =
     roundingDefaultUnit === EXACT_CASH_UNIT ? 'Exact' : formatAmount(roundingDefaultUnit);
   const modeDefaultLabel = defaultSettlementMode === 'banker' ? 'Banker' : 'Direct';
+  const resolvedToleranceDefault = resolveTolerance(defaultTolerance, currency as CurrencyCode);
+  const toleranceDefaultLabel =
+    resolvedToleranceDefault === EXACT_TOLERANCE ? 'Exact' : formatAmount(resolvedToleranceDefault);
 
   return (
     <View style={styles.container}>
@@ -409,6 +415,24 @@ export default function SettingsScreen() {
 
             <View style={styles.menuDivider} />
 
+            {/* Settlement mode */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setShowModePicker(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="swap-horizontal" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Settlement Mode</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>{modeDefaultLabel}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
             {/* Rounding */}
             <TouchableOpacity
               style={styles.menuItem}
@@ -427,18 +451,18 @@ export default function SettingsScreen() {
 
             <View style={styles.menuDivider} />
 
-            {/* Settlement mode */}
+            {/* Tolerance */}
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => setShowModePicker(true)}
+              onPress={() => setShowTolerancePicker(true)}
               activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
-                <Ionicons name="swap-horizontal" size={24} color="#B072BB" />
-                <Text style={styles.menuItemLabel}>Settlement Mode</Text>
+                <Ionicons name="git-compare-outline" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Tolerance</Text>
               </View>
               <View style={styles.menuItemRight}>
-                <Text style={styles.menuItemValue}>{modeDefaultLabel}</Text>
+                <Text style={styles.menuItemValue}>{toleranceDefaultLabel}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#666" />
               </View>
             </TouchableOpacity>
@@ -930,6 +954,14 @@ export default function SettingsScreen() {
         currentMode={defaultSettlementMode ?? 'optimal'}
         onSelect={(mode) => { setDefaultSettlementMode(mode); }}
         onClose={() => setShowModePicker(false)}
+      />
+
+      <TolerancePickerModal
+        visible={showTolerancePicker}
+        currentTolerance={defaultTolerance}
+        currency={currency as CurrencyCode}
+        onSelect={(tol) => { setDefaultTolerance(tol); }}
+        onClose={() => setShowTolerancePicker(false)}
       />
 
       <PaywallModal
