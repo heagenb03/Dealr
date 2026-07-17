@@ -23,4 +23,14 @@ describe('formatSettingsSummary', () => {
   it('omits the tolerance segment when no label is provided (default tolerance)', () => {
     expect(formatSettingsSummary(false, undefined, '$5')).toBe('Direct · $5');
   });
+
+  it('banker mode with no banker drops tolerance too, matching the visible row', () => {
+    // The collapsed row suppresses BOTH rounding and tolerance in this state,
+    // so the a11y label must not announce a tolerance the user cannot see.
+    expect(formatSettingsSummary(true, undefined, '$5', '±$10')).toBe('Banker · Choose banker');
+  });
+
+  it('banker mode with a banker keeps the tolerance', () => {
+    expect(formatSettingsSummary(true, 'Alex', '$5', '±$10')).toBe('Banker · Alex · $5 · ±$10');
+  });
 });
