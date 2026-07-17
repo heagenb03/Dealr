@@ -228,16 +228,25 @@ export class GameService {
     game.status = 'completed';
   }
   
-  static createGame(name: string): Game {
-    return {
+  static createGame(
+    name: string,
+    defaults?: { cashUnit?: number; settlementMode?: 'optimal' | 'banker' },
+  ): Game {
+    const game: Game = {
       id: `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       name,
       date: new Date(),
       status: 'active',
       players: [],
       transactions: [],
-      createdAt: new Date()
+      createdAt: new Date(),
     };
+    // Seed only when a default is defined so an unset default preserves the
+    // existing lazy-fallback behavior (cashUnit resolves to the currency note;
+    // settlementMode absent is treated as 'optimal').
+    if (defaults?.cashUnit !== undefined) game.cashUnit = defaults.cashUnit;
+    if (defaults?.settlementMode !== undefined) game.settlementMode = defaults.settlementMode;
+    return game;
   }
 
   /**

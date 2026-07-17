@@ -43,6 +43,28 @@ describe('GameService.createGame', () => {
     expect(game.date).toBeInstanceOf(Date);
     expect(game.createdAt).toBeInstanceOf(Date);
   });
+
+  it('leaves cashUnit and settlementMode undefined when no defaults are given', () => {
+    const game = GameService.createGame('Test');
+    expect(game.cashUnit).toBeUndefined();
+    expect(game.settlementMode).toBeUndefined();
+  });
+
+  it('seeds cashUnit from defaults when provided', () => {
+    const game = GameService.createGame('Test', { cashUnit: 0 });
+    expect(game.cashUnit).toBe(0);
+  });
+
+  it('seeds settlementMode from defaults when provided', () => {
+    const game = GameService.createGame('Test', { settlementMode: 'banker' });
+    expect(game.settlementMode).toBe('banker');
+  });
+
+  it('ignores undefined fields inside defaults', () => {
+    const game = GameService.createGame('Test', { cashUnit: undefined, settlementMode: undefined });
+    expect(game.cashUnit).toBeUndefined();
+    expect(game.settlementMode).toBeUndefined();
+  });
 });
 
 // ---- addPlayer ----
