@@ -439,6 +439,7 @@ export function deserializeFirestoreGame(data: Record<string, any>): Game {
     createdAt: toDate(data.createdAt),
     syncedAt: toOptDate(data.syncedAt),
     cashUnit: data.cashUnit,
+    imbalanceTolerance: data.imbalanceTolerance,
     currency: data.currency,
     settlementMode: data.settlementMode,
     bankerPlayerId: data.bankerPlayerId,

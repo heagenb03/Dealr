@@ -39,6 +39,10 @@ export interface Game {
   /** Cash rounding unit in the game's currency. Default 5. 0 (or <=0) = Exact (no rounding). */
   cashUnit?: number;
 
+  /** Buy-in vs cash-out imbalance tolerance, in the game's native currency
+   *  units. Absent = resolve to the currency default (see resolveTolerance). */
+  imbalanceTolerance?: number;
+
   /** Settlement mode. Absent = 'optimal' (peer-to-peer solver). 'banker' = star through bankerPlayerId. */
   settlementMode?: 'optimal' | 'banker';
 
@@ -91,6 +95,8 @@ export interface SettlementRequestSettings {
   minTransferAmount?: number;
   /** Forwarded to the solver. Default 5. <= 0 = Exact (no rounding). */
   cashRoundingUnit?: number;
+  /** Imbalance tolerance forwarded to the solver, native units. Default 2.50. */
+  imbalanceTolerance?: number;
 }
 
 export interface Validation {
