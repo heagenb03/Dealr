@@ -25,7 +25,7 @@ import ModalButton from '@/components/ModalButton';
 import PaywallModal from '@/components/PaywallModal';
 import CashUnitPickerModal from '@/components/CashUnitPickerModal';
 import TolerancePickerModal from '@/components/TolerancePickerModal';
-import { resolveTolerance, getDefaultTolerance } from '@/constants/Tolerances';
+import { resolveTolerance } from '@/constants/Tolerances';
 import { DEFAULT_CURRENCY, CurrencyCode } from '@/constants/Currencies';
 import SettlementModePicker from '@/components/SettlementModePicker';
 import PaymentEditorModal from '@/components/PaymentEditorModal';
@@ -38,7 +38,7 @@ import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUti
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList } from '@/utils/addPlayer';
-import { formatSettingsSummary } from '@/utils/settingsSummary';
+import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -757,15 +757,9 @@ export default function ActiveGameScreen() {
   // Expanded-row value (always shown, plain like the Rounding value).
   const toleranceValueLabel =
     resolvedTolerance === 0 ? 'Exact' : formatAmount(resolvedTolerance);
-  // Visible caption segment + a11y label: ONLY when explicitly overridden away
-  // from the currency default (keeps default games' summary unchanged).
-  const toleranceLabel =
-    activeGame.imbalanceTolerance !== undefined &&
-    resolvedTolerance !== getDefaultTolerance(gameCurrency)
-      ? resolvedTolerance === 0
-        ? 'Exact'
-        : `±${formatAmount(resolvedTolerance)}`
-      : undefined;
+  // Collapsed caption segment + a11y label: always shown (like rounding), so the
+  // summary stays consistent at the currency default instead of dropping it.
+  const toleranceLabel = toleranceCaption(resolvedTolerance, formatAmount);
 
   const settingsSummary = formatSettingsSummary(
     activeGame.settlementMode === 'banker',
@@ -1098,9 +1092,8 @@ export default function ActiveGameScreen() {
                 </>
               )}
 
-              {/* Tolerance — only when overridden; same visibility gate as rounding */}
-              {toleranceLabel !== undefined &&
-                (activeGame.settlementMode !== 'banker' || !!bankerName) && (
+              {/* Tolerance — always shown, same banker-unchosen suppression as rounding */}
+              {(activeGame.settlementMode !== 'banker' || !!bankerName) && (
                   <>
                     <Text style={styles.settingsSummaryDot}>·</Text>
                     <View style={styles.settingsSummaryGroup}>

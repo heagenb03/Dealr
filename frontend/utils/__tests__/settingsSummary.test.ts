@@ -1,4 +1,4 @@
-import { formatSettingsSummary } from '../settingsSummary';
+import { formatSettingsSummary, toleranceCaption } from '../settingsSummary';
 
 describe('formatSettingsSummary', () => {
   it('direct mode shows mode and rounding', () => {
@@ -32,5 +32,23 @@ describe('formatSettingsSummary', () => {
 
   it('banker mode with a banker keeps the tolerance', () => {
     expect(formatSettingsSummary(true, 'Alex', '$5', '±$10')).toBe('Banker · Alex · $5 · ±$10');
+  });
+});
+
+describe('toleranceCaption', () => {
+  const fmt = (n: number) => `$${n}`;
+
+  it('captions a positive tolerance with a ± prefix', () => {
+    expect(toleranceCaption(10, fmt)).toBe('±$10');
+  });
+
+  it('captions the currency default (not just overrides) so the summary always shows it', () => {
+    // Regression: at the default $2.50 the collapsed summary used to omit
+    // tolerance while rounding/mode stayed — this asymmetry was the bug.
+    expect(toleranceCaption(2.5, fmt)).toBe('±$2.5');
+  });
+
+  it('captions Exact (0) as "Exact", not "±$0"', () => {
+    expect(toleranceCaption(0, fmt)).toBe('Exact');
   });
 });
