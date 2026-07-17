@@ -452,8 +452,8 @@ function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances
   const text = isRetrying
     ? 'Optimizing settlements...'
     : retryable
-      ? "Couldn't reach server — settlements are estimated"
-      : "Totals didn't balance — settlements are estimated";
+      ? "Couldn't reach server. Settlements are non-optimized"
+      : "Totals didn't balance. Settlements are non-optimized";
 
   return (
     <View style={styles.fallbackBanner} accessibilityRole="alert">
