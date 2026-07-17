@@ -6,22 +6,23 @@ export const EXACT_TOLERANCE = 0;
 interface TolerancePreset {
   /** The "Normal" default when a game has no explicit override. */
   default: number;
-  /** Non-zero curated options, ascending. Native currency units. */
+  /** Non-zero curated options, ascending. Native currency units. One step
+   *  below `default` (the "Strict" option) and several above it. */
   steps: number[];
 }
 
 // Hand-curated round numbers ≈ "a couple dollars", per currency. NOT FX-derived.
 const TOLERANCE_PRESETS: Record<CurrencyCode, TolerancePreset> = {
-  USD: { default: 2.5, steps: [2.5, 5, 10, 20, 50] },
-  EUR: { default: 2.5, steps: [2.5, 5, 10, 20, 50] },
-  GBP: { default: 2.5, steps: [2.5, 5, 10, 20, 50] },
-  CAD: { default: 2.5, steps: [2.5, 5, 10, 20, 50] },
-  AUD: { default: 2.5, steps: [2.5, 5, 10, 20, 50] },
-  CHF: { default: 2.5, steps: [2.5, 5, 10, 20, 50] },
-  JPY: { default: 250, steps: [250, 500, 1000, 2000, 5000] },
-  INR: { default: 200, steps: [200, 500, 1000, 2000, 5000] },
-  BRL: { default: 10, steps: [10, 25, 50, 100, 250] },
-  MXN: { default: 40, steps: [40, 100, 200, 500, 1000] },
+  USD: { default: 2.5, steps: [1, 2.5, 5, 10, 20, 50] },
+  EUR: { default: 2.5, steps: [1, 2.5, 5, 10, 20, 50] },
+  GBP: { default: 2.5, steps: [1, 2.5, 5, 10, 20, 50] },
+  CAD: { default: 2.5, steps: [1, 2.5, 5, 10, 20, 50] },
+  AUD: { default: 2.5, steps: [1, 2.5, 5, 10, 20, 50] },
+  CHF: { default: 2.5, steps: [1, 2.5, 5, 10, 20, 50] },
+  JPY: { default: 250, steps: [100, 250, 500, 1000, 2000, 5000] },
+  INR: { default: 200, steps: [100, 200, 500, 1000, 2000, 5000] },
+  BRL: { default: 10, steps: [5, 10, 25, 50, 100, 250] },
+  MXN: { default: 40, steps: [20, 40, 100, 200, 500, 1000] },
 };
 
 function presetFor(currency: CurrencyCode): TolerancePreset {

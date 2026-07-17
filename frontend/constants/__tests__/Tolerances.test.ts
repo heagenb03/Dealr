@@ -42,4 +42,18 @@ describe('Tolerances', () => {
     expect(toleranceSemantic(2.5, 'USD')).toBe('Normal');
     expect(toleranceSemantic(50, 'USD')).toBe('Loose');
   });
+
+  it('exposes a Strict step below the default so Strict is reachable', () => {
+    // New sub-default step is a valid option and labels as Strict…
+    expect(getToleranceOptions('USD')).toContain(1);
+    expect(toleranceSemantic(1, 'USD')).toBe('Strict');
+    expect(toleranceSemantic(100, 'JPY')).toBe('Strict');
+    // …while the currency default is unchanged (back-compat).
+    expect(getDefaultTolerance('USD')).toBe(2.5);
+    expect(getDefaultTolerance('JPY')).toBe(250);
+    // Options remain ascending and still start with Exact(0).
+    const opts = getToleranceOptions('USD');
+    expect(opts[0]).toBe(0);
+    expect(opts).toEqual([...opts].sort((a, b) => a - b));
+  });
 });
