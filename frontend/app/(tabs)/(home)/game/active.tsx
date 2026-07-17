@@ -710,6 +710,12 @@ export default function ActiveGameScreen() {
               },
             });
 
+      // Count profile stats only on the FIRST completion. Reopening a game
+      // leaves statsCounted set, so a re-completion won't double-count. Set the
+      // flag before this persist so the existing updateGame writes it.
+      const alreadyCounted = activeGame.statsCounted === true;
+      if (!alreadyCounted) activeGame.statsCounted = true;
+
       GameService.cacheSettlements(activeGame, result);
       await updateGame(activeGame);
 
@@ -719,8 +725,8 @@ export default function ActiveGameScreen() {
         AsyncStorage.setItem('review_games_completed', String(count + 1));
       }).catch(() => {});
 
-      // Fire-and-forget profile stat increment — after successful completion
-      if (user?.uid) {
+      // Fire-and-forget profile stat increment — only on first completion
+      if (!alreadyCounted && user?.uid) {
         const totalPot = balances.reduce((sum, b) => sum + b.totalBuyins, 0);
         const playerCount = activeGame.players.length;
         if (Number.isFinite(totalPot) && totalPot > 0 && playerCount > 0) {
