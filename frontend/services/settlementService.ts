@@ -260,6 +260,7 @@ export function validateSettlements(
   balances: PlayerBalance[],
   formatMoney: (n: number) => string = (n) => `$${n.toFixed(2)}`,
   bankerPlayerId?: string,
+  settlementMode?: 'optimal' | 'banker',
 ): Validation {
   const tolerance = 2.50;
   const validation : Validation = {
@@ -277,7 +278,20 @@ export function validateSettlements(
   if (!Array.isArray(balances) || balances.length === 0) {
     validation.errors.push('No player balances available for validation.');
     return validation;
-  } else if (playersWithNoActivity.length > 0) {
+  }
+
+  // Banker mode requires a banker who is still in the roster. Seeding a banker
+  // default makes "banker mode, no bankerPlayerId" a persistent, completable
+  // state, so block it here rather than feed an undefined banker to the solver.
+  if (settlementMode === 'banker') {
+    const hasBanker = !!bankerPlayerId && balances.some(b => b.playerId === bankerPlayerId);
+    if (!hasBanker) {
+      validation.errors.push('Choose a banker before completing the game.');
+      return validation;
+    }
+  }
+
+  if (playersWithNoActivity.length > 0) {
     validation.errors.push(`Players with no activity: ${playersWithNoActivity.map(p => p.playerName).join(', ')}.
     \n Consider removing them from the game.`);
     return validation;

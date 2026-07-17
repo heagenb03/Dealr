@@ -433,6 +433,33 @@ describe('GameService.validateGame', () => {
     const result = GameService.validateGame(balances);
     expect(result.isValid).toBe(true);
   });
+
+  it('blocks banker mode when no banker is chosen', () => {
+    const balances: PlayerBalance[] = [
+      { playerId: 'p1', playerName: 'Alice', totalBuyins: 100, totalCashouts: 100, netBalance: 0 },
+    ];
+    const result = GameService.validateGame(balances, undefined, undefined, 'banker');
+    expect(result.isValid).toBe(false);
+    expect(result.errors.join(' ')).toMatch(/banker/i);
+  });
+
+  it('blocks banker mode when the banker id is not in the roster', () => {
+    const balances: PlayerBalance[] = [
+      { playerId: 'p1', playerName: 'Alice', totalBuyins: 100, totalCashouts: 100, netBalance: 0 },
+    ];
+    const result = GameService.validateGame(balances, undefined, 'ghost', 'banker');
+    expect(result.isValid).toBe(false);
+    expect(result.errors.join(' ')).toMatch(/banker/i);
+  });
+
+  it('allows banker mode when a valid banker (zero activity) is chosen', () => {
+    const balances: PlayerBalance[] = [
+      { playerId: 'p1', playerName: 'Alice', totalBuyins: 100, totalCashouts: 100, netBalance: 0 },
+      { playerId: 'bank', playerName: 'Banker', totalBuyins: 0, totalCashouts: 0, netBalance: 0 },
+    ];
+    const result = GameService.validateGame(balances, undefined, 'bank', 'banker');
+    expect(result.isValid).toBe(true);
+  });
 });
 
 // ---- cacheSettlements / getCachedSettlements / clearSettlementCache ----

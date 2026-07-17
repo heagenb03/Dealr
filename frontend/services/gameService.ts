@@ -220,8 +220,9 @@ export class GameService {
     balances: PlayerBalance[],
     formatMoney?: (n: number) => string,
     bankerPlayerId?: string,
+    settlementMode?: 'optimal' | 'banker',
   ): Validation {
-    return validateSettlements(balances, formatMoney, bankerPlayerId);
+    return validateSettlements(balances, formatMoney, bankerPlayerId, settlementMode);
   }
   
   static completeGame(game: Game): void {

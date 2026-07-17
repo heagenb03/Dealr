@@ -658,6 +658,7 @@ export default function ActiveGameScreen() {
       balances,
       formatAmount,
       activeGame.settlementMode === 'banker' ? activeGame.bankerPlayerId : undefined,
+      activeGame.settlementMode,
     );
 
     setValidationResult(validation);
