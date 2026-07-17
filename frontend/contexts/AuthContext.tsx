@@ -39,6 +39,8 @@ interface UserDocument {
   trialEndsAt?: Date | null;
   createdAt?: Date | null;
   currency?: string;
+  defaultCashUnit?: number;
+  defaultSettlementMode?: 'optimal' | 'banker';
 }
 
 interface AuthContextType {

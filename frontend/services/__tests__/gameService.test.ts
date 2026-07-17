@@ -43,6 +43,28 @@ describe('GameService.createGame', () => {
     expect(game.date).toBeInstanceOf(Date);
     expect(game.createdAt).toBeInstanceOf(Date);
   });
+
+  it('leaves cashUnit and settlementMode undefined when no defaults are given', () => {
+    const game = GameService.createGame('Test');
+    expect(game.cashUnit).toBeUndefined();
+    expect(game.settlementMode).toBeUndefined();
+  });
+
+  it('seeds cashUnit from defaults when provided', () => {
+    const game = GameService.createGame('Test', { cashUnit: 0 });
+    expect(game.cashUnit).toBe(0);
+  });
+
+  it('seeds settlementMode from defaults when provided', () => {
+    const game = GameService.createGame('Test', { settlementMode: 'banker' });
+    expect(game.settlementMode).toBe('banker');
+  });
+
+  it('ignores undefined fields inside defaults', () => {
+    const game = GameService.createGame('Test', { cashUnit: undefined, settlementMode: undefined });
+    expect(game.cashUnit).toBeUndefined();
+    expect(game.settlementMode).toBeUndefined();
+  });
 });
 
 // ---- addPlayer ----
@@ -409,6 +431,33 @@ describe('GameService.validateGame', () => {
       { playerId: 'p1', playerName: 'Alice', totalBuyins: 100, totalCashouts: 100, netBalance: 0 },
     ];
     const result = GameService.validateGame(balances);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('blocks banker mode when no banker is chosen', () => {
+    const balances: PlayerBalance[] = [
+      { playerId: 'p1', playerName: 'Alice', totalBuyins: 100, totalCashouts: 100, netBalance: 0 },
+    ];
+    const result = GameService.validateGame(balances, undefined, undefined, 'banker');
+    expect(result.isValid).toBe(false);
+    expect(result.errors.join(' ')).toMatch(/banker/i);
+  });
+
+  it('blocks banker mode when the banker id is not in the roster', () => {
+    const balances: PlayerBalance[] = [
+      { playerId: 'p1', playerName: 'Alice', totalBuyins: 100, totalCashouts: 100, netBalance: 0 },
+    ];
+    const result = GameService.validateGame(balances, undefined, 'ghost', 'banker');
+    expect(result.isValid).toBe(false);
+    expect(result.errors.join(' ')).toMatch(/banker/i);
+  });
+
+  it('allows banker mode when a valid banker (zero activity) is chosen', () => {
+    const balances: PlayerBalance[] = [
+      { playerId: 'p1', playerName: 'Alice', totalBuyins: 100, totalCashouts: 100, netBalance: 0 },
+      { playerId: 'bank', playerName: 'Banker', totalBuyins: 0, totalCashouts: 0, netBalance: 0 },
+    ];
+    const result = GameService.validateGame(balances, undefined, 'bank', 'banker');
     expect(result.isValid).toBe(true);
   });
 });

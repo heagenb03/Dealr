@@ -27,6 +27,11 @@ import { getCustomerManagementURL } from '@/services/revenueCatService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import CurrencyPickerModal from '@/components/CurrencyPickerModal';
+import CashUnitPickerModal from '@/components/CashUnitPickerModal';
+import SettlementModeDefaultPicker from '@/components/SettlementModeDefaultPicker';
+import { useGameDefaults } from '@/contexts/GameDefaultsContext';
+import { resolveCashUnit, EXACT_CASH_UNIT } from '@/constants/CashUnits';
+import { CurrencyCode } from '@/constants/Currencies';
 import { getTrialLabel } from '@/utils/trialUtils';
 import { useOAuthPrompt, isOAuthCancel } from '@/hooks/useOAuthPrompt';
 
@@ -134,8 +139,12 @@ export default function SettingsScreen() {
   // Modal state
   // ---------------------------------------------------------------------------
 
-  const { currency, setCurrency, meta } = useCurrency();
+  const { currency, setCurrency, meta, formatAmount } = useCurrency();
+  const { defaultCashUnit, defaultSettlementMode, setDefaultCashUnit, setDefaultSettlementMode } =
+    useGameDefaults();
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [showRoundingPicker, setShowRoundingPicker] = useState(false);
+  const [showModePicker, setShowModePicker] = useState(false);
 
   const [showPaywall, setShowPaywall] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
@@ -315,6 +324,11 @@ export default function SettingsScreen() {
   // Render
   // ---------------------------------------------------------------------------
 
+  const roundingDefaultUnit = resolveCashUnit(defaultCashUnit, currency as CurrencyCode);
+  const roundingDefaultLabel =
+    roundingDefaultUnit === EXACT_CASH_UNIT ? 'Exact' : formatAmount(roundingDefaultUnit);
+  const modeDefaultLabel = defaultSettlementMode === 'banker' ? 'Banker' : 'Direct';
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -358,6 +372,25 @@ export default function SettingsScreen() {
 
             <View style={styles.menuDivider} />
 
+            {/* Saved Players */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/(tabs)/(profile)/saved-players' as any)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="people-outline" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Saved Players</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Game Defaults section */}
+        <View style={styles.section}>
+          <HudSectionHeader label="Game Defaults" centered={true} />
+          <View style={styles.menuCard}>
             {/* Currency */}
             <TouchableOpacity
               style={styles.menuItem}
@@ -376,17 +409,38 @@ export default function SettingsScreen() {
 
             <View style={styles.menuDivider} />
 
-            {/* Saved Players */}
+            {/* Rounding */}
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/(tabs)/(profile)/saved-players' as any)}
+              onPress={() => setShowRoundingPicker(true)}
               activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
-                <Ionicons name="people-outline" size={24} color="#B072BB" />
-                <Text style={styles.menuItemLabel}>Saved Players</Text>
+                <Ionicons name="options-outline" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Rounding</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#666" />
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>{roundingDefaultLabel}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            {/* Settlement mode */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setShowModePicker(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="swap-horizontal" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Settlement Mode</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>{modeDefaultLabel}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -861,6 +915,21 @@ export default function SettingsScreen() {
         currentCode={currency}
         onSelect={(code) => setCurrency(code)}
         onClose={() => setShowCurrencyPicker(false)}
+      />
+
+      <CashUnitPickerModal
+        visible={showRoundingPicker}
+        currentUnit={defaultCashUnit}
+        currency={currency as CurrencyCode}
+        onSelect={(unit) => { setDefaultCashUnit(unit); }}
+        onClose={() => setShowRoundingPicker(false)}
+      />
+
+      <SettlementModeDefaultPicker
+        visible={showModePicker}
+        currentMode={defaultSettlementMode ?? 'optimal'}
+        onSelect={(mode) => { setDefaultSettlementMode(mode); }}
+        onClose={() => setShowModePicker(false)}
       />
 
       <PaywallModal

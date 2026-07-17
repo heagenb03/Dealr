@@ -154,16 +154,40 @@ describe('validateSettlements', () => {
     expect(result.netDifference).toBe(0);
   });
 
-  it('returns warning for imbalance > $2.50', () => {
+  it('returns warning for imbalance > $2.50 (buy-ins higher)', () => {
     const balances = [
       makeBalance('Alice', 100, 50),
-      makeBalance('Bob', 50, 97),  // total cashouts = 147, buyins = 150, diff = 3
+      makeBalance('Bob', 50, 97),  // total buyins = 150, cashouts = 147, diff = 3
     ];
 
     const result = validateSettlements(balances);
     expect(result.isValid).toBe(true); // warnings don't block
     expect(result.warnings.length).toBeGreaterThan(0);
     expect(result.netDifference).toBe(3);
+
+    const msg = result.warnings[0];
+    expect(msg).toContain('Buy-ins are');
+    expect(msg).toContain('more than cash-outs');
+    expect(msg).toContain('your $2.50 limit');
+    expect(msg).toContain('non-optimized settlements');
+    expect(msg).toBe(
+      'Buy-ins are $3.00 more than cash-outs, over your $2.50 limit (In $150.00 · Out $147.00). Proceeding will produce non-optimized settlements.'
+    );
+  });
+
+  it('returns warning for imbalance > $2.50 (cash-outs higher, direction flips)', () => {
+    const balances = [
+      makeBalance('Alice', 50, 100),
+      makeBalance('Bob', 97, 50),  // total buyins = 147, cashouts = 150, diff = 3
+    ];
+
+    const result = validateSettlements(balances);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.netDifference).toBe(3);
+
+    const msg = result.warnings[0];
+    expect(msg).toContain('Cash-outs are');
+    expect(msg).toContain('more than buy-ins');
   });
 
   it('returns no warning for imbalance within tolerance ($2.50)', () => {
@@ -194,7 +218,7 @@ describe('validateSettlements', () => {
       makeBalance('Alice', 100, 100),
       makeBalance('Bob', 50, 54), // diff = 4.00
     ];
-    const result = validateSettlements(balances, undefined, undefined, 5.0);
+    const result = validateSettlements(balances, undefined, undefined, undefined, 5.0);
     expect(result.warnings).toHaveLength(0);
     expect(result.isValid).toBe(true);
   });
@@ -204,7 +228,7 @@ describe('validateSettlements', () => {
       makeBalance('Alice', 100, 100),
       makeBalance('Bob', 50, 49), // diff = 1.00
     ];
-    const result = validateSettlements(balances, undefined, undefined, 0);
+    const result = validateSettlements(balances, undefined, undefined, undefined, 0);
     expect(result.warnings.length).toBeGreaterThan(0);
     expect(result.isValid).toBe(true); // still a warning, never a block
   });

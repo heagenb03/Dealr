@@ -12,6 +12,7 @@ import 'react-native-reanimated';
 import { GameProvider } from '@/contexts/GameContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
+import { GameDefaultsProvider } from '@/contexts/GameDefaultsContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { needsVerification } from '@/utils/emailVerification';
 
@@ -123,16 +124,18 @@ function AuthNavigator() {
   // Main navigation tree — always mounted once auth state is known
   return (
     <CurrencyProvider>
-      <GameProvider>
-        <View style={styles.root}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="verify-email" />
-            <Stack.Screen name="how-it-works" options={{ presentation: 'modal' }} />
-          </Stack>
-        </View>
-      </GameProvider>
+      <GameDefaultsProvider>
+        <GameProvider>
+          <View style={styles.root}>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="verify-email" />
+              <Stack.Screen name="how-it-works" options={{ presentation: 'modal' }} />
+            </Stack>
+          </View>
+        </GameProvider>
+      </GameDefaultsProvider>
     </CurrencyProvider>
   );
 }

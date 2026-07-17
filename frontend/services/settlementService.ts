@@ -260,6 +260,7 @@ export function validateSettlements(
   balances: PlayerBalance[],
   formatMoney: (n: number) => string = (n) => `$${n.toFixed(2)}`,
   bankerPlayerId?: string,
+  settlementMode?: 'optimal' | 'banker',
   tolerance: number = 2.50,
 ): Validation {
   const validation : Validation = {
@@ -277,7 +278,20 @@ export function validateSettlements(
   if (!Array.isArray(balances) || balances.length === 0) {
     validation.errors.push('No player balances available for validation.');
     return validation;
-  } else if (playersWithNoActivity.length > 0) {
+  }
+
+  // Banker mode requires a banker who is still in the roster. Seeding a banker
+  // default makes "banker mode, no bankerPlayerId" a persistent, completable
+  // state, so block it here rather than feed an undefined banker to the solver.
+  if (settlementMode === 'banker') {
+    const hasBanker = !!bankerPlayerId && balances.some(b => b.playerId === bankerPlayerId);
+    if (!hasBanker) {
+      validation.errors.push('Choose a banker before completing the game.');
+      return validation;
+    }
+  }
+
+  if (playersWithNoActivity.length > 0) {
     validation.errors.push(`Players with no activity: ${playersWithNoActivity.map(p => p.playerName).join(', ')}.
     \n Consider removing them from the game.`);
     return validation;
@@ -288,10 +302,12 @@ export function validateSettlements(
   validation.netDifference = Math.abs(validation.totalBuyins - validation.totalCashouts);
 
   if (validation.netDifference > tolerance) {
+    const buyinsHigher = validation.totalBuyins > validation.totalCashouts;
+    const direction = buyinsHigher
+      ? `Buy-ins are ${formatMoney(validation.netDifference)} more than cash-outs`
+      : `Cash-outs are ${formatMoney(validation.netDifference)} more than buy-ins`;
     validation.warnings.push(
-      `Total buy-ins of ${formatMoney(validation.totalBuyins)} with total cash outs of ${formatMoney(validation.totalCashouts)}. A ${formatMoney(validation.netDifference)} difference.
-      Double check transactions and chip-counts.
-      \n If you proceed, settlement algorithm may have poor results.`
+      `${direction}, over your ${formatMoney(tolerance)} limit (In ${formatMoney(validation.totalBuyins)} · Out ${formatMoney(validation.totalCashouts)}). Proceeding will produce non-optimized settlements.`
     );
   }
 

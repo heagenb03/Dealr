@@ -662,6 +662,7 @@ export default function ActiveGameScreen() {
       balances,
       formatAmount,
       activeGame.settlementMode === 'banker' ? activeGame.bankerPlayerId : undefined,
+      activeGame.settlementMode,
       resolveTolerance(activeGame.imbalanceTolerance, (activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY),
     );
 
