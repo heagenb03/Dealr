@@ -5,6 +5,7 @@ import { StorageService } from '@/services/storageService';
 import { SyncService } from '@/services/syncService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/contexts/NetworkContext';
+import { useGameDefaults } from '@/contexts/GameDefaultsContext';
 
 interface GameContextType {
   games: Game[];
@@ -26,6 +27,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const { user } = useAuth();
   const { isOnline } = useNetwork();
+  const { defaultCashUnit, defaultSettlementMode } = useGameDefaults();
   const uid = user?.uid ?? null;
   const abortRef = useRef<AbortController | null>(null);
   const prevUidRef = useRef<string | null | undefined>(undefined); // undefined = not yet initialized
@@ -151,13 +153,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------------
 
   const createGame = useCallback(async (name: string): Promise<Game> => {
-    const newGame = GameService.createGame(name);
+    const newGame = GameService.createGame(name, {
+      cashUnit: defaultCashUnit,
+      settlementMode: defaultSettlementMode,
+    });
     setGames(prev => [...prev, newGame]);
     await SyncService.saveGame(uid, newGame);
     setActiveGameState(newGame);
     await StorageService.saveActiveGameId(newGame.id);
     return newGame;
-  }, [uid]);
+  }, [uid, defaultCashUnit, defaultSettlementMode]);
 
   const setActiveGame = useCallback(async (gameId: string | null) => {
     if (gameId) {
