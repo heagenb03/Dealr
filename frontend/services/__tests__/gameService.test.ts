@@ -60,6 +60,21 @@ describe('GameService.createGame', () => {
     expect(game.settlementMode).toBe('banker');
   });
 
+  it('seeds imbalanceTolerance from defaults when provided', () => {
+    const game = GameService.createGame('Test', { tolerance: 5 });
+    expect(game.imbalanceTolerance).toBe(5);
+  });
+
+  it('seeds imbalanceTolerance of 0 (Exact) from defaults', () => {
+    const game = GameService.createGame('Test', { tolerance: 0 });
+    expect(game.imbalanceTolerance).toBe(0);
+  });
+
+  it('leaves imbalanceTolerance undefined when no tolerance default is given', () => {
+    const game = GameService.createGame('Test', { cashUnit: 5 });
+    expect(game.imbalanceTolerance).toBeUndefined();
+  });
+
   it('ignores undefined fields inside defaults', () => {
     const game = GameService.createGame('Test', { cashUnit: undefined, settlementMode: undefined });
     expect(game.cashUnit).toBeUndefined();

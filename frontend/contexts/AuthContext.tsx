@@ -41,6 +41,7 @@ interface UserDocument {
   currency?: string;
   defaultCashUnit?: number;
   defaultSettlementMode?: 'optimal' | 'banker';
+  defaultTolerance?: number;
 }
 
 interface AuthContextType {
