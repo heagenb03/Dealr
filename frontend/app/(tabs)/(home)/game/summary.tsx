@@ -417,7 +417,7 @@ function BankerPayoutRow({ recipient, amount, recipientPayment }: BankerPayoutRo
 }
 
 // Fallback Banner Component
-function isRetryableFallback(error?: string, balances?: PlayerBalance[]): boolean {
+function isRetryableFallback(error?: string, balances?: PlayerBalance[], tolerance: number = 2.50): boolean {
   // 4xx = backend rejected (e.g. imbalance too large) — retry won't help
   if (error && /Server responded with status 4\d{2}/.test(error)) {
     return false;
@@ -428,7 +428,7 @@ function isRetryableFallback(error?: string, balances?: PlayerBalance[]): boolea
   if (balances && balances.length > 0) {
     const totalBuyins = balances.reduce((sum, b) => sum + b.totalBuyins, 0);
     const totalCashouts = balances.reduce((sum, b) => sum + b.totalCashouts, 0);
-    if (Math.abs(totalBuyins - totalCashouts) > 2.50) {
+    if (Math.abs(totalBuyins - totalCashouts) > tolerance) {
       return false;
     }
   }
@@ -442,10 +442,11 @@ interface FallbackBannerProps {
   isRetrying: boolean;
   errorMessage?: string;
   balances?: PlayerBalance[];
+  tolerance: number;
 }
 
-function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances }: FallbackBannerProps) {
-  const retryable = isRetryableFallback(errorMessage, balances);
+function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances, tolerance }: FallbackBannerProps) {
+  const retryable = isRetryableFallback(errorMessage, balances, tolerance);
 
   const icon = retryable ? 'cellular-outline' : 'alert-circle-outline';
   const text = isRetrying
@@ -878,6 +879,10 @@ setSettlementResult(cachedResult);
               isRetrying={isLoadingSettlements}
               errorMessage={lastError}
               balances={summary.balances}
+              tolerance={resolveTolerance(
+                summary.game.imbalanceTolerance,
+                (summary.game.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+              )}
             />
           )}
 
