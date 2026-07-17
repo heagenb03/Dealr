@@ -1,6 +1,7 @@
 export type HelpTopicId =
   | 'settlement-modes'
   | 'rounding'
+  | 'imbalance-tolerance'
   | 'saved-players'
   | 'swipe-actions'
   | 'sharing'
@@ -38,6 +39,16 @@ export const HELP_TOPICS: HelpTopic[] = [
     paragraphs: [
       'Rounding configures each payment to a friendly desired amount so nobody is stuck making change.',
       'So A $5 unit rounds every payment to the nearest $5 while "Exact" keeps payments down to the cent. This is managed by the app to still ensure the total owed and total paid are equal, even if some individual payments are rounded up or down.',
+    ],
+  },
+  {
+    id: 'imbalance-tolerance',
+    title: 'Imbalance tolerance',
+    icon: 'warning-outline',
+    paragraphs: [
+      "Imbalance tolerance sets how far a game's books can be off before Cash Cage warns before game completion. When the total cashed out differs from the total bought in by more than this amount, you'll get a heads-up before the game settles.",
+      "Pick a tighter limit (or Exact) to catch every discrepancy, or a looser one for casual games where being off by a few dollars is fine.",
+      "This is only a warning as you can always finish the game anyway, but the settlements will not be optimized if you proceed.",
     ],
   },
   {
@@ -94,6 +105,7 @@ export const HELP_TOPICS: HelpTopic[] = [
 export const ACTIVE_GAME_TOPIC_IDS: HelpTopicId[] = [
   'settlement-modes',
   'rounding',
+  'imbalance-tolerance',
   'saved-players',
   'swipe-actions',
 ];
@@ -102,6 +114,7 @@ export const ACTIVE_GAME_TOPIC_IDS: HelpTopicId[] = [
 export const GUIDE_TOPIC_IDS: HelpTopicId[] = [
   'settlement-modes',
   'rounding',
+  'imbalance-tolerance',
   'saved-players',
   'swipe-actions',
   'sharing',
