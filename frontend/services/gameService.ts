@@ -232,7 +232,7 @@ export class GameService {
   
   static createGame(
     name: string,
-    defaults?: { cashUnit?: number; settlementMode?: 'optimal' | 'banker' },
+    defaults?: { cashUnit?: number; settlementMode?: 'optimal' | 'banker'; tolerance?: number },
   ): Game {
     const game: Game = {
       id: `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -245,9 +245,11 @@ export class GameService {
     };
     // Seed only when a default is defined so an unset default preserves the
     // existing lazy-fallback behavior (cashUnit resolves to the currency note;
-    // settlementMode absent is treated as 'optimal').
+    // settlementMode absent is treated as 'optimal'; tolerance resolves to the
+    // currency default at read time).
     if (defaults?.cashUnit !== undefined) game.cashUnit = defaults.cashUnit;
     if (defaults?.settlementMode !== undefined) game.settlementMode = defaults.settlementMode;
+    if (defaults?.tolerance !== undefined) game.imbalanceTolerance = defaults.tolerance;
     return game;
   }
 
