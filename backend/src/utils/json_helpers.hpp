@@ -81,6 +81,11 @@ inline SettlementRequest parseRequest(const nlohmann::json& body) {
             settings["cashRoundingUnit"].is_number()) {
             request.cashRoundingUnit = settings["cashRoundingUnit"].get<double>();
         }
+
+        if (settings.contains("imbalanceTolerance") &&
+            settings["imbalanceTolerance"].is_number()) {
+            request.imbalanceTolerance = settings["imbalanceTolerance"].get<double>();
+        }
     }
 
     return request;

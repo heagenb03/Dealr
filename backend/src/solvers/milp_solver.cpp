@@ -16,9 +16,10 @@ struct BalanceAdjustmentResult {
 };
 
 BalanceAdjustmentResult adjustBalancesForSolver(
-    const std::vector<PlayerBalance>& balances
+    const std::vector<PlayerBalance>& balances,
+    double tolerance
 ) {
-    const double TOLERANCE = 2.50;
+    const double TOLERANCE = tolerance;
     const double ROUNDING_THRESHOLD = 0.01;
 
     BalanceAdjustmentResult result;
@@ -139,14 +140,15 @@ MILPResult solveMILP(
     const std::vector<PlayerBalance>& balances,
     std::optional<int> maxTransfersPerPlayer,
     std::optional<double> minTransferAmount,
-    std::optional<double> cashRoundingUnit
+    std::optional<double> cashRoundingUnit,
+    std::optional<double> imbalanceTolerance
 ) {
     using namespace operations_research;
 
     MILPResult result;
 
     // Step 1: Adjust balances for imbalance if needed
-    auto adjustmentResult = adjustBalancesForSolver(balances);
+    auto adjustmentResult = adjustBalancesForSolver(balances, imbalanceTolerance.value_or(2.50));
 
     if (!adjustmentResult.success) {
         result.warnings = adjustmentResult.warnings;

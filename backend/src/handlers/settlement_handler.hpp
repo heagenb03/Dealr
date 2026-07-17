@@ -67,7 +67,8 @@ inline void setupRoutes(crow::SimpleApp& app) {
                     request.balances,
                     request.maxTransfersPerPlayer,
                     request.minTransferAmount,
-                    request.cashRoundingUnit
+                    request.cashRoundingUnit,
+                    request.imbalanceTolerance
                 );
 
                 // Build response

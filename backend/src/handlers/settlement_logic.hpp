@@ -98,7 +98,8 @@ inline HttpResponse handleSettlementOptimal(const HttpRequest& req) {
             request.balances,
             request.maxTransfersPerPlayer,
             request.minTransferAmount,
-            request.cashRoundingUnit
+            request.cashRoundingUnit,
+            request.imbalanceTolerance
         );
 
         // Build response
