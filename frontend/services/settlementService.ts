@@ -260,8 +260,8 @@ export function validateSettlements(
   balances: PlayerBalance[],
   formatMoney: (n: number) => string = (n) => `$${n.toFixed(2)}`,
   bankerPlayerId?: string,
+  tolerance: number = 2.50,
 ): Validation {
-  const tolerance = 2.50;
   const validation : Validation = {
     isValid: false,
     errors: [],

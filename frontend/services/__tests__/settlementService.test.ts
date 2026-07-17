@@ -189,6 +189,35 @@ describe('validateSettlements', () => {
     expect(result.netDifference).toBe(2.5);
   });
 
+  it('honors a custom (looser) tolerance — no warning under it', () => {
+    const balances = [
+      makeBalance('Alice', 100, 100),
+      makeBalance('Bob', 50, 54), // diff = 4.00
+    ];
+    const result = validateSettlements(balances, undefined, undefined, 5.0);
+    expect(result.warnings).toHaveLength(0);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('honors a custom (stricter) tolerance — warns above it', () => {
+    const balances = [
+      makeBalance('Alice', 100, 100),
+      makeBalance('Bob', 50, 49), // diff = 1.00
+    ];
+    const result = validateSettlements(balances, undefined, undefined, 0);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.isValid).toBe(true); // still a warning, never a block
+  });
+
+  it('defaults to 2.50 tolerance when omitted (back-compat)', () => {
+    const balances = [
+      makeBalance('Alice', 100, 100),
+      makeBalance('Bob', 50, 46), // diff = 4.00 > 2.50
+    ];
+    const result = validateSettlements(balances);
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
   it('computes totals correctly', () => {
     const balances = [
       makeBalance('Alice', 200, 80),

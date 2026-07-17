@@ -220,8 +220,9 @@ export class GameService {
     balances: PlayerBalance[],
     formatMoney?: (n: number) => string,
     bankerPlayerId?: string,
+    tolerance?: number,
   ): Validation {
-    return validateSettlements(balances, formatMoney, bankerPlayerId);
+    return validateSettlements(balances, formatMoney, bankerPlayerId, tolerance);
   }
   
   static completeGame(game: Game): void {
