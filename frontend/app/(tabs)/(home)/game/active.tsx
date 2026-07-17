@@ -24,6 +24,8 @@ import Button from '@/components/Button';
 import ModalButton from '@/components/ModalButton';
 import PaywallModal from '@/components/PaywallModal';
 import CashUnitPickerModal from '@/components/CashUnitPickerModal';
+import { resolveTolerance } from '@/constants/Tolerances';
+import { DEFAULT_CURRENCY, CurrencyCode } from '@/constants/Currencies';
 import SettlementModePicker from '@/components/SettlementModePicker';
 import PaymentEditorModal from '@/components/PaymentEditorModal';
 import AppModal, { appModalStyles } from '@/components/AppModal';
@@ -658,6 +660,7 @@ export default function ActiveGameScreen() {
       balances,
       formatAmount,
       activeGame.settlementMode === 'banker' ? activeGame.bankerPlayerId : undefined,
+      resolveTolerance(activeGame.imbalanceTolerance, (activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY),
     );
 
     setValidationResult(validation);
