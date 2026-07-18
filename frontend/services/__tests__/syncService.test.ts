@@ -313,3 +313,48 @@ describe('withStorageLock (write serialization, Limitation 2)', () => {
     expect(result).toBe(42);
   });
 });
+
+describe('reopen-vs-complete cross-device conflict (last-write-wins by syncedAt)', () => {
+  const completedLater: Game = {
+    ...makeGame([{ id: 'A', name: 'Alice' }]),
+    status: 'completed',
+    statsCounted: true,
+    syncedAt: new Date('2026-07-02T00:00:00Z'),
+  };
+
+  it('a completion with the later syncedAt beats an earlier local reopen', async () => {
+    const reopenedEarlier: Game = {
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      status: 'active',
+      statsCounted: false,
+      syncedAt: new Date('2026-07-01T12:00:00Z'),
+    };
+    await StorageService.saveGames([reopenedEarlier]);
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([completedLater]);
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    const stored = await StorageService.loadGames();
+    expect(stored[0].status).toBe('completed');
+    expect(stored[0].statsCounted).toBe(true);
+  });
+
+  it('a reopen with the later syncedAt beats an earlier completion and propagates statsCounted: false', async () => {
+    const reopenedLater: Game = {
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      status: 'active',
+      statsCounted: false,
+      syncedAt: new Date('2026-07-03T00:00:00Z'),
+    };
+    await StorageService.saveGames([reopenedLater]);
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([completedLater]);
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    const stored = await StorageService.loadGames();
+    expect(stored[0].status).toBe('active');
+    expect(stored[0].statsCounted).toBe(false);
+  });
+});
