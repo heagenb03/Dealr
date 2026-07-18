@@ -231,13 +231,16 @@ export class GameService {
   }
 
   /**
-   * Reopen a completed game for editing. Flips status back to active and clears
-   * the cached settlement so the next completion re-solves from corrected data.
-   * Deliberately leaves statsCounted untouched — that flag is what prevents a
-   * re-completion from double-counting profile stats.
+   * Reopen a completed game for editing. Flips status back to active, clears
+   * the cached settlement so the next completion re-solves from corrected
+   * data, and clears statsCounted so the next completion re-counts profile
+   * stats with the corrected values. The call site is responsible for
+   * reversing the previously counted contribution (reverseProfileStats)
+   * BEFORE this flag is cleared — see the reopen handler in summary.tsx.
    */
   static reopenGame(game: Game): void {
     game.status = 'active';
+    game.statsCounted = false;
     GameService.clearSettlementCache(game);
   }
 
