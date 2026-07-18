@@ -1011,7 +1011,6 @@ setSettlementResult(cachedResult);
         <Text style={appModalStyles.title}>Reopen this game?</Text>
         <Text style={styles.reopenModalText}>
           You'll be able to edit buy-ins and cash-outs, then complete it again.
-          {'\n\n'}Your lifetime stats won't change.
         </Text>
         <View style={styles.reopenModalButtons}>
           <ModalButton variant="cancel" title="Cancel" onPress={() => setShowReopenConfirm(false)} />
@@ -1416,6 +1415,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   roundingNote: {
     fontSize: 12,
