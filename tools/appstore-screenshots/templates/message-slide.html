@@ -36,9 +36,11 @@
     })
     .join('<br>');
   // Highlight the payment annotations "(Venmo @maria-ho)" etc. in accent purple.
+  // The inner alternation allows ONE level of nested parens so phone-in-parens
+  // handles like "(Zelle (123)456-7890)" highlight as a whole, not split at (123).
   const esc = SLIDE.shareText.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   document.querySelector('.bubble').innerHTML =
-    esc.replace(/\(([^)]+)\)/g, '(<span class="handle">$1</span>)');
+    esc.replace(/\(((?:[^()]|\([^()]*\))*)\)/g, '(<span class="handle">$1</span>)');
 </script>
 </body>
 </html>
