@@ -344,6 +344,29 @@ export async function incrementProfileStats(
   });
 }
 
+/**
+ * Reverse a previously counted game's contribution to the profile stat
+ * counters. Called when a counted game is reopened; re-completion then
+ * re-counts the corrected values through incrementProfileStats.
+ *
+ * Deliberately never touches biggestPot: that field is a transactional max
+ * and is not reversible without recomputing across all games. If the
+ * record-holding game shrinks on re-completion, biggestPot stays at the old
+ * high (accepted limitation — records don't shrink).
+ */
+export async function reverseProfileStats(
+  uid: string,
+  stats: { gamesPlayed: number; moneyTracked: number; playersHosted: number },
+): Promise<void> {
+  const userRef = doc(db, 'users', uid);
+  // Offline-durable, same as the counter half of incrementProfileStats.
+  await updateDoc(userRef, {
+    totalGamesPlayed: increment(-stats.gamesPlayed),
+    totalMoneyTracked: increment(-stats.moneyTracked),
+    totalPlayersHosted: increment(-stats.playersHosted),
+  });
+}
+
 /** Update the user's preferred currency code. */
 export async function updateUserCurrency(uid: string, currencyCode: string): Promise<void> {
   const userRef = doc(db, 'users', uid);
