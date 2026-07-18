@@ -364,10 +364,16 @@ describe('GameService.reopenGame', () => {
     expect(game.transactionHash).toBeUndefined();
   });
 
-  it('leaves statsCounted set so re-completion does not double-count', () => {
+  it('clears statsCounted so re-completion re-counts the corrected values', () => {
     const game = createTestGame({ status: 'completed', statsCounted: true });
     GameService.reopenGame(game);
-    expect(game.statsCounted).toBe(true);
+    expect(game.statsCounted).toBe(false);
+  });
+
+  it('clears statsCounted even when it was never set (stays falsy, no throw)', () => {
+    const game = createTestGame({ status: 'completed' });
+    GameService.reopenGame(game);
+    expect(game.statsCounted).toBe(false);
   });
 });
 

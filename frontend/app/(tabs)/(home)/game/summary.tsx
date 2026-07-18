@@ -6,9 +6,11 @@ import { Text, View } from '@/components/Themed';
 import { useGame } from '@/contexts/GameContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useHelp } from '@/contexts/HelpContext';
+import { useAuth } from '@/contexts/AuthContext';
 import HelpSheet from '@/components/HelpSheet';
 import { getSummaryTopicIds, getTopicsByIds } from '@/constants/helpTopics';
 import { GameService } from '@/services/gameService';
+import { reverseProfileStats } from '@/services/firebaseService';
 import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
 import { PlayerBalance, SettlementResult } from '@/types/game';
 import { groupSettlementsByRecipient, sortPaymentsByAmount } from '@/utils/settlementUtils';
@@ -508,6 +510,7 @@ function FallbackBanner({ onDismiss, onRetry, onReopen, isRetrying, errorMessage
 
 export default function GameSummaryScreen() {
   const { activeGame, updateGame } = useGame();
+  const { user } = useAuth();
   const router = useRouter();
   const reduceMotion = useReduceMotion();
   const { formatAmount, currency } = useCurrency();
@@ -752,8 +755,27 @@ setSettlementResult(cachedResult);
   const handleReopen = async () => {
     if (!activeGame) return;
     setShowReopenConfirm(false);
+    // Capture the counted contribution from the still-intact completed game
+    // BEFORE reopenGame clears statsCounted and the user can edit amounts.
+    const wasCounted = activeGame.statsCounted === true;
+    const balances = GameService.calculateBalances(activeGame);
+    const totalPot = balances.reduce((sum, b) => sum + b.totalBuyins, 0);
+    const playerCount = activeGame.players.length;
     GameService.reopenGame(activeGame);
     await updateGame(activeGame);
+    // Fire-and-forget reversal, mirroring the completion increment's guards
+    // (active.tsx) so offline/failure drift stays symmetric. This assumes
+    // wasCounted (statsCounted === true) implies the increment actually ran;
+    // that holds only because the auth gate (app/_layout.tsx) keeps user
+    // non-null on these game screens — otherwise we could subtract a
+    // contribution that was never added.
+    if (wasCounted && user?.uid && Number.isFinite(totalPot) && totalPot > 0 && playerCount > 0) {
+      reverseProfileStats(user.uid, {
+        gamesPlayed: 1,
+        moneyTracked: Math.round(totalPot * 100) / 100,
+        playersHosted: playerCount,
+      }).catch(err => console.warn('Profile stats reversal failed:', err));
+    }
     router.replace('/game/active' as any);
   };
 

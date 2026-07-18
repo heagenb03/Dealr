@@ -47,6 +47,7 @@ import {
   deserializeFirestoreGame,
   fetchSavedPlayersFromFirestore,
   incrementProfileStats,
+  reverseProfileStats,
   sendVerificationEmail,
   signInWithGoogleCredential,
   signInWithAppleCredential,
@@ -133,6 +134,21 @@ describe('deserializeFirestoreGame', () => {
   it('leaves statsCounted undefined when absent in the document', () => {
     const game = deserializeFirestoreGame(baseDoc);
     expect(game.statsCounted).toBeUndefined();
+  });
+
+  it('preserves imbalanceTolerance through deserialization', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, imbalanceTolerance: 10 });
+    expect(game.imbalanceTolerance).toBe(10);
+  });
+
+  it('preserves an imbalanceTolerance of 0 (strict) — no falsy coercion', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, imbalanceTolerance: 0 });
+    expect(game.imbalanceTolerance).toBe(0);
+  });
+
+  it('leaves imbalanceTolerance undefined when absent so the currency default applies', () => {
+    const game = deserializeFirestoreGame(baseDoc);
+    expect(game.imbalanceTolerance).toBeUndefined();
   });
 });
 
@@ -266,6 +282,30 @@ describe('incrementProfileStats — biggestPot', () => {
       totalMoneyTracked: { __increment: 150 },
       totalPlayersHosted: { __increment: 3 },
     }));
+  });
+});
+
+describe('reverseProfileStats', () => {
+  beforeEach(() => {
+    (increment as jest.Mock).mockImplementation((n: number) => ({ __increment: n }));
+    (updateDoc as jest.Mock).mockClear();
+    (updateDoc as jest.Mock).mockResolvedValue(undefined);
+    (runTransaction as jest.Mock).mockClear();
+  });
+
+  it('negates the three counters in a single offline-durable updateDoc write', async () => {
+    await reverseProfileStats('u1', { gamesPlayed: 1, moneyTracked: 250, playersHosted: 5 });
+    expect(updateDoc).toHaveBeenCalledTimes(1);
+    expect((updateDoc as jest.Mock).mock.calls[0][1]).toEqual({
+      totalGamesPlayed: { __increment: -1 },
+      totalMoneyTracked: { __increment: -250 },
+      totalPlayersHosted: { __increment: -5 },
+    });
+  });
+
+  it('never touches biggestPot — no transaction runs on reversal', async () => {
+    await reverseProfileStats('u1', { gamesPlayed: 1, moneyTracked: 100, playersHosted: 3 });
+    expect(runTransaction).not.toHaveBeenCalled();
   });
 });
 
