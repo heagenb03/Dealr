@@ -971,24 +971,34 @@ setSettlementResult(cachedResult);
 
       {/* Actions */}
       <View style={styles.actions}>
-        {activeGame.status === 'completed' && (
-          <View style={styles.reopenButtonSpacing}>
-            <Button
-              onPress={() => setShowReopenConfirm(true)}
-              title="Reopen Game"
-              variant="secondary"
-              fullWidth
-              accessibilityHint="Reopen this game to edit buy-ins and cash-outs"
-            />
+        {activeGame.status === 'completed' ? (
+          <View style={styles.actionRow}>
+            <View style={styles.actionRowItem}>
+              <Button
+                onPress={() => setShowReopenConfirm(true)}
+                title="Reopen"
+                variant="secondary"
+                accessibilityHint="Reopen this game to edit buy-ins and cash-outs"
+              />
+            </View>
+            <View style={styles.actionRowItem}>
+              <Button
+                onPress={() => router.push('/')}
+                title="Done"
+                variant="primary"
+                accessibilityHint="Returns to the home screen"
+              />
+            </View>
           </View>
+        ) : (
+          <Button
+            onPress={() => router.push('/')}
+            title="Done"
+            variant="primary"
+            fullWidth
+            accessibilityHint="Returns to the home screen"
+          />
         )}
-        <Button
-          onPress={() => router.push('/')}
-          title="Done"
-          variant="primary"
-          fullWidth
-          accessibilityHint="Returns to the home screen"
-        />
       </View>
 
       <AppModal
@@ -1346,6 +1356,14 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     gap: 12,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  actionRowItem: {
+    flex: 1,
+  },
   // Fallback Banner styles (slim inline notice)
   fallbackBanner: {
     flexDirection: 'row',
@@ -1398,9 +1416,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'center',
-  },
-  reopenButtonSpacing: {
-    marginBottom: 12,
   },
   roundingNote: {
     fontSize: 12,
