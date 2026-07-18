@@ -22,7 +22,6 @@ import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { computeRoundingDistortion } from '@/utils/roundingUtils';
 import { resolveCashUnit } from '@/constants/CashUnits';
 import { resolveTolerance } from '@/constants/Tolerances';
-import { DEFAULT_CURRENCY, CurrencyCode } from '@/constants/Currencies';
 import * as Clipboard from 'expo-clipboard';
 import { PreferredPayment } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
@@ -660,7 +659,7 @@ setSettlementResult(cachedResult);
             cashRoundingUnit: resolveCashUnit(summary.game.cashUnit, currency),
             imbalanceTolerance: resolveTolerance(
               summary.game.imbalanceTolerance,
-              (summary.game.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+              currency,
             ),
           },
         });
@@ -719,7 +718,7 @@ setSettlementResult(cachedResult);
           cashRoundingUnit: resolveCashUnit(cashUnitRef.current, currency),
           imbalanceTolerance: resolveTolerance(
             summary.game.imbalanceTolerance,
-            (summary.game.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+            currency,
           ),
         },
       });
@@ -908,7 +907,7 @@ setSettlementResult(cachedResult);
               formatAmount={formatAmount}
               tolerance={resolveTolerance(
                 summary.game.imbalanceTolerance,
-                (summary.game.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+                currency,
               )}
             />
           )}
