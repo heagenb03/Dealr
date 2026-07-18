@@ -8,6 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Player, PlayerBalance } from '@/types/game';
 import { getNetBalanceColor, formatNetBalanceDisplay } from '@/utils/formatUtils';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
+import { formatHandleForDisplay } from '@/utils/paymentLinks';
 
 interface PlayerCardCompletedProps {
   player: Player;
@@ -108,6 +110,14 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
             <View style={styles.nameRow}>
               <Text style={styles.playerName}>{player.name}</Text>
             </View>
+            {player.preferredPayment && (
+              <View style={styles.paymentBadge}>
+                <Text style={styles.paymentBadgeText} numberOfLines={1}>
+                  {getPaymentMethodMeta(player.preferredPayment.method).label}
+                  {player.preferredPayment.handle ? ` · ${formatHandleForDisplay(player.preferredPayment.method, player.preferredPayment.handle)}` : ''}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Data row — IN | OUT | NET */}
@@ -211,6 +221,15 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontStyle: 'italic',
   },
+  paymentBadge: {
+    maxWidth: 160,
+    backgroundColor: 'transparent',
+  },
+  paymentBadgeText: {
+    fontSize: 11,
+    color: 'rgba(176,114,187,0.9)',
+    fontFamily: 'SpaceMono',
+  },
   reactivateAction: {
     backgroundColor: '#141A14',
     justifyContent: 'center',
@@ -240,6 +259,8 @@ export default React.memo(PlayerCardCompleted, (prevProps, nextProps) => {
     prevProps.balance?.totalBuyins === nextProps.balance?.totalBuyins &&
     prevProps.balance?.totalCashouts === nextProps.balance?.totalCashouts &&
     prevProps.balance?.netBalance === nextProps.balance?.netBalance &&
+    prevProps.player.preferredPayment?.method === nextProps.player.preferredPayment?.method &&
+    prevProps.player.preferredPayment?.handle === nextProps.player.preferredPayment?.handle &&
     prevProps.reduceMotion === nextProps.reduceMotion
   );
 });
