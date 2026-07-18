@@ -764,7 +764,11 @@ setSettlementResult(cachedResult);
     GameService.reopenGame(activeGame);
     await updateGame(activeGame);
     // Fire-and-forget reversal, mirroring the completion increment's guards
-    // (active.tsx) so offline/failure drift stays symmetric.
+    // (active.tsx) so offline/failure drift stays symmetric. This assumes
+    // wasCounted (statsCounted === true) implies the increment actually ran;
+    // that holds only because the auth gate (app/_layout.tsx) keeps user
+    // non-null on these game screens — otherwise we could subtract a
+    // contribution that was never added.
     if (wasCounted && user?.uid && Number.isFinite(totalPot) && totalPot > 0 && playerCount > 0) {
       reverseProfileStats(user.uid, {
         gamesPlayed: 1,
