@@ -26,7 +26,6 @@ import PaywallModal from '@/components/PaywallModal';
 import CashUnitPickerModal from '@/components/CashUnitPickerModal';
 import TolerancePickerModal from '@/components/TolerancePickerModal';
 import { resolveTolerance } from '@/constants/Tolerances';
-import { DEFAULT_CURRENCY, CurrencyCode } from '@/constants/Currencies';
 import SettlementModePicker from '@/components/SettlementModePicker';
 import PaymentEditorModal from '@/components/PaymentEditorModal';
 import AppModal, { appModalStyles } from '@/components/AppModal';
@@ -663,7 +662,7 @@ export default function ActiveGameScreen() {
       formatAmount,
       activeGame.settlementMode === 'banker' ? activeGame.bankerPlayerId : undefined,
       activeGame.settlementMode,
-      resolveTolerance(activeGame.imbalanceTolerance, (activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY),
+      resolveTolerance(activeGame.imbalanceTolerance, currency),
     );
 
     setValidationResult(validation);
@@ -705,7 +704,7 @@ export default function ActiveGameScreen() {
                 cashRoundingUnit: resolveCashUnit(activeGame.cashUnit, currency),
                 imbalanceTolerance: resolveTolerance(
                   activeGame.imbalanceTolerance,
-                  (activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY,
+                  currency,
                 ),
               },
             });
@@ -752,8 +751,7 @@ export default function ActiveGameScreen() {
       ? 'Exact'
       : formatAmount(resolveCashUnit(activeGame.cashUnit, currency));
 
-  const gameCurrency = (activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY;
-  const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, gameCurrency);
+  const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, currency);
   // Expanded-row value (always shown, plain like the Rounding value).
   const toleranceValueLabel =
     resolvedTolerance === 0 ? 'Exact' : formatAmount(resolvedTolerance);
@@ -1616,7 +1614,7 @@ export default function ActiveGameScreen() {
       <TolerancePickerModal
         visible={showTolerancePicker}
         currentTolerance={activeGame.imbalanceTolerance}
-        currency={(activeGame.currency as CurrencyCode | undefined) ?? DEFAULT_CURRENCY}
+        currency={currency}
         onSelect={async (tol) => {
           activeGame.imbalanceTolerance = tol;
           GameService.clearSettlementCache(activeGame);
