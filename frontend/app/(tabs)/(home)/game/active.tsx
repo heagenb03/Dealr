@@ -168,6 +168,7 @@ const PLAYERS_PAYWALL_MESSAGE = 'Upgrade to Pro for unlimited players per game.'
 const SAVED_CAP_PAYWALL_MESSAGE = `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
 const RECENT_LIMIT = 5;
 const HELP_HINT_SEEN_KEY = 'help_hint_seen';
+const DEFAULT_GAME_NAME = 'Untitled Game';
 
 export default function ActiveGameScreen() {
   const { activeGame, updateGame, setActiveGame, createGame } = useGame();
@@ -337,7 +338,7 @@ export default function ActiveGameScreen() {
 
   const handleCreateNewGame = async () => {
     try {
-      await createGame('Untitled Game');
+      await createGame(DEFAULT_GAME_NAME);
       // The useEffect or state update will automatically handle the active game change
     } catch (error) {
       Alert.alert('Error', 'Failed to create game');
@@ -820,7 +821,9 @@ export default function ActiveGameScreen() {
   };
 
   const handleTitlePress = () => {
-    setEditedTitle(activeGame.name);
+    // Default-named games open with an empty field so the user types straight away;
+    // named games pre-fill the real name for typo fixes.
+    setEditedTitle(activeGame.name === DEFAULT_GAME_NAME ? '' : activeGame.name);
     setIsEditingTitle(true);
   };
 
@@ -829,7 +832,11 @@ export default function ActiveGameScreen() {
 
     // Validation: empty title
     if (!trimmedTitle) {
-      Alert.alert('Error', 'Game name cannot be empty');
+      // A default-named game dismissed without typing is expected — keep the default
+      // silently. Only warn when the user cleared a real name.
+      if (activeGame.name !== DEFAULT_GAME_NAME) {
+        Alert.alert('Error', 'Game name cannot be empty');
+      }
       setEditedTitle(activeGame.name);
       setIsEditingTitle(false);
       return;
