@@ -406,7 +406,9 @@ export default function ActiveGameScreen() {
 
     setSelectedPlayer(player);
     setTransactionType(type);
-    setTransactionAmount(currentTotal.toString());
+    // A 0 total is a placeholder, not a real value — open empty so the user
+    // types straight away instead of deleting "0". The "Amount" placeholder shows.
+    setTransactionAmount(currentTotal > 0 ? currentTotal.toString() : '');
     setShowAddTransaction(true);
   }, [balances]);
 
@@ -604,6 +606,15 @@ export default function ActiveGameScreen() {
 
   const handleAddTransaction = async () => {
     if (!selectedPlayer) return;
+
+    // An untouched (empty) field is a no-op — close silently, same as confirming
+    // the unchanged current total. Prevents parseFloat('') === NaN from erroring.
+    if (transactionAmount.trim() === '') {
+      setTransactionAmount('');
+      setShowAddTransaction(false);
+      setSelectedPlayer(null);
+      return;
+    }
 
     // Validate format before parsing
     if (!isValidNumericInput(transactionAmount)) {
