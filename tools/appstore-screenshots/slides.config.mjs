@@ -3,23 +3,28 @@ export const DEVICES = {
 };
 
 // Demo game: "Friday Night Poker", pot $2,100 (staged 2026-07-18).
-// SHARE_TEXT is the LITERAL output of the app's Share action on the COMPLETED
-// staged game. It is pasted verbatim by Heagen in Task 2 — do NOT hand-author or
-// compute it (the summary capture only shows one recipient in full). The value
-// below is a loud placeholder so renders/tests work before Task 2; it must be
-// replaced before the set is approved.
-const SHARE_TEXT = `PLACEHOLDER — replace verbatim in Task 2 with the app's real Share output`;
+// SHARE_TEXT is the app's real Share output for the completed staged game, pasted by
+// Heagen 2026-07-18. Single blank lines between sections. No "Settled with Cash Cage"
+// footer — Heagen intentionally omitted it (no promo inside a promo screenshot).
+const SHARE_TEXT = `Friday Night Poker
+
+Total Pot: $2,100.00
+
+Settlements:
+• Doyle (Venmo @doylethewhale): $400.00 from Daniel
+• Maria (Venmo @mariahluvpoker): $300.00 from Johnny, $80.00 from Wolfgang
+• Phil (Zelle (123)456-7890): $220.00 from Wolfgang`;
 
 export const SLIDES = [
   {
+    // Device-only (no popped card): the completed-summary capture already shows the
+    // full expanded Doyle settlement (Venmo handle, RECEIVES $400, FROM Daniel, Pay ->)
+    // AND the $2,100 total pot, so a popped card would only duplicate + clip at the
+    // bottom edge. Approved by Heagen 2026-07-18 over two popped-card variants.
     n: 1, template: 'device-slide.html',
     kicker: 'Settle Up', headline: ['Who Pays Who —', 'And How'],
     capture: '../captures/slide1-summary.png', tilt: true,
-    cards: [
-      // Expanded Doyle settlement card (Venmo + Pay). Tune x/y/w/h on the real
-      // capture in Task 2; set captureWidth if the capture isn't 1179px wide.
-      { x: 40, y: 900, w: 1100, h: 620, left: 40, top: 1450, scale: 0.95 },
-    ],
+    cards: [],
   },
   {
     // Settings panel expanded over the populated game: Direct|Banker toggle
