@@ -135,6 +135,21 @@ describe('deserializeFirestoreGame', () => {
     const game = deserializeFirestoreGame(baseDoc);
     expect(game.statsCounted).toBeUndefined();
   });
+
+  it('preserves imbalanceTolerance through deserialization', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, imbalanceTolerance: 10 });
+    expect(game.imbalanceTolerance).toBe(10);
+  });
+
+  it('preserves an imbalanceTolerance of 0 (strict) — no falsy coercion', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, imbalanceTolerance: 0 });
+    expect(game.imbalanceTolerance).toBe(0);
+  });
+
+  it('leaves imbalanceTolerance undefined when absent so the currency default applies', () => {
+    const game = deserializeFirestoreGame(baseDoc);
+    expect(game.imbalanceTolerance).toBeUndefined();
+  });
 });
 
 describe('fetchSavedPlayersFromFirestore', () => {
