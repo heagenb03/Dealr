@@ -11,17 +11,16 @@ docs/superpowers/
 
 functions/
 # Ignore tools/ contents via tools/* (NOT tools/) so git still descends into tools/
-# and the negations below can re-include the App Store screenshot captures. A blanket
+# and the negation below can re-include the App Store screenshot tool. A blanket
 # tools/ excludes the dir itself, blocking any re-include of paths beneath it.
 tools/*
-# Re-include the App Store screenshot tool's captures (referenced .png only) so the
-# ASO slide set is reproducible from the repo. Intermediate dirs must be re-included
-# first (git won't descend into an excluded parent), then everything re-ignored,
-# then the .png captures un-ignored. node_modules/dist/*.jpeg stay ignored.
+# Track the whole App Store screenshot tool so the ASO slide set is reproducible from
+# the repo, with no add-friction on its tracked source. The tool's own
+# tools/appstore-screenshots/.gitignore already excludes node_modules/, dist/,
+# test/out/, and templates/.tmp-*. Re-ignore only the generated artifacts it doesn't
+# cover: the redundant .jpeg capture exports and the test-bootstrapped placeholder.
 !tools/appstore-screenshots/
-tools/appstore-screenshots/*
-!tools/appstore-screenshots/captures/
-tools/appstore-screenshots/captures/*
-!tools/appstore-screenshots/captures/*.png
+tools/appstore-screenshots/captures/*.jpeg
+tools/appstore-screenshots/test/fixtures/placeholder-capture.png
 
 nul
