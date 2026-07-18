@@ -1,80 +1,53 @@
 export const DEVICES = {
   iphone: { width: 1290, height: 2796, dir: 'iphone-6_9' },
-  ipad:   { width: 2048, height: 2732, dir: 'ipad-13' },
 };
 
-// Demo game: "Friday Night Poker", pot $2,100, cash unit $20.
-// Nets: Daniel -400, Phil +220, Maria +380, Doyle +400, Johnny -300, Wolfgang -300.
-const SHARE_TEXT = `Friday Night Poker
-
-Total Pot: $2,100.00
-
-Settlements:
-• Doyle (Cash): $400.00 from Daniel
-• Maria (Venmo @maria-ho): $300.00 from Johnny, $80.00 from Wolfgang
-• Phil (Cash App $philivey): $220.00 from Wolfgang
-
-
-Settled with Cash Cage
-https://apps.apple.com/app/id6759301097`;
+// Demo game: "Friday Night Poker", pot $2,100 (staged 2026-07-18).
+// SHARE_TEXT is the LITERAL output of the app's Share action on the COMPLETED
+// staged game. It is pasted verbatim by Heagen in Task 2 — do NOT hand-author or
+// compute it (the summary capture only shows one recipient in full). The value
+// below is a loud placeholder so renders/tests work before Task 2; it must be
+// replaced before the set is approved.
+const SHARE_TEXT = `PLACEHOLDER — replace verbatim in Task 2 with the app's real Share output`;
 
 export const SLIDES = [
   {
     n: 1, template: 'device-slide.html',
     kicker: 'Settle Up', headline: ['Who Pays Who —', 'And How'],
-    capture: '../captures/iphone/slide1-summary.png', tilt: true,
+    capture: '../captures/slide1-summary.png', tilt: true,
     cards: [
-      // expanded settlement card with Pay/Copy — tune x/y/w/h on the real capture
+      // Expanded Doyle settlement card (Venmo + Pay). Tune x/y/w/h on the real
+      // capture in Task 2; set captureWidth if the capture isn't 1179px wide.
       { x: 40, y: 900, w: 1100, h: 620, left: 40, top: 1450, scale: 0.95 },
     ],
-    perDevice: { ipad: { capture: '../captures/ipad/slide1-summary.png', cards: [{ x: 60, y: 900, w: 1900, h: 620, left: 60, top: 1500, scale: 0.85, captureWidth: 2048 }] } },
   },
   {
-    // Banker co-headline (slide 2): active-game "game setup" card showing the
-    // Direct | Banker segmented toggle with Banker selected and the
-    // "Everyone settles with <name> ›" caption. The toggle is the subject —
-    // no popped cards; the device alone shows it.
+    // Settings panel expanded over the populated game: Direct|Banker toggle
+    // (Banker selected) + Banker row + Rounding + Imbalance tolerance, players
+    // below. The panel is the subject — no popped card; the device alone shows it.
     n: 2, template: 'device-slide.html',
     kicker: 'Two Ways to Settle', headline: ['Direct Or Banker —', 'Your Call'],
-    capture: '../captures/iphone/slide2-banker.png', tilt: true,
+    capture: '../captures/slide3-settings-new.png', tilt: true,
     cards: [],
-    perDevice: { ipad: { capture: '../captures/ipad/slide2-banker.png', cards: [] } },
   },
   {
     n: 3, template: 'message-slide.html',
     kicker: 'Share It', headline: ['Get Paid In', 'The Group Chat'],
     shareText: SHARE_TEXT, tilt: false, cards: [],
-    perDevice: {},
   },
-  // NOTE: the source capture filenames below (slide3/4/5-*) are historical and were
-  // deliberately NOT renumbered when the banker slide was inserted at n:2. Only the
-  // output slide-<n>.png sequence and array order matter for the App Store upload;
-  // keeping these names avoids churn in the ASO plan's Task 4 staging checklist.
   {
     n: 4, template: 'device-slide.html',
-    kicker: 'Cash Games', headline: ['Amounts That Match', 'Real Bills'],
-    capture: '../captures/iphone/slide3-cashunit.png', tilt: true,
-    cards: [
-      { x: 40, y: 1200, w: 1100, h: 500, left: 60, top: 1500, scale: 0.95 },
-    ],
-    perDevice: { ipad: { capture: '../captures/ipad/slide3-cashunit.png', cards: [] } },
-  },
-  {
-    n: 5, template: 'device-slide.html',
     kicker: 'Saved Players', headline: ['Your Table,', 'On Every Device'],
-    capture: '../captures/iphone/slide4-savedplayers.png', tilt: true,
-    cards: [
-      { x: 40, y: 500, w: 1100, h: 400, left: 50, top: 1350, scale: 0.95 },
-    ],
-    perDevice: { ipad: { capture: '../captures/ipad/slide4-savedplayers.png', cards: [] } },
+    capture: '../captures/slide4-saved-players.png', tilt: true,
+    cards: [],
   },
   {
-    n: 6, template: 'device-slide.html',
+    // Active game, Direct mode — IN/OUT/NET tracking with a completed player.
+    // Legacy filename (kept to avoid a rename): the "-banker" suffix is historical;
+    // this capture is the Direct-mode tracking screen.
+    n: 5, template: 'device-slide.html',
     kicker: 'Game Night', headline: ['Track Every', 'Buy-In & Cashout'],
-    capture: '../captures/iphone/slide5-active.png', tilt: true,
-    cards: [
-      { x: 40, y: 700, w: 1100, h: 380, left: 45, top: 1400, scale: 0.95 },
-    ],
-    perDevice: { ipad: { capture: '../captures/ipad/slide5-active.png', cards: [] } },
+    capture: '../captures/slide5-active-banker.png', tilt: true,
+    cards: [],
   },
 ];

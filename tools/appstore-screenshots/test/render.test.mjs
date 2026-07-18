@@ -32,6 +32,9 @@ test('renderSlide produces an exact-size PNG with injected data', async () => {
   assert.deepEqual(pngSize(buf), { width: 1290, height: 2796 });
 });
 
+// NOTE: this exercises the render ENGINE at two sizes (incl. iPad dims) on purpose —
+// it proves the template renders at any viewport. Product scope is iPhone-only (see
+// DEVICES in slides.config.mjs); this test does not read DEVICES and is not product scope.
 test('device-slide renders at iPhone and iPad sizes', async () => {
   const browser = await puppeteer.launch();
   try {
@@ -64,9 +67,9 @@ test('device-slide renders at iPhone and iPad sizes', async () => {
   }
 });
 
-test('full config renders 12 slides at correct sizes (placeholder captures)', async () => {
+test('full config renders 5 slides at correct sizes (placeholder captures)', async () => {
   const { DEVICES, SLIDES } = await import('../slides.config.mjs');
-  assert.equal(SLIDES.length, 6);
+  assert.equal(SLIDES.length, 5);
   const browser = await puppeteer.launch();
   try {
     const cap = path.join(here, 'fixtures', 'placeholder-capture.png');
