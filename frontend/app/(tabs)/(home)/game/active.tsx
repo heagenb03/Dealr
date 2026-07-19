@@ -636,13 +636,8 @@ export default function ActiveGameScreen() {
       ? playerBalance?.totalBuyins ?? 0
       : playerBalance?.totalCashouts ?? 0;
 
-    if (transactionType === 'buyin') {
-      const currentCashout = playerBalance?.totalCashouts ?? 0;
-      if (currentCashout > 0 && amount < currentCashout) {
-        Alert.alert('Error', `Buy-in cannot be less than cash out of ${formatAmount(currentCashout)}`);
-        return;
-      }
-    }
+    // No lower limit constraint - a buy-in can be less than the cash out when the player wins
+    // (mirror of the cashout rule below; both directions of that old cap are retired)
 
     if (transactionType === 'cashout') {
       const currentBuyin = playerBalance?.totalBuyins ?? 0;
