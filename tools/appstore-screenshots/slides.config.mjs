@@ -53,9 +53,10 @@ export const SLIDES = [
     // Active game, Direct mode — IN/OUT/NET tracking with a completed player.
     // Legacy filename (kept to avoid a rename): the "-banker" suffix is historical;
     // this capture is the Direct-mode tracking screen.
-    n: 5, template: 'device-slide.html',
+    n: 5, template: 'device-slide.html', layout: 'top',
     kicker: 'Game Night', headline: ['Track Every', 'Buy-In & Cashout'],
-    capture: '../captures/slide5-active-banker.png', tilt: true,
+    capture: '../captures/slide5-active-banker.png',
+    deviceWidth: '92%', deviceY: '-30%',
     cards: [],
   },
 ];
