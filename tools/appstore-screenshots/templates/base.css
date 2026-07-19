@@ -44,7 +44,17 @@ body.ipad .headline { font-size: 96px; }
 .device.ipad   { width: var(--device-width, 62%); aspect-ratio: 2048 / 2732; border-radius: 56px; }
 
 /* ---- Layout: hero (caption top-center, phone bottom-center, tilted) ---- */
-/* Specificity (0,2,1) beats plain .device (0,1,0), so layout rules always win. */
+/* CONTRACT for every body.layout-* .device block: CSS cascades per declared
+   PROPERTY, not per rule — higher specificity only wins for properties the rule
+   actually declares. Base .device carries `left: 50%` AND
+   `transform: translateX(-50%)`, so each layout MUST declare BOTH:
+     1. the horizontal anchor — `left`, or `left: auto` plus `right`
+        (set only `right` and the box is over-constrained, so `right` is
+         ignored in LTR and the phone stays centered), and
+     2. a COMPLETE `transform`
+        (omit it and the inherited translateX(-50%) re-centers the phone).
+   Miss either and the slide renders centered while the test suite stays green —
+   the tests check that a `body.layout-X` string exists, not where the phone lands. */
 body.layout-hero .stage  { top: 26%; }
 body.layout-hero .device {
   left: 50%;
