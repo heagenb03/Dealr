@@ -1,5 +1,6 @@
 import { StyleSheet, ScrollView, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { Text, View } from '@/components/Themed';
 import HudSectionHeader from '@/components/HudSectionHeader';
 
@@ -109,7 +110,7 @@ export default function AboutScreen() {
 
         {/* App Info Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Cash Cage v2.0.0</Text>
+          <Text style={styles.footerText}>Cash Cage v{Constants.expoConfig?.version ?? '-'}</Text>
         </View>
       </ScrollView>
     </View>
