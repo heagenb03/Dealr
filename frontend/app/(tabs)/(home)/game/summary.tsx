@@ -463,13 +463,13 @@ function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances
   return (
     <View style={styles.fallbackBanner} accessibilityRole="alert">
       <View style={styles.fallbackBannerContent}>
-        <Ionicons name={icon as any} size={14} color="rgba(176,114,187,0.7)" />
+        <Ionicons name={icon as any} size={14} color="rgba(212,175,55,0.75)" />
         <Text style={styles.fallbackBannerText}>{text}</Text>
       </View>
       <View style={styles.fallbackBannerActions}>
         {retryable && (
           isRetrying ? (
-            <ActivityIndicator size="small" color="#B072BB" />
+            <ActivityIndicator size="small" color="#D4AF37" />
           ) : (
             <TouchableOpacity
               onPress={onRetry}
@@ -478,7 +478,7 @@ function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances
               accessibilityRole="button"
               accessibilityLabel="Retry for optimal settlements"
             >
-              <Ionicons name="refresh-outline" size={16} color="#B072BB" />
+              <Ionicons name="refresh-outline" size={16} color="#D4AF37" />
             </TouchableOpacity>
           )
         )}
@@ -1372,14 +1372,15 @@ const styles = StyleSheet.create({
   actionRowItem: {
     flex: 1,
   },
-  // Fallback Banner styles (slim inline notice)
+  // Fallback Banner styles (slim inline notice) — gold, not the purple brand
+  // accent, so the notice reads as a warning instead of blending into the UI.
   fallbackBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(176,114,187,0.06)',
+    backgroundColor: 'rgba(212,175,55,0.08)',   // Colors.dark.warning @ 8%
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(176,114,187,0.12)',
+    borderColor: 'rgba(212,175,55,0.22)',       // Colors.dark.warning @ 22%
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 10,
@@ -1395,7 +1396,7 @@ const styles = StyleSheet.create({
   fallbackBannerText: {
     flex: 1,
     fontSize: 12,
-    color: 'rgba(176,114,187,0.85)',
+    color: 'rgba(212,175,55,0.90)',             // Colors.dark.warning @ 90%
     lineHeight: 16,
   },
   fallbackBannerActions: {
