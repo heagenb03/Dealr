@@ -34,7 +34,7 @@ export const SLIDES = [
     n: 2, template: 'device-slide.html', layout: 'left',
     kicker: 'Two Ways to Settle', headline: ['Direct Or Banker', 'Your Call'],
     capture: '../captures/slide3-settings-new.png',
-    deviceWidth: '104%', deviceY: '-24%',
+    deviceWidth: '94%', deviceY: '-6%',
     cards: [],
   },
   {
