@@ -98,3 +98,23 @@ test('no slide copy contains an em-dash', async () => {
     assert.ok(!copy.includes('—'), `slide ${slide.n} contains an em-dash: ${copy}`);
   }
 });
+
+test('every device slide declares a layout with a matching CSS block', async () => {
+  const { SLIDES } = await import('../slides.config.mjs');
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  const deviceSlides = SLIDES.filter((s) => s.template === 'device-slide.html');
+  assert.ok(deviceSlides.length > 0, 'expected at least one device slide');
+  for (const slide of deviceSlides) {
+    assert.ok(slide.layout, `slide ${slide.n} is missing a layout`);
+    assert.ok(
+      css.includes(`body.layout-${slide.layout}`),
+      `slide ${slide.n} uses layout "${slide.layout}" but base.css has no body.layout-${slide.layout} rule`,
+    );
+  }
+});
+
+test('device layout geometry is driven by custom properties, not hardcoded per slide', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  assert.ok(css.includes('var(--device-width'), 'base.css must size .device from --device-width');
+  assert.ok(css.includes('var(--device-y'), 'base.css must position .device from --device-y');
+});

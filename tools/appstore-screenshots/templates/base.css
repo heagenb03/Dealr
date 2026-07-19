@@ -33,16 +33,23 @@ body.ipad .headline { font-size: 96px; }
 
 .stage { position: absolute; left: 0; right: 0; bottom: 0; top: 26%; perspective: 2600px; }
 .device {
-  position: absolute; left: 50%; top: 8%;
+  position: absolute; left: 50%; top: var(--device-y, 8%);
+  transform: translateX(-50%);
   background: var(--screen-bg);
   border: 17px solid var(--frame); border-radius: 78px;
   box-shadow: 0 0 0 3px #221f24, 0 70px 140px rgba(0,0,0,.55), inset 0 0 4px rgba(255,255,255,.25);
   overflow: hidden;
 }
-.device.iphone { width: 76%; aspect-ratio: 1179 / 2556; }
-.device.ipad   { width: 62%; aspect-ratio: 2048 / 2732; border-radius: 56px; }
-.device.tilt   { transform: translateX(-50%) rotateX(6deg) rotateY(-10deg) rotateZ(6deg); }
-.device.flat   { transform: translateX(-50%); }
+.device.iphone { width: var(--device-width, 76%); aspect-ratio: 1179 / 2556; }
+.device.ipad   { width: var(--device-width, 62%); aspect-ratio: 2048 / 2732; border-radius: 56px; }
+
+/* ---- Layout: hero (caption top-center, phone bottom-center, tilted) ---- */
+/* Specificity (0,2,1) beats plain .device (0,1,0), so layout rules always win. */
+body.layout-hero .stage  { top: 26%; }
+body.layout-hero .device {
+  left: 50%;
+  transform: translateX(-50%) rotateX(6deg) rotateY(-10deg) rotateZ(6deg);
+}
 .device .island { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 24%; height: 62px; border-radius: 34px; background: #000; z-index: 2; box-shadow: 0 0 0 2px #0a0a0a; }
 .device.ipad .island { display: none; }
 .capture { width: 100%; height: 100%; object-fit: cover; display: block; }

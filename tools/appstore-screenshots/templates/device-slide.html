@@ -30,7 +30,10 @@
     .join('<br>');
 
   const device = document.querySelector('.device');
-  device.classList.add(SLIDE.device, SLIDE.tilt ? 'tilt' : 'flat');
+  device.classList.add(SLIDE.device);
+  if (SLIDE.layout) document.body.classList.add(`layout-${SLIDE.layout}`);
+  if (SLIDE.deviceWidth) device.style.setProperty('--device-width', SLIDE.deviceWidth);
+  if (SLIDE.deviceY) device.style.setProperty('--device-y', SLIDE.deviceY);
   document.querySelector('.capture').src = SLIDE.capture;
 
   const stage = document.querySelector('.stage');

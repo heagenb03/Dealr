@@ -21,9 +21,10 @@ export const SLIDES = [
     // full expanded Doyle settlement (Venmo handle, RECEIVES $400, FROM Daniel, Pay ->)
     // AND the $2,100 total pot, so a popped card would only duplicate + clip at the
     // bottom edge. Approved by Heagen 2026-07-18 over two popped-card variants.
-    n: 1, template: 'device-slide.html',
+    n: 1, template: 'device-slide.html', layout: 'hero',
     kicker: 'Settle Up', headline: ['Who Pays Who', 'And How'],
-    capture: '../captures/slide1-summary.png', tilt: true,
+    capture: '../captures/slide1-summary.png',
+    deviceWidth: '88%', deviceY: '6%',
     cards: [],
   },
   {
