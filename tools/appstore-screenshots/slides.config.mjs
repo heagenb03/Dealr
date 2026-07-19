@@ -31,9 +31,10 @@ export const SLIDES = [
     // Settings panel expanded over the populated game: Direct|Banker toggle
     // (Banker selected) + Banker row + Rounding + Imbalance tolerance, players
     // below. The panel is the subject — no popped card; the device alone shows it.
-    n: 2, template: 'device-slide.html',
+    n: 2, template: 'device-slide.html', layout: 'left',
     kicker: 'Two Ways to Settle', headline: ['Direct Or Banker', 'Your Call'],
-    capture: '../captures/slide3-settings-new.png', tilt: true,
+    capture: '../captures/slide3-settings-new.png',
+    deviceWidth: '104%', deviceY: '-24%',
     cards: [],
   },
   {
@@ -42,9 +43,10 @@ export const SLIDES = [
     shareText: SHARE_TEXT, tilt: false, cards: [],
   },
   {
-    n: 4, template: 'device-slide.html',
+    n: 4, template: 'device-slide.html', layout: 'right',
     kicker: 'Saved Players', headline: ['Your Table,', 'On Every Device'],
-    capture: '../captures/slide4-saved-players.png', tilt: true,
+    capture: '../captures/slide4-saved-players.png',
+    deviceWidth: '86%', deviceY: '4%',
     cards: [],
   },
   {

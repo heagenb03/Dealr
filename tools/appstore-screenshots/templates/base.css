@@ -50,6 +50,28 @@ body.layout-hero .device {
   left: 50%;
   transform: translateX(-50%) rotateX(6deg) rotateY(-10deg) rotateZ(6deg);
 }
+/* ---- Layout: left (caption top-right, phone bleeds off the LEFT edge) ---- */
+body.layout-left .caption  { text-align: right; padding: 5% 6% 0 26%; }
+body.layout-left .kicker   { font-size: 50px; }
+body.layout-left .headline { font-size: 92px; }
+body.layout-left .stage    { top: 20%; }
+body.layout-left .device {
+  left: -22%;
+  transform-origin: left center;
+  transform: rotateX(5deg) rotateY(13deg) rotateZ(-5deg);
+}
+
+/* ---- Layout: right (caption top-left, phone bleeds off the RIGHT edge) ---- */
+body.layout-right .caption  { text-align: left; padding: 5% 26% 0 6%; }
+body.layout-right .kicker   { font-size: 50px; }
+body.layout-right .headline { font-size: 92px; }
+body.layout-right .stage    { top: 20%; }
+body.layout-right .device {
+  left: auto; right: -18%;
+  transform-origin: right center;
+  transform: rotateX(5deg) rotateY(-13deg) rotateZ(5deg);
+}
+
 .device .island { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 24%; height: 62px; border-radius: 34px; background: #000; z-index: 2; box-shadow: 0 0 0 2px #0a0a0a; }
 .device.ipad .island { display: none; }
 .capture { width: 100%; height: 100%; object-fit: cover; display: block; }
