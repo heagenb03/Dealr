@@ -443,7 +443,6 @@ function isRetryableFallback(error?: string, balances?: PlayerBalance[], toleran
 interface FallbackBannerProps {
   onDismiss: () => void;
   onRetry: () => void;
-  onReopen: () => void;
   isRetrying: boolean;
   errorMessage?: string;
   balances?: PlayerBalance[];
@@ -451,7 +450,7 @@ interface FallbackBannerProps {
   formatAmount: (n: number) => string;
 }
 
-function FallbackBanner({ onDismiss, onRetry, onReopen, isRetrying, errorMessage, balances, tolerance, formatAmount }: FallbackBannerProps) {
+function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances, tolerance, formatAmount }: FallbackBannerProps) {
   const retryable = isRetryableFallback(errorMessage, balances, tolerance);
 
   const totalBuyins = (balances ?? []).reduce((sum, b) => sum + b.totalBuyins, 0);
@@ -482,17 +481,6 @@ function FallbackBanner({ onDismiss, onRetry, onReopen, isRetrying, errorMessage
               <Ionicons name="refresh-outline" size={16} color="#B072BB" />
             </TouchableOpacity>
           )
-        )}
-        {!retryable && (
-          <TouchableOpacity
-            onPress={onReopen}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessible={true}
-            accessibilityRole="button"
-            accessibilityLabel="Reopen game to fix amounts"
-          >
-            <Text style={styles.fallbackReopenText}>Reopen to fix</Text>
-          </TouchableOpacity>
         )}
         <TouchableOpacity
           onPress={onDismiss}
@@ -922,7 +910,6 @@ setSettlementResult(cachedResult);
             <FallbackBanner
               onDismiss={() => setShowFallbackBanner(false)}
               onRetry={handleRetry}
-              onReopen={() => setShowReopenConfirm(true)}
               isRetrying={isLoadingSettlements}
               errorMessage={lastError}
               balances={summary.balances}
@@ -1416,11 +1403,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: 'transparent',
-  },
-  fallbackReopenText: {
-    color: '#B072BB',
-    fontSize: 13,
-    fontWeight: '600',
   },
   reopenIcon: {
     alignSelf: 'center',
