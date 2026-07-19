@@ -52,7 +52,7 @@ test('device-slide renders at iPhone and iPad sizes', async () => {
         template: path.join(here, '..', 'templates', 'device-slide.html'),
         data: {
           kicker: 'Settle Up',
-          headline: ['Who Pays Who —', 'And How'],
+          headline: ['Who Pays Who', 'And How'],
           capture: '../test/fixtures/placeholder-capture.png',
           device, tilt: true,
           cards: [{ x: 0, y: 0, w: 1179, h: 400, left: 60, top: 1400, scale: 0.9 }],
@@ -88,5 +88,13 @@ test('full config renders 5 slides at correct sizes (placeholder captures)', asy
     }
   } finally {
     await browser.close();
+  }
+});
+
+test('no slide copy contains an em-dash', async () => {
+  const { SLIDES } = await import('../slides.config.mjs');
+  for (const slide of SLIDES) {
+    const copy = [slide.kicker, ...(slide.headline ?? []), slide.shareText ?? ''].join(' ');
+    assert.ok(!copy.includes('—'), `slide ${slide.n} contains an em-dash: ${copy}`);
   }
 });

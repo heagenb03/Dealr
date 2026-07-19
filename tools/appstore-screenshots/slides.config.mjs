@@ -22,7 +22,7 @@ export const SLIDES = [
     // AND the $2,100 total pot, so a popped card would only duplicate + clip at the
     // bottom edge. Approved by Heagen 2026-07-18 over two popped-card variants.
     n: 1, template: 'device-slide.html',
-    kicker: 'Settle Up', headline: ['Who Pays Who —', 'And How'],
+    kicker: 'Settle Up', headline: ['Who Pays Who', 'And How'],
     capture: '../captures/slide1-summary.png', tilt: true,
     cards: [],
   },
@@ -31,7 +31,7 @@ export const SLIDES = [
     // (Banker selected) + Banker row + Rounding + Imbalance tolerance, players
     // below. The panel is the subject — no popped card; the device alone shows it.
     n: 2, template: 'device-slide.html',
-    kicker: 'Two Ways to Settle', headline: ['Direct Or Banker —', 'Your Call'],
+    kicker: 'Two Ways to Settle', headline: ['Direct Or Banker', 'Your Call'],
     capture: '../captures/slide3-settings-new.png', tilt: true,
     cards: [],
   },
