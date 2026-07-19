@@ -56,7 +56,7 @@ export const SLIDES = [
     n: 5, template: 'device-slide.html', layout: 'top',
     kicker: 'Game Night', headline: ['Track Every', 'Buy-In & Cashout'],
     capture: '../captures/slide5-active-banker.png',
-    deviceWidth: '92%', deviceY: '-30%',
+    deviceWidth: '96%', deviceY: '-23%',
     cards: [],
   },
 ];

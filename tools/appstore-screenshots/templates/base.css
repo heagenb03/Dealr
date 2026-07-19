@@ -81,8 +81,8 @@ body.layout-top .caption {
 }
 /* Scrim so the caption stays readable over the phone behind it. */
 body.layout-top .caption::before {
-  content: ''; position: absolute; left: -10%; right: -10%; bottom: 0; top: -45%;
-  background: linear-gradient(180deg, rgba(23,3,24,0) 0%, rgba(23,3,24,.86) 48%, rgba(23,3,24,.98) 100%);
+  content: ''; position: absolute; left: -10%; right: -10%; bottom: 0; top: -110%;
+  background: linear-gradient(180deg, rgba(23,3,24,0) 0%, rgba(23,3,24,.86) 65%, rgba(23,3,24,.98) 100%);
   z-index: -1;
 }
 body.layout-top .stage  { top: 0; }
