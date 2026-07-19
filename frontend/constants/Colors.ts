@@ -26,5 +26,6 @@ export default {
     purpAccent: purpAccent,
     success: '#00D66F',
     danger: '#FF3B5C',
+    warning: '#D4AF37',
   },
 };
