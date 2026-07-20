@@ -34,6 +34,16 @@
   if (SLIDE.layout) document.body.classList.add(`layout-${SLIDE.layout}`);
   if (SLIDE.deviceWidth) device.style.setProperty('--device-width', SLIDE.deviceWidth);
   if (SLIDE.deviceY) device.style.setProperty('--device-y', SLIDE.deviceY);
+  // An explicit captureZoom of 1 is treated exactly like omitting it: both must
+  // emit no transform, so both stay byte-identical to a pre-feature render.
+  // Coerce before comparing: a string "1" from a config typo would otherwise
+  // slip past a strict !== 1 check and apply an identity transform, which is
+  // NOT a no-op (it promotes .capture to its own compositing layer).
+  const zoom = Number(SLIDE.captureZoom);
+  if (Number.isFinite(zoom) && zoom > 0 && zoom !== 1) {
+    device.dataset.zoom = '';
+    device.style.setProperty('--capture-zoom', zoom);
+  }
   document.querySelector('.capture').src = SLIDE.capture;
 
   const stage = document.querySelector('.stage');

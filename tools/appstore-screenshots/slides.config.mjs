@@ -55,10 +55,30 @@ export const SLIDES = [
     cards: [],
   },
   {
+    // The payment handles are the hero here, and they sit at the RIGHT edge of
+    // each row — so the bleed is deliberately small (layout-right is -4%, near
+    // layout-left's -3%) rather than dramatic. At -18% every chip clipped
+    // mid-word.
+    //
+    // The capture's list holds six players and then ~37% empty black, which a
+    // fully-on-canvas phone would show as a band along the bottom. Two knobs
+    // can close that band, and they act oppositely on the horizontal axis.
+    // Because layout-right anchors `right`, growing deviceWidth extends the
+    // phone LEFT and DOWN, dropping the dead tail off-canvas while pulling the
+    // right-edge handles further ONTO it (past ~124% "Wolfgang" clips at the
+    // left). captureZoom instead scales the capture from top center, so it
+    // crops the tail symmetrically -- and symmetric is the problem: every zoom
+    // value that closed the band also pushed "Select" off the left edge and
+    // clipped the handle chips' borders at the right.
+    //
+    // So width alone does the work here and captureZoom stays unset. deviceY
+    // -1% then raises the phone until its top edge sits at ~22% of canvas
+    // height, near slide 2's ~17% -- slide 2 is this slide's layout mirror and
+    // the deck reads wrong when the two sit at visibly different heights.
     n: 4, template: 'device-slide.html', layout: 'right',
     kicker: 'Saved Players', headline: ['Your Table,', 'On Every Device'],
     capture: '../captures/slide4-saved-players.png',
-    deviceWidth: '86%', deviceY: '4%',
+    deviceWidth: '120%', deviceY: '-1%',
     cards: [],
   },
   {
