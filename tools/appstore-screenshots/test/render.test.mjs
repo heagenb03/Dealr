@@ -94,7 +94,13 @@ test('full config renders 5 slides at correct sizes (placeholder captures)', asy
 test('no slide copy contains an em-dash', async () => {
   const { SLIDES } = await import('../slides.config.mjs');
   for (const slide of SLIDES) {
-    const copy = [slide.kicker, ...(slide.headline ?? []), slide.shareText ?? ''].join(' ');
+    const copy = [
+      slide.kicker,
+      ...(slide.headline ?? []),
+      slide.shareText ?? '',
+      slide.chat?.title ?? '',
+      ...(slide.replies ?? []).flatMap((r) => [r.from, r.text]),
+    ].join(' ');
     assert.ok(!copy.includes('—'), `slide ${slide.n} contains an em-dash: ${copy}`);
   }
 });
@@ -161,5 +167,22 @@ test('chat-slide template wires every SLIDE field it is given', async () => {
     'SLIDE.sentStyle',
   ]) {
     assert.ok(html.includes(ref), `chat-slide.html must read ${ref}`);
+  }
+});
+
+test('reply copy names no payment rail', async () => {
+  const { SLIDES } = await import('../slides.config.mjs');
+  // A reply naming a rail can contradict the share text rendered directly above
+  // it: Wolfgang pays Maria by Venmo but Phil by Zelle, and the handle
+  // highlighting makes "Zelle (123)456-7890" one of the most prominent strings
+  // on the slide. Replies stay rail-agnostic ("sent", "paid ...").
+  const RAILS = /venmo|zelle|paypal|cash ?app|apple pay/i;
+  for (const slide of SLIDES) {
+    for (const r of slide.replies ?? []) {
+      assert.ok(
+        !RAILS.test(r.text),
+        `slide ${slide.n} reply from ${r.from} names a payment rail: "${r.text}"`,
+      );
+    }
   }
 });

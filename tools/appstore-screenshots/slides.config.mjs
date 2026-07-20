@@ -38,9 +38,21 @@ export const SLIDES = [
     cards: [],
   },
   {
-    n: 3, template: 'message-slide.html',
+    // Frameless group-chat scene. Deliberately the only slide WITHOUT a device
+    // frame: its subject is the share text after it has left the app, so Cash
+    // Cage's own frame would misrepresent where that text lives.
+    // `sentStyle` is omitted, which selects the tinted-dark sent bubble; setting
+    // it to 'accent' renders the purple-fill comparison variant.
+    n: 3, template: 'chat-slide.html',
     kicker: 'Share It', headline: ['Get Paid In', 'The Group Chat'],
-    shareText: SHARE_TEXT, tilt: false, cards: [],
+    shareText: SHARE_TEXT,
+    chat: { title: 'Friday Night Poker', members: ['D', 'M', 'P', 'W'], count: 6 },
+    // Rail-agnostic by contract -- see the 'reply copy names no payment rail' test.
+    replies: [
+      { from: 'Daniel', text: 'sent' },
+      { from: 'Wolfgang', text: 'paid Maria + Phil' },
+    ],
+    cards: [],
   },
   {
     n: 4, template: 'device-slide.html', layout: 'right',
