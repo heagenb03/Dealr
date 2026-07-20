@@ -53,6 +53,23 @@
 
   const msgs = document.querySelector('.msgs');
 
+  // Oldest message first: .msgs is bottom-anchored inside a clipped panel, so
+  // this is the element that gets cut off by the top edge when the thread
+  // overflows. That clipping is the intended effect, not a defect.
+  if (SLIDE.preface) {
+    const el = document.createElement('div');
+    el.className = 'msg recv older';
+    el.innerHTML = `<span class="from">${esc(SLIDE.preface.from)}</span>${esc(SLIDE.preface.text)}`;
+    msgs.appendChild(el);
+  }
+
+  if (SLIDE.timestamp) {
+    const el = document.createElement('div');
+    el.className = 'stamp';
+    el.textContent = SLIDE.timestamp;
+    msgs.appendChild(el);
+  }
+
   // Anchor message: the app's real share output, verbatim. Payment annotations
   // in parens highlight purple; the inner alternation allows ONE level of nested
   // parens so "(Zelle (123)456-7890)" highlights whole, not split at "(123)".

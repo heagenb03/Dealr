@@ -47,6 +47,13 @@ export const SLIDES = [
     kicker: 'Share It', headline: ['Get Paid In', 'The Group Chat'],
     shareText: SHARE_TEXT,
     chat: { title: 'Friday Night Poker', members: ['D', 'M', 'P', 'W'], count: 6 },
+    // The oldest message in the thread. It is deliberately clipped by the
+    // surface's top edge (see .msgs in base.css), which both sells
+    // "mid-conversation" and frames the share text as the answer to it.
+    // Rail-agnostic by the same contract as `replies`.
+    preface: { from: 'Johnny', text: "who owes what for last night?" },
+    // Matches the 11:27 shown in slide 1's status bar.
+    timestamp: '11:27 PM',
     // Rail-agnostic by contract -- see the 'reply copy names no payment rail' test.
     replies: [
       { from: 'Daniel', text: 'sent' },

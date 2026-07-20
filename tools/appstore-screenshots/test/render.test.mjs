@@ -99,10 +99,33 @@ test('no slide copy contains an em-dash', async () => {
       ...(slide.headline ?? []),
       slide.shareText ?? '',
       slide.chat?.title ?? '',
+      slide.timestamp ?? '',
+      slide.preface ? `${slide.preface.from} ${slide.preface.text}` : '',
       ...(slide.replies ?? []).flatMap((r) => [r.from, r.text]),
     ].join(' ');
     assert.ok(!copy.includes('—'), `slide ${slide.n} contains an em-dash: ${copy}`);
   }
+});
+
+test('preface message is rail-agnostic and em-dash free', async () => {
+  const { SLIDES } = await import('../slides.config.mjs');
+  // Same reasoning as the reply contract: the preface renders directly above
+  // the share text, so naming a rail there can contradict it.
+  const RAILS = /venmo|zelle|paypal|cash ?app|apple pay/i;
+  const prefaces = SLIDES.filter((s) => s.preface).map((s) => s.preface);
+  assert.ok(prefaces.length > 0, 'expected at least one slide with a preface');
+  for (const p of prefaces) {
+    assert.ok(!RAILS.test(p.text), `preface names a payment rail: "${p.text}"`);
+    assert.ok(!`${p.from} ${p.text}`.includes('—'), `preface contains an em-dash: "${p.text}"`);
+  }
+});
+
+test('preface and timestamp are optional in the template', async () => {
+  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
+  // Guarded, because the 'chat-slide renders at iPhone size' test builds slide
+  // data without either field.
+  assert.ok(html.includes('if (SLIDE.preface)'), 'preface rendering must be guarded');
+  assert.ok(html.includes('if (SLIDE.timestamp)'), 'timestamp rendering must be guarded');
 });
 
 test('every device slide declares a layout with a matching CSS block', async () => {
@@ -165,6 +188,8 @@ test('chat-slide template wires every SLIDE field it is given', async () => {
     'SLIDE.replies',
     'SLIDE.shareText',
     'SLIDE.sentStyle',
+    'SLIDE.preface',
+    'SLIDE.timestamp',
   ]) {
     assert.ok(html.includes(ref), `chat-slide.html must read ${ref}`);
   }

@@ -233,6 +233,15 @@ body.layout-top .device {
 }
 .msg .handle { color: #B072BB; font-weight: 700; }
 
+/* Faded because it is the tail of an earlier conversation, not part of the
+   message the slide is actually about. */
+.msg.older { opacity: .45; }
+.stamp {
+  align-self: center;
+  color: var(--kicker); font-size: 30px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+
 /* Variant rendered for side-by-side comparison (Task 3): a conventional
    accent-filled sent bubble. Selected by SLIDE.sentStyle === 'accent'. */
 body.sent-accent .msg.sent {
