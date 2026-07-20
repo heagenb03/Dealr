@@ -118,3 +118,48 @@ test('device layout geometry is driven by custom properties, not hardcoded per s
   assert.ok(css.includes('var(--device-width'), 'base.css must size .device from --device-width');
   assert.ok(css.includes('var(--device-y'), 'base.css must position .device from --device-y');
 });
+
+test('chat-slide renders at iPhone size', async () => {
+  const out = path.join(here, 'out', 'chat-iphone.png');
+  const browser = await puppeteer.launch();
+  try {
+    await renderSlide(browser, {
+      template: path.join(here, '..', 'templates', 'chat-slide.html'),
+      data: {
+        device: 'iphone',
+        kicker: 'Share It',
+        headline: ['Get Paid In', 'The Group Chat'],
+        shareText:
+          'Friday Night Poker\n\nTotal Pot: $2,100.00\n\nSettlements:\n' +
+          '• Doyle (Venmo @doylethewhale): $400.00 from Daniel\n' +
+          '• Phil (Zelle (123)456-7890): $220.00 from Wolfgang',
+        chat: { title: 'Friday Night Poker', members: ['D', 'M', 'P', 'W'], count: 6 },
+        replies: [
+          { from: 'Daniel', text: 'sent' },
+          { from: 'Wolfgang', text: 'paid Maria + Phil' },
+        ],
+      },
+      width: 1290,
+      height: 2796,
+      outPath: out,
+    });
+  } finally {
+    await browser.close();
+  }
+  const buf = await readFile(out);
+  assert.deepEqual(pngSize(buf), { width: 1290, height: 2796 });
+});
+
+test('chat-slide template wires every SLIDE field it is given', async () => {
+  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
+  for (const ref of [
+    'SLIDE.chat.members',
+    'SLIDE.chat.title',
+    'SLIDE.chat.count',
+    'SLIDE.replies',
+    'SLIDE.shareText',
+    'SLIDE.sentStyle',
+  ]) {
+    assert.ok(html.includes(ref), `chat-slide.html must read ${ref}`);
+  }
+});

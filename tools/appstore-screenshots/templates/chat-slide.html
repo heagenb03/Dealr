@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+</head>
+<body>
+<script>const SLIDE = /*__SLIDE_JSON__*/null;</script>
+<div class="suits"></div>
+<header class="caption">
+  <p class="kicker"></p>
+  <h1 class="headline"></h1>
+</header>
+<section class="thread">
+  <div class="thread-head">
+    <div class="avatars"></div>
+    <div class="who"><span class="title"></span><span class="count"></span></div>
+  </div>
+  <div class="msgs"></div>
+</section>
+<script>
+  document.body.classList.add(SLIDE.device);
+  if (SLIDE.sentStyle) document.body.classList.add(`sent-${SLIDE.sentStyle}`);
+
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  document.querySelector('.kicker').textContent = SLIDE.kicker;
+  document.querySelector('.headline').innerHTML = SLIDE.headline
+    .map((line, i) => {
+      const cls = i === SLIDE.headline.length - 1 ? ' class="grad"' : '';
+      return `<span${cls}>${esc(line)}</span>`;
+    })
+    .join('<br>');
+
+  // Chat header: overlapped initial avatars, group title, member count. The
+  // avatar row is truncated (4 of 6) beside the full count, which is standard
+  // chat-client behavior.
+  const AV_COLORS = ['#B072BB', '#7A4A86', '#8E5C99', '#49264F'];
+  const avatars = document.querySelector('.avatars');
+  SLIDE.chat.members.forEach((initial, i) => {
+    const el = document.createElement('span');
+    el.className = 'av';
+    el.style.background = AV_COLORS[i % AV_COLORS.length];
+    el.textContent = initial;
+    avatars.appendChild(el);
+  });
+  document.querySelector('.title').textContent = SLIDE.chat.title;
+  document.querySelector('.count').textContent = `${SLIDE.chat.count} people`;
+
+  const msgs = document.querySelector('.msgs');
+
+  // Anchor message: the app's real share output, verbatim. Payment annotations
+  // in parens highlight purple; the inner alternation allows ONE level of nested
+  // parens so "(Zelle (123)456-7890)" highlights whole, not split at "(123)".
+  const sent = document.createElement('div');
+  sent.className = 'msg sent';
+  sent.innerHTML = esc(SLIDE.shareText)
+    .replace(/\(((?:[^()]|\([^()]*\))*)\)/g, '(<span class="handle">$1</span>)');
+  msgs.appendChild(sent);
+
+  // Replies: other players confirming payment. Copy is rail-agnostic by contract
+  // (Wolfgang pays Maria by Venmo but Phil by Zelle) -- enforced by a test.
+  for (const r of SLIDE.replies ?? []) {
+    const el = document.createElement('div');
+    el.className = 'msg recv';
+    el.innerHTML = `<span class="from">${esc(r.from)}</span>${esc(r.text)}`;
+    msgs.appendChild(el);
+  }
+</script>
+</body>
+</html>

@@ -111,3 +111,80 @@ body.layout-top .device {
   background-color: #1A1A1A; background-repeat: no-repeat;
   box-shadow: 0 40px 90px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06);
 }
+
+/* ---- Chat thread (slide 3): frameless group-chat scene, no device frame ---- */
+/* Slide 3 is intentionally the only slide with no .device. Its subject is the
+   share text AFTER it has left the app, so wrapping it in Cash Cage's own frame
+   would misrepresent where that text lives. */
+.thread {
+  position: absolute; left: 0; right: 0; top: 20%; bottom: 6%;
+  z-index: 2; padding: 0 7%;
+  display: flex; flex-direction: column;
+}
+/* The header pins to the top and the messages hug the BOTTOM (margin-top: auto),
+   which is both how real chat clients stack and what closes the dead band by
+   construction. A plain top-anchored column leaves ~500px empty at the bottom --
+   the exact defect this slide is being rebuilt to fix. */
+.msgs {
+  margin-top: auto;
+  display: flex; flex-direction: column; gap: 34px;
+}
+
+.thread-head {
+  display: flex; align-items: center; gap: 26px;
+  padding-bottom: 30px;
+  border-bottom: 2px solid rgba(255, 255, 255, .10);
+  flex: 0 0 auto;
+}
+.avatars { display: flex; }
+/* Overlapped initial circles. The border matches the gradient's bottom stop so
+   each circle reads as punched out of the background rather than outlined. */
+.avatars .av {
+  width: 84px; height: 84px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 38px; font-weight: 700; color: #fff;
+  border: 4px solid #2a0a33; margin-left: -34px;
+}
+.avatars .av:first-child { margin-left: 0; }
+.thread-head .who { display: flex; flex-direction: column; gap: 6px; }
+.thread-head .title { color: var(--headline); font-size: 46px; font-weight: 700; }
+.thread-head .count { color: var(--kicker); font-size: 34px; font-weight: 500; }
+
+/* 44px matches the legibility of the bubble this replaces. With the bottom-hugging
+   .msgs stack there is room for it; do not drop below 40px without re-checking the
+   render, since App Store screenshots are judged at thumbnail scale. */
+.msg {
+  padding: 44px 52px; border-radius: 52px;
+  font-size: 44px; line-height: 1.5; color: #f2f2f4;
+  white-space: pre-wrap; word-break: break-word;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .5);
+}
+/* Sent vs received is carried by alignment, sender labels, and a purple-tinted
+   surface -- NOT by an accent-purple fill, which would compete with both the
+   purple background and the headline gradient. */
+.msg.sent {
+  align-self: flex-end; max-width: 82%;
+  border-bottom-right-radius: 18px;
+  background: #2a1830;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .5), 0 0 0 2px rgba(176, 114, 187, .35);
+}
+.msg.recv {
+  align-self: flex-start; max-width: 62%;
+  border-bottom-left-radius: 18px;
+  background: #232326;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .05);
+}
+.msg .from {
+  display: block; color: var(--kicker);
+  font-size: 30px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.msg .handle { color: #B072BB; font-weight: 700; }
+
+/* Variant rendered for side-by-side comparison (Task 3): a conventional
+   accent-filled sent bubble. Selected by SLIDE.sentStyle === 'accent'. */
+body.sent-accent .msg.sent {
+  background: #B072BB; color: #1a0a1f;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .5);
+}
+body.sent-accent .msg.sent .handle { color: #4a1656; }
