@@ -387,3 +387,18 @@ test('share bubble is grouped with its reaction pill and receipt', async () => {
   assert.match(css, /\.sent-group\s*\{[^}]*align-items:\s*flex-end/s, '.sent-group is right-aligned');
   assert.ok(!/\.sent-group\s*\{[^}]*gap:/s.test(css), '.sent-group must not set a gap');
 });
+
+test('avatars are legible and punched out of the surface', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  const av = css.match(/\.avatars \.av\s*\{([^}]*)\}/s);
+  assert.ok(av, 'base.css must style .avatars .av');
+
+  // -34px on 84px circles mashed D/M/P/W into an unreadable blob.
+  const overlap = Number(av[1].match(/margin-left:\s*-(\d+)px/)[1]);
+  assert.ok(overlap <= 22, `avatar overlap is -${overlap}px, must be <= -22px to stay legible`);
+
+  // The avatars now sit on the panel, not the gradient. The border must match
+  // the surface exactly or the punched-out effect breaks -- hence the shared
+  // custom property rather than a duplicated literal.
+  assert.match(av[1], /border:[^;]*var\(--surface\)/, 'avatar border must use var(--surface)');
+});

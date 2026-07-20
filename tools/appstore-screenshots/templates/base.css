@@ -165,7 +165,14 @@ body.layout-top .device {
      .surface's outer overflow:hidden was in effect before, which does not
      stop a sibling-on-sibling paint-over inside its own bounds. This became
      visible once Task 4's added content (reactions pill, receipt, third
-     reply) pushed the thread further into overflow. */
+     reply) pushed the thread further into overflow.
+     Known, accepted side effects of this box: it clips the 2px purple ring on
+     the last .msg.sent's right edge and the last bubble's downward drop
+     shadow. Both were judged imperceptible (dark-on-dark, 2px on a 1290px
+     canvas). `overflow: clip` with `overflow-clip-margin` was considered and
+     rejected -- that margin applies symmetrically to all four edges, so a
+     margin large enough to spare the bottom shadow would also push the TOP
+     clip edge down and reopen the header overlap this rule exists to prevent. */
   overflow: hidden;
 }
 
@@ -197,13 +204,14 @@ body.layout-top .device {
   flex: 0 0 auto;
 }
 .avatars { display: flex; }
-/* Overlapped initial circles. The border matches the gradient's bottom stop so
-   each circle reads as punched out of the background rather than outlined. */
+/* Overlapped initial circles. The border matches the SURFACE colour so each
+   circle reads as punched out of the panel rather than outlined. At -34px the
+   initials overlapped into an unreadable blob. */
 .avatars .av {
   width: 84px; height: 84px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 38px; font-weight: 700; color: #fff;
-  border: 4px solid #2a0a33; margin-left: -34px;
+  border: 4px solid var(--surface); margin-left: -22px;
 }
 .avatars .av:first-child { margin-left: 0; }
 .thread-head .who { display: flex; flex-direction: column; gap: 6px; }
@@ -228,8 +236,10 @@ body.layout-top .device {
   background: #2a1830;
   box-shadow: 0 40px 90px rgba(0, 0, 0, .5), 0 0 0 2px rgba(176, 114, 187, .35);
 }
+/* 72%, not 62%: beside the wide share bubble a narrower left column looks
+   starved and weights the whole lower half to one side. */
 .msg.recv {
-  align-self: flex-start; max-width: 62%;
+  align-self: flex-start; max-width: 72%;
   border-bottom-left-radius: 18px;
   background: #232326;
   box-shadow: 0 40px 90px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .05);
