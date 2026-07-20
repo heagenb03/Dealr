@@ -190,6 +190,7 @@ test('chat-slide template wires every SLIDE field it is given', async () => {
     'SLIDE.sentStyle',
     'SLIDE.preface',
     'SLIDE.timestamp',
+    'SLIDE.reactions',
   ]) {
     assert.ok(html.includes(ref), `chat-slide.html must read ${ref}`);
   }
@@ -356,4 +357,33 @@ test('chat surface has a compose bar pinned to its bottom row', async () => {
   assert.ok(field, 'base.css must style .compose .field');
   const size = Number(field[1].match(/font-size:\s*(\d+)px/)[1]);
   assert.ok(size >= 40, `.compose .field font-size is ${size}px, must be >= 40px`);
+});
+
+test('sent-side replies are supported and stay rail-agnostic', async () => {
+  const { SLIDES } = await import('../slides.config.mjs');
+  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
+
+  // Absent `side` must keep the existing received styling: the
+  // 'chat-slide renders at iPhone size' test passes replies without it.
+  assert.ok(html.includes("r.side === 'sent'"), 'template must branch on reply side');
+
+  const sent = SLIDES.flatMap((s) => s.replies ?? []).filter((r) => r.side === 'sent');
+  assert.equal(sent.length, 1, 'exactly one sent-side reply, to balance the bottom-right');
+  // The global rail contract applies to every reply regardless of side; this
+  // asserts the sent-side one is not accidentally exempted.
+  assert.ok(!/venmo|zelle|paypal|cash ?app|apple pay/i.test(sent[0].text));
+});
+
+test('share bubble is grouped with its reaction pill and receipt', async () => {
+  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+
+  assert.ok(html.includes('sent-group'), 'share bubble must live in a .sent-group');
+  assert.ok(html.includes('Delivered'), 'template must render a delivery receipt');
+  assert.ok(html.includes('if (SLIDE.reactions)'), 'reactions must be guarded');
+
+  // The group has no gap, so the pill's negative margin is an exact overlap
+  // rather than being partly eaten by .msgs' 28px gap.
+  assert.match(css, /\.sent-group\s*\{[^}]*align-items:\s*flex-end/s, '.sent-group is right-aligned');
+  assert.ok(!/\.sent-group\s*\{[^}]*gap:/s.test(css), '.sent-group must not set a gap');
 });

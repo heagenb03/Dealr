@@ -159,6 +159,14 @@ body.layout-top .device {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column; justify-content: flex-end;
   gap: 28px;
+  /* Without this, overflowing content spills past .msgs' own box and paints
+     over the sibling .thread-head above it (same stacking context, later in
+     DOM order) instead of clipping at the header divider as intended -- only
+     .surface's outer overflow:hidden was in effect before, which does not
+     stop a sibling-on-sibling paint-over inside its own bounds. This became
+     visible once Task 4's added content (reactions pill, receipt, third
+     reply) pushed the thread further into overflow. */
+  overflow: hidden;
 }
 
 /* Pinned bottom row. Its presence is what makes the scene read as a real chat
@@ -241,6 +249,25 @@ body.layout-top .device {
   color: var(--kicker); font-size: 30px; font-weight: 700;
   letter-spacing: .06em; text-transform: uppercase;
 }
+
+.sent-group { display: flex; flex-direction: column; align-items: flex-end; }
+/* Overlaps the bubble's bottom edge, inset from the right. The group sets no
+   gap, so -30px is exactly 30px of overlap. */
+.reacts {
+  position: relative; z-index: 4;
+  margin: -30px 44px 0 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 26px; border-radius: 40px;
+  background: #232326; border: 4px solid var(--surface);
+  font-size: 38px; line-height: 1;
+}
+.reacts .n { color: var(--kicker); font-size: 30px; font-weight: 700; }
+.receipt {
+  margin-top: 14px;
+  color: var(--kicker); font-size: 28px; font-weight: 500; letter-spacing: .04em;
+}
+/* A short closing reply, not a second wall of text. */
+.msg.sent.reply { max-width: 62%; }
 
 /* Variant rendered for side-by-side comparison (Task 3): a conventional
    accent-filled sent bubble. Selected by SLIDE.sentStyle === 'accent'. */

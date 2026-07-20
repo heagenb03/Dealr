@@ -73,17 +73,40 @@
   // Anchor message: the app's real share output, verbatim. Payment annotations
   // in parens highlight purple; the inner alternation allows ONE level of nested
   // parens so "(Zelle (123)456-7890)" highlights whole, not split at "(123)".
+  // The bubble, its reaction pill, and its receipt move as one unit. The group
+  // sets no gap, so the pill's negative margin is an exact overlap instead of
+  // fighting the 28px gap on .msgs.
+  const group = document.createElement('div');
+  group.className = 'sent-group';
+  msgs.appendChild(group);
+
   const sent = document.createElement('div');
   sent.className = 'msg sent';
   sent.innerHTML = esc(SLIDE.shareText)
     .replace(/\(((?:[^()]|\([^()]*\))*)\)/g, '(<span class="handle">$1</span>)');
-  msgs.appendChild(sent);
+  group.appendChild(sent);
+
+  if (SLIDE.reactions) {
+    const el = document.createElement('div');
+    el.className = 'reacts';
+    el.innerHTML =
+      `<span class="emo">${esc(SLIDE.reactions.emoji.join(''))}</span>` +
+      `<span class="n">${SLIDE.reactions.count}</span>`;
+    group.appendChild(el);
+  }
+
+  const receipt = document.createElement('div');
+  receipt.className = 'receipt';
+  receipt.textContent = 'Delivered';
+  group.appendChild(receipt);
 
   // Replies: other players confirming payment. Copy is rail-agnostic by contract
   // (Wolfgang pays Maria by Venmo but Phil by Zelle) -- enforced by a test.
   for (const r of SLIDE.replies ?? []) {
     const el = document.createElement('div');
-    el.className = 'msg recv';
+    // No `side` means received: the existing render.test.mjs fixture passes
+    // replies without it and must keep its current left-aligned styling.
+    el.className = r.side === 'sent' ? 'msg sent reply' : 'msg recv';
     el.innerHTML = `<span class="from">${esc(r.from)}</span>${esc(r.text)}`;
     msgs.appendChild(el);
   }

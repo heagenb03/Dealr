@@ -54,10 +54,17 @@ export const SLIDES = [
     preface: { from: 'Johnny', text: "who owes what for last night?" },
     // Matches the 11:27 shown in slide 1's status bar.
     timestamp: '11:27 PM',
+    // Emoji depend on Chromium's system-font fallback (Inter has no emoji
+    // glyphs). If they render as tofu, substitute the card suits used by the
+    // .suits watermark, which are proven to render in this pipeline.
+    reactions: { emoji: ['\u{1F525}', '\u{1F4B0}'], count: 3 },
     // Rail-agnostic by contract -- see the 'reply copy names no payment rail' test.
+    // The third reply is `side: 'sent'` so it right-aligns: it balances the
+    // otherwise-empty bottom-right quadrant and states the product's payoff.
     replies: [
       { from: 'Daniel', text: 'sent' },
       { from: 'Wolfgang', text: 'paid Maria + Phil' },
+      { from: 'You', text: 'all square \u{1F389}', side: 'sent' },
     ],
     cards: [],
   },
