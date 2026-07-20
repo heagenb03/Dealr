@@ -165,10 +165,16 @@ test('captureZoom scales the capture and defaults to inert', async () => {
       try {
         await page.setViewport({ width: 1290, height: 2796, deviceScaleFactor: 1 });
         await page.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
-        return await page.evaluate(() => ({
-          zoomAttr: document.querySelector('.device').hasAttribute('data-zoom'),
-          transform: getComputedStyle(document.querySelector('.capture')).transform,
-        }));
+        return await page.evaluate(() => {
+          const cap = document.querySelector('.capture');
+          const cs = getComputedStyle(cap);
+          return {
+            zoomAttr: document.querySelector('.device').hasAttribute('data-zoom'),
+            transform: cs.transform,
+            transformOrigin: cs.transformOrigin,
+            captureWidth: cap.clientWidth,
+          };
+        });
       } finally {
         await page.close();
         await rm(tmp, { force: true });
@@ -185,9 +191,10 @@ test('captureZoom scales the capture and defaults to inert', async () => {
     // what keeps slides 1, 2, 3 and 5 rendering unchanged from before this
     // feature existed. Asserting transform === 'none' checks that directly,
     // where the old byte comparison could only check it by side effect.
-    assert.deepEqual(omitted, { zoomAttr: false, transform: 'none' },
+    const inert = ({ zoomAttr, transform }) => ({ zoomAttr, transform });
+    assert.deepEqual(inert(omitted), { zoomAttr: false, transform: 'none' },
       'omitting captureZoom must emit no transform');
-    assert.deepEqual(explicitOne, { zoomAttr: false, transform: 'none' },
+    assert.deepEqual(inert(explicitOne), { zoomAttr: false, transform: 'none' },
       'captureZoom: 1 must be treated exactly like omitting it');
 
     // A non-default zoom must actually reach the DOM and the CSSOM. Without
@@ -196,6 +203,18 @@ test('captureZoom scales the capture and defaults to inert', async () => {
     assert.equal(zoomed.zoomAttr, true, 'captureZoom: 2 must set [data-zoom]');
     assert.equal(zoomed.transform, 'matrix(2, 0, 0, 2, 0, 0)',
       'captureZoom: 2 must apply scale(2) to .capture');
+
+    // The knob's whole documented semantic -- pin the status bar, push the
+    // surplus past the frame's BOTTOM edge -- lives in transform-origin, not
+    // in the scale. Flipping it to `center` silently converts this into a
+    // symmetric crop that also eats the top, and every other assertion in
+    // this test stays green. Assert the origin rather than the scale alone.
+    const [originX, originY] = zoomed.transformOrigin.split(' ');
+    assert.equal(originY, '0px',
+      'captureZoom must scale from the TOP edge, not the element centre');
+    assert.ok(Math.abs(parseFloat(originX) - zoomed.captureWidth / 2) < 1,
+      `captureZoom must scale from the horizontal centre (origin x ${originX}, `
+      + `capture width ${zoomed.captureWidth})`);
   } finally {
     await browser.close();
   }
