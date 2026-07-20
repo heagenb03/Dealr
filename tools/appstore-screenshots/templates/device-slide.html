@@ -34,7 +34,12 @@
   if (SLIDE.layout) document.body.classList.add(`layout-${SLIDE.layout}`);
   if (SLIDE.deviceWidth) device.style.setProperty('--device-width', SLIDE.deviceWidth);
   if (SLIDE.deviceY) device.style.setProperty('--device-y', SLIDE.deviceY);
-  if (SLIDE.captureZoom) device.style.setProperty('--capture-zoom', SLIDE.captureZoom);
+  // An explicit captureZoom of 1 is treated exactly like omitting it: both must
+  // emit no transform, so both stay byte-identical to a pre-feature render.
+  if (SLIDE.captureZoom && SLIDE.captureZoom !== 1) {
+    device.dataset.zoom = '';
+    device.style.setProperty('--capture-zoom', SLIDE.captureZoom);
+  }
   document.querySelector('.capture').src = SLIDE.capture;
 
   const stage = document.querySelector('.stage');

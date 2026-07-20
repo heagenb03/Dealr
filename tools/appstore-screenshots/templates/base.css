@@ -105,9 +105,14 @@ body.layout-top .device {
 .device.ipad .island { display: none; }
 /* --capture-zoom is set on .device (inherits down). Scaling from top center
    pins the status bar and pushes surplus content past the frame's bottom edge;
-   .device's overflow:hidden does the clipping. Default 1 = no-op. */
-.capture {
-  width: 100%; height: 100%; object-fit: cover; display: block;
+   .device's overflow:hidden does the clipping.
+   The transform is scoped behind [data-zoom] rather than defaulting to
+   scale(1), because an identity transform is NOT a no-op: it promotes the
+   element to its own compositing layer and shifts rasterization by +/-1 per
+   channel. Slides without a zoom must emit no transform to stay byte-identical. */
+.capture { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.device[data-zoom] .capture {
   transform: scale(var(--capture-zoom, 1));
   transform-origin: top center;
 }

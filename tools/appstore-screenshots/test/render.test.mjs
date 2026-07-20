@@ -158,8 +158,9 @@ test('captureZoom scales the capture and defaults to inert', async () => {
     const explicitOne = await render('one', { captureZoom: 1 });
     const zoomed = await render('two', { captureZoom: 2 });
 
-    // Omitting captureZoom must be identical to 1 — this is what keeps
-    // slides 1, 2, 3 and 5 rendering byte-for-byte unchanged.
+    // Omitting captureZoom and passing exactly 1 must both be fully inert —
+    // neither emits a transform — which is what keeps slides 1, 2, 3 and 5
+    // rendering byte-for-byte unchanged from before this feature existed.
     assert.deepEqual(omitted, explicitOne, 'captureZoom must default to 1');
     // A non-default zoom must actually reach the DOM. Without this the
     // template wiring could regress silently and every other test stays green.
