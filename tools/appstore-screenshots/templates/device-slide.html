@@ -34,6 +34,7 @@
   if (SLIDE.layout) document.body.classList.add(`layout-${SLIDE.layout}`);
   if (SLIDE.deviceWidth) device.style.setProperty('--device-width', SLIDE.deviceWidth);
   if (SLIDE.deviceY) device.style.setProperty('--device-y', SLIDE.deviceY);
+  if (SLIDE.captureZoom) device.style.setProperty('--capture-zoom', SLIDE.captureZoom);
   document.querySelector('.capture').src = SLIDE.capture;
 
   const stage = document.querySelector('.stage');

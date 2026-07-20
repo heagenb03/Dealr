@@ -118,3 +118,53 @@ test('device layout geometry is driven by custom properties, not hardcoded per s
   assert.ok(css.includes('var(--device-width'), 'base.css must size .device from --device-width');
   assert.ok(css.includes('var(--device-y'), 'base.css must position .device from --device-y');
 });
+
+test('captureZoom scales the capture and defaults to inert', async () => {
+  const browser = await puppeteer.launch();
+  try {
+    // Bootstrap a placeholder capture with Puppeteer itself (no image deps).
+    const cap = path.join(here, 'fixtures', 'placeholder-capture.png');
+    const p = await browser.newPage();
+    await p.setViewport({ width: 1179, height: 2556 });
+    await p.setContent('<body style="margin:0;background:#111;color:#B072BB;font:60px sans-serif">CAPTURE</body>');
+    await p.screenshot({ path: cap });
+    await p.close();
+
+    const base = {
+      kicker: 'Saved Players',
+      headline: ['Your Table,', 'On Every Device'],
+      capture: '../test/fixtures/placeholder-capture.png',
+      device: 'iphone',
+      // layout:'hero' is deliberate. The rotated layouts (left/right/top) rasterize
+      // non-deterministically (+/-1 per channel), which would make the byte comparison
+      // below flaky and let the notDeepEqual assertion pass on noise alone.
+      // captureZoom is layout-independent, so hero exercises the same wiring.
+      layout: 'hero',
+      cards: [],
+    };
+    const render = async (name, extra) => {
+      const out = path.join(here, 'out', `zoom-${name}.png`);
+      await renderSlide(browser, {
+        template: path.join(here, '..', 'templates', 'device-slide.html'),
+        data: { ...base, ...extra },
+        width: 1290,
+        height: 2796,
+        outPath: out,
+      });
+      return readFile(out);
+    };
+
+    const omitted = await render('omitted', {});
+    const explicitOne = await render('one', { captureZoom: 1 });
+    const zoomed = await render('two', { captureZoom: 2 });
+
+    // Omitting captureZoom must be identical to 1 — this is what keeps
+    // slides 1, 2, 3 and 5 rendering byte-for-byte unchanged.
+    assert.deepEqual(omitted, explicitOne, 'captureZoom must default to 1');
+    // A non-default zoom must actually reach the DOM. Without this the
+    // template wiring could regress silently and every other test stays green.
+    assert.notDeepEqual(omitted, zoomed, 'captureZoom: 2 must change rendered pixels');
+  } finally {
+    await browser.close();
+  }
+});

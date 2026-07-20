@@ -103,7 +103,14 @@ body.layout-top .device {
 
 .device .island { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 24%; height: 62px; border-radius: 34px; background: #000; z-index: 2; box-shadow: 0 0 0 2px #0a0a0a; }
 .device.ipad .island { display: none; }
-.capture { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* --capture-zoom is set on .device (inherits down). Scaling from top center
+   pins the status bar and pushes surplus content past the frame's bottom edge;
+   .device's overflow:hidden does the clipping. Default 1 = no-op. */
+.capture {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transform: scale(var(--capture-zoom, 1));
+  transform-origin: top center;
+}
 
 /* Popped-out UI cards: crops of the capture, floated above the device */
 .card {
