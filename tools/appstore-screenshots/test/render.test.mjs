@@ -287,3 +287,30 @@ test('captureZoom scales the capture and defaults to inert', async () => {
     await browser.close();
   }
 });
+
+test('chat surface is a bleeding, top-clipping panel', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
+
+  // The panel is the positioned root of the chat scene.
+  assert.ok(html.includes('class="surface"'), 'chat-slide.html must wrap the scene in .surface');
+  // Note the closing quote: this does NOT match the `class="thread-head"` that
+  // stays in the template, only a bare `class="thread"` wrapper.
+  assert.ok(!html.includes('class="thread"'), '.thread is replaced by .surface');
+
+  // Surface colour is a shared custom property: the avatar border (Task 5) must
+  // match it exactly, so it cannot be duplicated as a literal.
+  assert.ok(css.includes('--surface: #141016'), 'base.css must define --surface');
+  assert.ok(css.includes('--surface-line:'), 'base.css must define --surface-line');
+
+  // Bleeds off the bottom edge, so its bottom corners are never in frame.
+  assert.match(css, /\.surface\s*\{[^}]*bottom:\s*-60px/s, '.surface must bleed past the bottom edge');
+  assert.match(css, /\.surface\s*\{[^}]*border-radius:\s*56px 56px 0 0/s, '.surface has top corners only');
+
+  // Load-bearing: clipping + a bottom-anchored, shrinkable list is what makes
+  // surplus content clip at the TOP instead of becoming whitespace.
+  assert.match(css, /\.surface\s*\{[^}]*overflow:\s*hidden/s, '.surface must clip');
+  assert.match(css, /\.msgs\s*\{[^}]*min-height:\s*0/s, '.msgs needs min-height:0 or the panel overflows itself');
+  assert.match(css, /\.msgs\s*\{[^}]*justify-content:\s*flex-end/s, '.msgs must be bottom-anchored');
+  assert.ok(!/\.msgs\s*\{[^}]*margin-top:\s*auto/s.test(css), 'margin-top:auto is replaced by justify-content');
+});

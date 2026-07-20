@@ -8,6 +8,10 @@
   --kicker: #a89fae; --headline: #f4eef6;
   --headline-grad-a: #e9d5f0; --headline-grad-b: #a855c8;
   --frame: #4a4a4e; --screen-bg: #000;
+  /* Slide 3's chat surface. Deliberately neither Cash Cage's #0A0A0A nor a
+     purple tint: the panel must read as a generic messaging app, because the
+     slide's subject is the share text AFTER it has left Cash Cage. */
+  --surface: #141016; --surface-line: rgba(255,255,255,.08);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; }
@@ -124,22 +128,37 @@ body.layout-top .device {
   box-shadow: 0 40px 90px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06);
 }
 
-/* ---- Chat thread (slide 3): frameless group-chat scene, no device frame ---- */
-/* Slide 3 is intentionally the only slide with no .device. Its subject is the
-   share text AFTER it has left the app, so wrapping it in Cash Cage's own frame
-   would misrepresent where that text lives. */
-.thread {
-  position: absolute; left: 0; right: 0; top: 30%; bottom: 6%;
-  z-index: 2; padding: 0 7%;
+/* ---- Chat surface (slide 3): a neutral messaging panel, NOT a device ---- */
+/* Slide 3 still has no .device. The panel carries no bezel, notch, or status
+   bar, which is exactly what keeps it a messaging surface rather than Cash
+   Cage's own frame. It bleeds off the BOTTOM edge so its lower corners are
+   never in frame: a clipped edge reads as "continues past the frame", while
+   the same emptiness with four hard edges reads as a hole. That is why slide 1
+   survives having just as much empty gradient. */
+.surface {
+  position: absolute; left: 5%; right: 5%; top: 22%; bottom: -60px;
+  z-index: 2;
   display: flex; flex-direction: column;
+  /* Bottom padding is 60px (the bleed) + 48px (the visible inset), so the
+     compose bar's bottom edge lands 48px ABOVE the canvas edge rather than
+     off-canvas. Changing `bottom` means changing this too. */
+  padding: 44px 48px 108px;
+  background: var(--surface);
+  border: 1px solid var(--surface-line); border-bottom: 0;
+  border-radius: 56px 56px 0 0;
+  box-shadow: 0 -30px 90px rgba(0, 0, 0, .55);
+  overflow: hidden;
 }
-/* The header pins to the top and the messages hug the BOTTOM (margin-top: auto),
-   which is both how real chat clients stack and what closes the dead band by
-   construction. A plain top-anchored column leaves ~500px empty at the bottom --
-   the exact defect this slide is being rebuilt to fix. */
+/* The list absorbs all the slack. `min-height: 0` is REQUIRED -- without it the
+   flex item refuses to shrink below its content height and the panel overflows
+   its own bounds instead of clipping. With it, surplus messages clip at the TOP
+   of the list, just under the header divider, which is what a real chat scrolled
+   to its latest message looks like. Overflow here is the intended effect, not a
+   bug: content can be added or removed without the layout reopening a gap. */
 .msgs {
-  margin-top: auto;
-  display: flex; flex-direction: column; gap: 34px;
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  gap: 28px;
 }
 
 .thread-head {
