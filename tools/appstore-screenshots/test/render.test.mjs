@@ -314,3 +314,21 @@ test('chat surface is a bleeding, top-clipping panel', async () => {
   assert.match(css, /\.msgs\s*\{[^}]*justify-content:\s*flex-end/s, '.msgs must be bottom-anchored');
   assert.ok(!/\.msgs\s*\{[^}]*margin-top:\s*auto/s.test(css), 'margin-top:auto is replaced by justify-content');
 });
+
+test('chat surface has a compose bar pinned to its bottom row', async () => {
+  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+
+  assert.ok(html.includes('class="compose"'), 'chat-slide.html must render a compose bar');
+  assert.ok(html.includes('Message'), 'compose bar needs a placeholder');
+
+  // Fixed row: it must not absorb slack, or it competes with .msgs for the
+  // space and the panel stops filling.
+  assert.match(css, /\.compose\s*\{[^}]*flex:\s*0 0 auto/s, '.compose must be a fixed row');
+
+  // Judged at thumbnail scale, so the placeholder cannot go below 40px.
+  const field = css.match(/\.compose \.field\s*\{([^}]*)\}/s);
+  assert.ok(field, 'base.css must style .compose .field');
+  const size = Number(field[1].match(/font-size:\s*(\d+)px/)[1]);
+  assert.ok(size >= 40, `.compose .field font-size is ${size}px, must be >= 40px`);
+});
