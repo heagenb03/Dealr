@@ -135,10 +135,14 @@ test('captureZoom scales the capture and defaults to inert', async () => {
       headline: ['Your Table,', 'On Every Device'],
       capture: '../test/fixtures/placeholder-capture.png',
       device: 'iphone',
-      // layout:'hero' is deliberate. The rotated layouts (left/right/top) rasterize
-      // non-deterministically (+/-1 per channel), which would make the byte comparison
-      // below flaky and let the notDeepEqual assertion pass on noise alone.
-      // captureZoom is layout-independent, so hero exercises the same wiring.
+      // layout:'hero' is deliberate, and empirical rather than principled. The
+      // edge-anchored layouts (left/right, which set transform-origin to an edge)
+      // differed by +/-1 per channel in every measured render of identical input;
+      // hero was byte-stable across 8 back-to-back renders. Do NOT assume "3D
+      // rotation" is the cause -- hero is 3D-rotated too, and layout-top is not
+      // 3D-rotated at all. captureZoom is layout-independent, so hero exercises
+      // the same wiring. If this test ever flakes, replace the byte comparison
+      // with a computed-style assertion rather than widening a tolerance.
       layout: 'hero',
       cards: [],
     };
