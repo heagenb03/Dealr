@@ -287,3 +287,68 @@ test('captureZoom scales the capture and defaults to inert', async () => {
     await browser.close();
   }
 });
+
+// Hydrate the real device template and read the CSSOM. Deliberately no
+// screenshot: this allocates no large buffers, so a failing assertion cannot
+// trigger Node's buffer diff formatter (see the captureZoom test's note above).
+async function probeStyles(browser, { data, tmpName, evaluate }) {
+  const template = path.join(here, '..', 'templates', 'device-slide.html');
+  const raw = await readFile(template, 'utf8');
+  const html = raw.replace('/*__SLIDE_JSON__*/null', JSON.stringify(data));
+  const tmp = path.join(path.dirname(template), `.tmp-${tmpName}.html`);
+  await writeFile(tmp, html);
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({ width: 1290, height: 2796, deviceScaleFactor: 1 });
+    await page.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
+    return await page.evaluate(evaluate);
+  } finally {
+    await page.close();
+    await rm(tmp, { force: true });
+  }
+}
+
+const BASE_SLIDE = {
+  kicker: 'Settle Up',
+  headline: ['Who Pays Who', 'And How'],
+  capture: '../test/fixtures/placeholder-capture.png',
+  device: 'iphone',
+  layout: 'hero',
+  cards: [],
+};
+
+test('canvas background is a flat colour, not a gradient', async () => {
+  const browser = await puppeteer.launch();
+  try {
+    const cs = await probeStyles(browser, {
+      data: BASE_SLIDE,
+      tmpName: 'bg-probe',
+      evaluate: () => {
+        const s = getComputedStyle(document.body);
+        return { backgroundImage: s.backgroundImage, backgroundColor: s.backgroundColor };
+      },
+    });
+    assert.equal(cs.backgroundImage, 'none', 'body must not paint a gradient');
+    assert.equal(cs.backgroundColor, 'rgb(42, 10, 51)', 'body must be flat #2A0A33');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('custom properties left dead by the flat background are removed', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  for (const dead of ['--bg-top', '--bg-mid', '--bg-glow']) {
+    assert.ok(!css.includes(dead), `base.css still references dead property ${dead}`);
+  }
+});
+
+test('layout-top scrim fades into the flat background colour', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  const rule = css.match(/body\.layout-top \.caption::before \{[\s\S]*?\}/);
+  assert.ok(rule, 'expected a body.layout-top .caption::before rule');
+  assert.ok(
+    rule[0].includes('rgba(42,10,51,.98)'),
+    'the scrim\'s bottom stop must match the flat background #2A0A33, '
+    + `otherwise it bands against it. Rule was:\n${rule[0]}`,
+  );
+});

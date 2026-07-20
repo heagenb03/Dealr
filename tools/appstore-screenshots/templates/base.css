@@ -4,14 +4,18 @@
 @font-face { font-family: Inter; font-weight: 800; src: url('../node_modules/@fontsource/inter/files/inter-latin-800-normal.woff2') format('woff2'); }
 
 :root {
-  --bg-top: #170318; --bg-mid: #3d0f4d; --bg-glow: #6b2478;
+  --canvas: #2A0A33;
   --kicker: #a89fae; --headline: #f4eef6;
   --headline-grad-a: #e9d5f0; --headline-grad-b: #a855c8;
   --frame: #4a4a4e; --screen-bg: #000;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; }
-body { font-family: Inter, sans-serif; background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 55%, var(--bg-glow) 78%, #2a0a33 100%); }
+/* Flat canvas. The old four-stop gradient was brighter at the bottom, which is
+   what the phone's drop shadow used to read against; the frame's own rail
+   gradient now carries that depth instead. The card-suit watermark is
+   unchanged and reads fine against the flat colour. */
+body { font-family: Inter, sans-serif; background: var(--canvas); }
 
 /* Card-suit watermark: inline SVG data URI, tiled, very low opacity */
 .suits {
@@ -92,7 +96,11 @@ body.layout-top .caption {
 /* Scrim so the caption stays readable over the phone behind it. */
 body.layout-top .caption::before {
   content: ''; position: absolute; left: -10%; right: -10%; bottom: 0; top: -110%;
-  background: linear-gradient(180deg, rgba(23,3,24,0) 0%, rgba(23,3,24,.86) 65%, rgba(23,3,24,.98) 100%);
+  /* Bottom stop matches --canvas so the scrim dissolves into the background
+     instead of banding against it. The mid stop stays the DARKER #170318:
+     #2A0A33 is lighter, and matching every stop to it would cost the caption
+     contrast against the phone behind it. */
+  background: linear-gradient(180deg, rgba(42,10,51,0) 0%, rgba(23,3,24,.86) 65%, rgba(42,10,51,.98) 100%);
   z-index: -1;
 }
 body.layout-top .stage  { top: 0; }
@@ -149,8 +157,10 @@ body.layout-top .device {
   flex: 0 0 auto;
 }
 .avatars { display: flex; }
-/* Overlapped initial circles. The border matches the gradient's bottom stop so
-   each circle reads as punched out of the background rather than outlined. */
+/* Overlapped initial circles. The border matches --canvas (#2A0A33) so each
+   circle reads as punched out of the background rather than outlined. This
+   used to match only the old gradient's bottom stop; with a flat canvas it
+   now holds at any height on the slide. Keep it in sync with --canvas. */
 .avatars .av {
   width: 84px; height: 84px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
