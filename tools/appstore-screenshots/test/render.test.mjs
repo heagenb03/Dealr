@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer';
 import { renderSlide } from '../render.mjs';
 
@@ -119,56 +119,83 @@ test('device layout geometry is driven by custom properties, not hardcoded per s
   assert.ok(css.includes('var(--device-y'), 'base.css must position .device from --device-y');
 });
 
+// This test asserts COMPUTED STYLE, not screenshot bytes, and that is load-bearing.
+//
+// It used to render three PNGs and compare the buffers. That was unsound: the
+// renderer is nondeterministic. Identical input differs by +/-1 per channel
+// between runs, and measurement showed this happens on layout:'hero' too --
+// roughly 1 render in 3 -- contradicting an earlier note here that claimed hero
+// was byte-stable. So the byte assertion failed intermittently on correct code.
+//
+// The failure mode was far worse than a flake. When assert.deepEqual fails on two
+// ~324KB Buffers, Node formats them into a diff with maxArrayLength: Infinity,
+// which exhausts the 4GB heap and aborts the ENTIRE test file with exit 134
+// before any result is reported. That looked like "a render OOM" and was
+// misattributed to slide 4's config, which this test never even reads.
+//
+// Computed style is invariant to rasterization noise, so this version is
+// deterministic by construction rather than by luck, allocates nothing large,
+// and asserts the wiring contract more directly than bytes did. If you are
+// tempted to go back to comparing images, don't -- and if you must compare
+// buffers anywhere, use Buffer.equals inside assert.ok so a failure cannot
+// trigger Node's buffer diff formatter.
 test('captureZoom scales the capture and defaults to inert', async () => {
   const browser = await puppeteer.launch();
   try {
-    // Bootstrap a placeholder capture with Puppeteer itself (no image deps).
-    const cap = path.join(here, 'fixtures', 'placeholder-capture.png');
-    const p = await browser.newPage();
-    await p.setViewport({ width: 1179, height: 2556 });
-    await p.setContent('<body style="margin:0;background:#111;color:#B072BB;font:60px sans-serif">CAPTURE</body>');
-    await p.screenshot({ path: cap });
-    await p.close();
-
     const base = {
       kicker: 'Saved Players',
       headline: ['Your Table,', 'On Every Device'],
       capture: '../test/fixtures/placeholder-capture.png',
       device: 'iphone',
-      // layout:'hero' is deliberate, and empirical rather than principled. The
-      // edge-anchored layouts (left/right, which set transform-origin to an edge)
-      // differed by +/-1 per channel in every measured render of identical input;
-      // hero was byte-stable across 8 back-to-back renders. Do NOT assume "3D
-      // rotation" is the cause -- hero is 3D-rotated too, and layout-top is not
-      // 3D-rotated at all. captureZoom is layout-independent, so hero exercises
-      // the same wiring. If this test ever flakes, replace the byte comparison
-      // with a computed-style assertion rather than widening a tolerance.
+      // captureZoom is layout-independent, so any layout exercises the same
+      // wiring; hero is kept purely for continuity with the previous version.
       layout: 'hero',
       cards: [],
     };
-    const render = async (name, extra) => {
-      const out = path.join(here, 'out', `zoom-${name}.png`);
-      await renderSlide(browser, {
-        template: path.join(here, '..', 'templates', 'device-slide.html'),
-        data: { ...base, ...extra },
-        width: 1290,
-        height: 2796,
-        outPath: out,
-      });
-      return readFile(out);
+
+    // Hydrate and load the real template, then read the CSSOM. Deliberately no
+    // screenshot: there is no large buffer anywhere in this test.
+    const template = path.join(here, '..', 'templates', 'device-slide.html');
+    const raw = await readFile(template, 'utf8');
+    const probe = async (extra) => {
+      const html = raw.replace('/*__SLIDE_JSON__*/null', JSON.stringify({ ...base, ...extra }));
+      const tmp = path.join(path.dirname(template), '.tmp-capture-zoom-probe.html');
+      await writeFile(tmp, html);
+      const page = await browser.newPage();
+      try {
+        await page.setViewport({ width: 1290, height: 2796, deviceScaleFactor: 1 });
+        await page.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
+        return await page.evaluate(() => ({
+          zoomAttr: document.querySelector('.device').hasAttribute('data-zoom'),
+          transform: getComputedStyle(document.querySelector('.capture')).transform,
+        }));
+      } finally {
+        await page.close();
+        await rm(tmp, { force: true });
+      }
     };
 
-    const omitted = await render('omitted', {});
-    const explicitOne = await render('one', { captureZoom: 1 });
-    const zoomed = await render('two', { captureZoom: 2 });
+    const omitted = await probe({});
+    const explicitOne = await probe({ captureZoom: 1 });
+    const zoomed = await probe({ captureZoom: 2 });
 
-    // Omitting captureZoom and passing exactly 1 must both be fully inert —
-    // neither emits a transform — which is what keeps slides 1, 2, 3 and 5
-    // rendering byte-for-byte unchanged from before this feature existed.
-    assert.deepEqual(omitted, explicitOne, 'captureZoom must default to 1');
-    // A non-default zoom must actually reach the DOM. Without this the
-    // template wiring could regress silently and every other test stays green.
-    assert.notDeepEqual(omitted, zoomed, 'captureZoom: 2 must change rendered pixels');
+    // Omitting captureZoom and passing exactly 1 must both be fully inert:
+    // no [data-zoom] hook and NO transform at all. An identity transform is not
+    // a no-op -- it promotes .capture to its own compositing layer -- which is
+    // what keeps slides 1, 2, 3 and 5 rendering unchanged from before this
+    // feature existed. Asserting transform === 'none' checks that directly,
+    // where the old byte comparison could only check it by side effect.
+    assert.deepEqual(omitted, { zoomAttr: false, transform: 'none' },
+      'omitting captureZoom must emit no transform');
+    assert.deepEqual(explicitOne, { zoomAttr: false, transform: 'none' },
+      'captureZoom: 1 must be treated exactly like omitting it');
+
+    // A non-default zoom must actually reach the DOM and the CSSOM. Without
+    // this the template wiring could regress silently and every other test
+    // stays green.
+    assert.equal(zoomed.zoomAttr, true, 'captureZoom: 2 must set [data-zoom]');
+    assert.equal(zoomed.transform, 'matrix(2, 0, 0, 2, 0, 0)',
+      'captureZoom: 2 must apply scale(2) to .capture');
   } finally {
     await browser.close();
   }
