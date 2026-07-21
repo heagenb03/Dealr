@@ -564,6 +564,24 @@ test('rail colours are tunable from custom properties', async () => {
   }
 });
 
+test('chat avatars use auto-assigned colours, not Cash Cage purple', async () => {
+  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
+  const decl = html.match(/const AV_COLORS = \[([^\]]*)\]/);
+  assert.ok(decl, 'chat-slide.html must declare AV_COLORS');
+  const colours = decl[1].match(/#[0-9A-Fa-f]{6}/g) ?? [];
+
+  // Four contacts (D/M/P/W) are rendered in the header.
+  assert.equal(colours.length, 4, `expected 4 avatar colours, got ${colours.length}`);
+
+  // The point of the slide is that the chat is NOT Cash Cage's. A row of brand
+  // purples is what made the panel read as an in-app feature.
+  assert.deepEqual(
+    colours.map((c) => c.toUpperCase()),
+    ['#FF9500', '#30D158', '#FF453A', '#64D2FF'],
+    'avatars must be mixed auto-assigned colours',
+  );
+});
+
 test('sent bubbles read as a third-party client, not a Cash Cage surface', async () => {
   const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
 
@@ -588,22 +606,4 @@ test('sent bubbles read as a third-party client, not a Cash Cage surface', async
   // only the container is de-branded.
   assert.match(css, /\.msg \.handle\s*\{[^}]*color:\s*#B072BB/is,
     'the base handle colour stays brand purple');
-});
-
-test('chat avatars use auto-assigned colours, not Cash Cage purple', async () => {
-  const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
-  const decl = html.match(/const AV_COLORS = \[([^\]]*)\]/);
-  assert.ok(decl, 'chat-slide.html must declare AV_COLORS');
-  const colours = decl[1].match(/#[0-9A-Fa-f]{6}/g) ?? [];
-
-  // Four contacts (D/M/P/W) are rendered in the header.
-  assert.equal(colours.length, 4, `expected 4 avatar colours, got ${colours.length}`);
-
-  // The point of the slide is that the chat is NOT Cash Cage's. A row of brand
-  // purples is what made the panel read as an in-app feature.
-  assert.deepEqual(
-    colours.map((c) => c.toUpperCase()),
-    ['#FF9500', '#30D158', '#FF453A', '#64D2FF'],
-    'avatars must be mixed auto-assigned colours',
-  );
 });
