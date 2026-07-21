@@ -626,7 +626,8 @@ test('compose bar and surface carry no Cash Cage brand purple', async () => {
   // Nothing in the chat chrome may carry brand purple. The handle spans are
   // content, not chrome, and are asserted separately.
   const chrome = ['.thread-head', '.avatars .av', '.compose', '.compose .field',
-                  '.compose .send', '.reacts', '.receipt', '.stamp', '.msg.recv'];
+                  '.compose .send', '.reacts', '.receipt', '.stamp', '.msg.recv',
+                  '.msg.sent', 'body.sent-accent .msg.sent'];
   for (const sel of chrome) {
     const rule = css.match(new RegExp(`\\n${sel.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`, 's'));
     // A selector that stops matching (renamed, merged into a comma-list, moved
@@ -636,4 +637,21 @@ test('compose bar and surface carry no Cash Cage brand purple', async () => {
     assert.ok(rule, `${sel} must exist in base.css for the brand-purple guard to mean anything`);
     assert.ok(!/#B072BB/i.test(rule[1]), `${sel} must not use brand purple`);
   }
+});
+
+// Pins the shipping branch. At the visual gate, grey (`sentStyle: 'accent'`)
+// was selected over the originally-planned iMessage blue on measured
+// accessibility: blue's white body text is 3.65:1 against #0A84FF, below WCAG
+// AA, and the purple @handles in the share text lose 63% of their separation
+// from body text on blue (deltaE 23.3) versus grey (deltaE 42.8). The blue
+// branch stays in base.css as a documented, non-selected alternative -- but
+// nothing else asserts which branch actually renders. Without this test,
+// deleting `sentStyle: 'accent'` from slides.config.mjs silently reverts
+// slide 3 to the rejected, WCAG-failing blue bubble while every other test
+// stays green.
+test('slide 3 selects the grey sent-bubble variant, not the rejected blue default', async () => {
+  const { SLIDES } = await import('../slides.config.mjs');
+  const slide3 = SLIDES.find((s) => s.n === 3);
+  assert.ok(slide3, 'expected a slide with n === 3');
+  assert.equal(slide3.sentStyle, 'accent', 'slide 3 must select the grey sent bubble via sentStyle: "accent"');
 });
