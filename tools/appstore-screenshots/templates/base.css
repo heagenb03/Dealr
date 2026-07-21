@@ -198,10 +198,11 @@ body.layout-top .device {
      stop a sibling-on-sibling paint-over inside its own bounds. This became
      visible once Task 4's added content (reactions pill, receipt, third
      reply) pushed the thread further into overflow.
-     Known, accepted side effects of this box: it clips the 2px purple ring on
-     the last .msg.sent's right edge and the last bubble's downward drop
-     shadow. Both were judged imperceptible (dark-on-dark, 2px on a 1290px
-     canvas). `overflow: clip` with `overflow-clip-margin` was considered and
+     Known, accepted side effect of this box: it clips the last bubble's
+     downward drop shadow, judged imperceptible (dark-on-dark on a 1290px
+     canvas). It used to clip a 2px purple ring on the last .msg.sent's right
+     edge too; that ring is gone since the sent bubble became a saturated
+     blue fill. `overflow: clip` with `overflow-clip-margin` was considered and
      rejected -- that margin applies symmetrically to all four edges, so a
      margin large enough to spare the bottom shadow would also push the TOP
      clip edge down and reopen the header overlap this rule exists to prevent. */
@@ -262,14 +263,17 @@ body.layout-top .device {
   white-space: pre-wrap; word-break: break-word;
   box-shadow: 0 40px 90px rgba(0, 0, 0, .5);
 }
-/* Sent vs received is carried by alignment, sender labels, and a purple-tinted
-   surface -- NOT by an accent-purple fill, which would compete with both the
-   purple background and the headline gradient. */
+/* iMessage blue, and deliberately off-brand. The slide's subject is the share
+   text AFTER it has left Cash Cage, so the bubble carrying it must read as
+   somebody else's messaging app. The previous purple-tinted fill plus purple
+   ring is what made the panel look like an in-app group chat.
+   The ring is gone rather than recoloured: it existed to separate a dark
+   tinted bubble from the dark panel, and a saturated fill separates itself. */
 .msg.sent {
   align-self: flex-end; max-width: 82%;
   border-bottom-right-radius: 18px;
-  background: #2a1830;
-  box-shadow: 0 40px 90px rgba(0, 0, 0, .5), 0 0 0 2px rgba(176, 114, 187, .35);
+  background: #0A84FF; color: #fff;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .5);
 }
 /* 72%, not 62%: beside the wide share bubble a narrower left column looks
    starved and weights the whole lower half to one side. */
@@ -284,7 +288,16 @@ body.layout-top .device {
   font-size: 30px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   margin-bottom: 10px;
 }
+/* The handles are CONTENT -- Cash Cage's own output -- so they stay in the
+   purple family even though the container around them is de-branded. On the
+   blue sent bubble the brand purple goes muddy, hence the pale tint; the base
+   rule keeps brand purple for any handle rendered in a received bubble. */
 .msg .handle { color: #B072BB; font-weight: 700; }
+.msg.sent .handle { color: #E8D0F0; }
+/* var(--kicker) is a warm grey tuned for the #232326 received bubble and reads
+   dirty on blue. Applies to the "YOU" label on the closing reply; the share
+   bubble renders no .from. */
+.msg.sent .from { color: rgba(255, 255, 255, .72); }
 
 /* Faded because it is the tail of an earlier conversation, not part of the
    message the slide is actually about. */
@@ -314,10 +327,14 @@ body.layout-top .device {
 /* A short closing reply, not a second wall of text. */
 .msg.sent.reply { max-width: 62%; }
 
-/* Variant rendered for side-by-side comparison (Task 3): a conventional
-   accent-filled sent bubble. Selected by SLIDE.sentStyle === 'accent'. */
+/* Neutral-grey sent bubble, kept as a live A/B against the default blue.
+   Selected by SLIDE.sentStyle === 'accent'. Grey is app-agnostic but risks
+   reading as just another dark surface in an already dark-themed deck, which
+   is why blue is the default. The name is historical -- it once selected a
+   brand-purple fill, which this slide now exists to avoid. */
 body.sent-accent .msg.sent {
-  background: #B072BB; color: #1a0a1f;
+  background: #3A3A3E; color: #f2f2f4;
   box-shadow: 0 40px 90px rgba(0, 0, 0, .5);
 }
-body.sent-accent .msg.sent .handle { color: #4a1656; }
+body.sent-accent .msg.sent .handle { color: #C89BD4; }
+body.sent-accent .msg.sent .from { color: var(--kicker); }

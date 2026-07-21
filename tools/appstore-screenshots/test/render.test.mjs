@@ -564,6 +564,32 @@ test('rail colours are tunable from custom properties', async () => {
   }
 });
 
+test('sent bubbles read as a third-party client, not a Cash Cage surface', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+
+  const sent = css.match(/\n\.msg\.sent\s*\{([^}]*)\}/s);
+  assert.ok(sent, 'base.css must style .msg.sent');
+
+  // iMessage blue. The slide's whole point is that this text has LEFT the app,
+  // so the bubble carrying it must not be painted in the app's own palette.
+  assert.match(sent[1], /background:\s*#0A84FF/i, 'sent bubble must be iMessage blue');
+  // The purple ring existed to separate a dark tinted bubble from a dark panel.
+  // A saturated fill needs no ring, and the ring was brand purple.
+  assert.ok(!/176,\s*114,\s*187/.test(sent[1]), 'sent bubble must not keep the purple ring');
+
+  // Legibility on blue: both the handle spans and the sender label were tuned
+  // for a dark bubble and go muddy on #0A84FF.
+  assert.match(css, /\.msg\.sent \.handle\s*\{[^}]*color:\s*#E8D0F0/is,
+    'handles need a pale tint to read on blue');
+  assert.match(css, /\.msg\.sent \.from\s*\{[^}]*color:\s*rgba\(255,\s*255,\s*255,\s*\.72\)/is,
+    'the sender label needs a white tint to read on blue');
+
+  // The handles are CONTENT (Cash Cage's output) and stay in the purple family;
+  // only the container is de-branded.
+  assert.match(css, /\.msg \.handle\s*\{[^}]*color:\s*#B072BB/is,
+    'the base handle colour stays brand purple');
+});
+
 test('chat avatars use auto-assigned colours, not Cash Cage purple', async () => {
   const html = await readFile(path.join(here, '..', 'templates', 'chat-slide.html'), 'utf8');
   const decl = html.match(/const AV_COLORS = \[([^\]]*)\]/);
