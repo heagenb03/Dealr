@@ -41,10 +41,14 @@ export const SLIDES = [
     // Frameless group-chat scene. Deliberately the only slide WITHOUT a device
     // frame: its subject is the share text after it has left the app, so Cash
     // Cage's own frame would misrepresent where that text lives.
-    // `sentStyle` is omitted, which selects the tinted-dark sent bubble; setting
-    // it to 'accent' renders the purple-fill comparison variant.
+    // `sentStyle: 'accent'` selects the neutral-grey sent bubble; omitting it
+    // selects the iMessage-blue bubble. Grey was chosen deliberately over blue:
+    // the purple `@handles` in the share text are the remaining signal that
+    // it's Cash Cage's output, and they lose most of their separation from
+    // the white body text on a blue fill.
     n: 3, template: 'chat-slide.html',
     kicker: 'Share It', headline: ['Get Paid In', 'The Group Chat'],
+    sentStyle: 'accent',
     shareText: SHARE_TEXT,
     chat: { title: 'Friday Night Poker', members: ['D', 'M', 'P', 'W'], count: 6 },
     // The oldest message in the thread. `.msgs` still clips at the surface's
