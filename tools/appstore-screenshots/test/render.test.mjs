@@ -353,7 +353,7 @@ test('chat surface is a bleeding, top-clipping panel', async () => {
 
   // Surface colour is a shared custom property: the avatar border (Task 5) must
   // match it exactly, so it cannot be duplicated as a literal.
-  assert.ok(css.includes('--surface: #141016'), 'base.css must define --surface');
+  assert.ok(css.includes('--surface: #131315'), 'base.css must define --surface');
   assert.ok(css.includes('--surface-line:'), 'base.css must define --surface-line');
 
   // Bleeds off the bottom edge, so its bottom corners are never in frame.
@@ -606,4 +606,30 @@ test('sent bubbles read as a third-party client, not a Cash Cage surface', async
   // only the container is de-branded.
   assert.match(css, /\.msg \.handle\s*\{[^}]*color:\s*#B072BB/is,
     'the base handle colour stays brand purple');
+});
+
+test('compose bar and surface carry no Cash Cage brand purple', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+
+  const send = css.match(/\.compose \.send\s*\{([^}]*)\}/s);
+  assert.ok(send, 'base.css must style .compose .send');
+  // Matches iOS Messages' blue send arrow, and matches the sent bubble from
+  // Task 2 -- one accent for the whole third-party client.
+  assert.match(send[1], /background:\s*#0A84FF/i, 'send button must be iMessage blue');
+  assert.ok(!/#B072BB/i.test(send[1]), 'send button must drop the brand purple');
+
+  // #141016 is blue-shifted enough to read faintly purple against the flat
+  // purple canvas, which undercuts the "generic messaging app" intent its own
+  // comment states. #131315 is neutral.
+  assert.ok(css.includes('--surface: #131315'), '--surface must be a neutral dark');
+
+  // Nothing in the chat chrome may carry brand purple. The handle spans are
+  // content, not chrome, and are asserted separately.
+  const chrome = ['.thread-head', '.avatars .av', '.compose', '.compose .field',
+                  '.compose .send', '.reacts', '.receipt', '.stamp', '.msg.recv'];
+  for (const sel of chrome) {
+    const rule = css.match(new RegExp(`\\n${sel.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`, 's'));
+    if (!rule) continue;
+    assert.ok(!/#B072BB/i.test(rule[1]), `${sel} must not use brand purple`);
+  }
 });
