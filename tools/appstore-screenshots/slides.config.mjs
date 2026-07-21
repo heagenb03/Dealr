@@ -47,10 +47,10 @@ export const SLIDES = [
     // it's Cash Cage's output, and they lose most of their separation from
     // the white body text on a blue fill.
     n: 3, template: 'chat-slide.html',
-    kicker: 'Share It', headline: ['Get Paid In', 'The Group Chat'],
+    kicker: 'Share It', headline: ['Get Paid In', 'Any Group Chat'],
     sentStyle: 'accent',
     shareText: SHARE_TEXT,
-    chat: { title: 'Friday Night Poker', members: ['D', 'M', 'P', 'W'], count: 6 },
+    chat: { title: 'The Fishes', members: ['D', 'M', 'P', 'W'], count: 15 },
     // The oldest message in the thread. `.msgs` still clips at the surface's
     // top edge (see base.css), which sells "mid-conversation" -- but with only
     // two replies below the share bubble the thread no longer overflows enough
@@ -71,7 +71,7 @@ export const SLIDES = [
     // The last reply is `side: 'sent'` so it right-aligns: it balances the
     // otherwise-empty bottom-right quadrant and states the product's payoff.
     replies: [
-      { from: 'Wolfgang', text: 'paid Maria + Phil' },
+      { from: 'Wolfgang', text: 'paid Maria and Phil' },
       { from: 'You', text: 'all square \u{1F389}', side: 'sent' },
     ],
     cards: [],
