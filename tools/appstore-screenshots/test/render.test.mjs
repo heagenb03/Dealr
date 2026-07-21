@@ -629,7 +629,11 @@ test('compose bar and surface carry no Cash Cage brand purple', async () => {
                   '.compose .send', '.reacts', '.receipt', '.stamp', '.msg.recv'];
   for (const sel of chrome) {
     const rule = css.match(new RegExp(`\\n${sel.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`, 's'));
-    if (!rule) continue;
+    // A selector that stops matching (renamed, merged into a comma-list, moved
+    // under a media query) must fail loudly, not silently drop out of the
+    // guard -- a `continue` here would let this brand-purple check erode to
+    // zero coverage while the suite stayed green.
+    assert.ok(rule, `${sel} must exist in base.css for the brand-purple guard to mean anything`);
     assert.ok(!/#B072BB/i.test(rule[1]), `${sel} must not use brand purple`);
   }
 });
