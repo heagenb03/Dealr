@@ -4,10 +4,12 @@
 @font-face { font-family: Inter; font-weight: 800; src: url('../node_modules/@fontsource/inter/files/inter-latin-800-normal.woff2') format('woff2'); }
 
 :root {
-  --bg-top: #170318; --bg-mid: #3d0f4d; --bg-glow: #6b2478;
+  --canvas: #2A0A33;
   --kicker: #a89fae; --headline: #f4eef6;
   --headline-grad-a: #e9d5f0; --headline-grad-b: #a855c8;
-  --frame: #4a4a4e; --screen-bg: #000;
+  /* Rail highlight and shadow. If slide 4's left edge reads too hot in the
+     final render, lower --rail-hi -- do NOT add a per-layout gradient angle. */
+  --rail-hi: #6e6e78; --rail-lo: #141417;
   /* Slide 3's chat surface. Deliberately neither Cash Cage's #0A0A0A nor a
      purple tint: the panel must read as a generic messaging app, because the
      slide's subject is the share text AFTER it has left Cash Cage. */
@@ -15,7 +17,14 @@
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; }
-body { font-family: Inter, sans-serif; background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 55%, var(--bg-glow) 78%, #2a0a33 100%); }
+/* Flat canvas. The old four-stop gradient was brighter at the bottom, which is
+   what the phone's drop shadow used to read against; against a flat canvas that
+   separation is carried by the rail gradient AND .device's drop shadow, which
+   was strengthened to compensate. Do not read this as "the shadow is now
+   redundant" -- nothing asserts box-shadow, so deleting it would silently cost
+   the phone its only separation from the background. The card-suit watermark is
+   unchanged and reads fine against the flat colour. */
+body { font-family: Inter, sans-serif; background: var(--canvas); }
 
 /* Card-suit watermark: inline SVG data URI, tiled, very low opacity */
 .suits {
@@ -39,9 +48,28 @@ body.ipad .headline { font-size: 96px; }
 .device {
   position: absolute; left: 50%; top: var(--device-y, 8%);
   transform: translateX(-50%);
-  background: var(--screen-bg);
-  border: 17px solid var(--frame); border-radius: 78px;
-  box-shadow: 0 0 0 3px #221f24, 0 70px 140px rgba(0,0,0,.55), inset 0 0 4px rgba(255,255,255,.25);
+  /* Graphite rail. A solid border takes exactly one colour and border-image
+     does not follow border-radius, so the rail is a TRANSPARENT border with two
+     stacked background layers clipped to different boxes: the flat black screen
+     to padding-box, the gradient rail to border-box. Both layers must originate
+     at border-box or the rail gradient is offset by the border width.
+     At 138deg the rail is bright at upper-left and lower-right and near-black
+     through the middle, so it catches light on two edges instead of reading as
+     a uniform gray ring. The gradient is painted in the phone's LOCAL space and
+     rotates with the element, so layout-left and layout-right (mirror rotations)
+     expose different stops on their one visible edge. That was reviewed and
+     accepted: they bleed off opposite edges and are never seen side by side. */
+  border: 11px solid transparent; border-radius: 74px;
+  background-image:
+    linear-gradient(#000, #000),
+    linear-gradient(138deg,
+      var(--rail-hi) 0%, #26262b 22%, var(--rail-lo) 50%, #2c2c32 74%, #85858f 100%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.10),
+    0 95px 165px rgba(0,0,0,.68),
+    0 10px 28px rgba(0,0,0,.5);
   overflow: hidden;
 }
 .device.iphone { width: var(--device-width, 76%); aspect-ratio: 1179 / 2556; }
@@ -96,7 +124,11 @@ body.layout-top .caption {
 /* Scrim so the caption stays readable over the phone behind it. */
 body.layout-top .caption::before {
   content: ''; position: absolute; left: -10%; right: -10%; bottom: 0; top: -110%;
-  background: linear-gradient(180deg, rgba(23,3,24,0) 0%, rgba(23,3,24,.86) 65%, rgba(23,3,24,.98) 100%);
+  /* Bottom stop matches --canvas so the scrim dissolves into the background
+     instead of banding against it. The mid stop stays the DARKER #170318:
+     #2A0A33 is lighter, and matching every stop to it would cost the caption
+     contrast against the phone behind it. */
+  background: linear-gradient(180deg, rgba(42,10,51,0) 0%, rgba(23,3,24,.86) 65%, rgba(42,10,51,.98) 100%);
   z-index: -1;
 }
 body.layout-top .stage  { top: 0; }
@@ -204,9 +236,12 @@ body.layout-top .device {
   flex: 0 0 auto;
 }
 .avatars { display: flex; }
-/* Overlapped initial circles. The border matches the SURFACE colour so each
-   circle reads as punched out of the panel rather than outlined. At -34px the
-   initials overlapped into an unreadable blob. */
+/* Overlapped initial circles. The border matches --surface, NOT --canvas: these
+   avatars are slide 3 only, and since the chat surface panel landed they sit ON
+   the panel rather than on the background, so --surface is what makes each
+   circle read as punched out rather than outlined. Keep it in sync with
+   whatever they sit on. At -34px the initials overlapped into an unreadable
+   blob, hence -22px. */
 .avatars .av {
   width: 84px; height: 84px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

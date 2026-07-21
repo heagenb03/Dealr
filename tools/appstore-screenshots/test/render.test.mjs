@@ -429,3 +429,137 @@ test('avatars are legible and punched out of the surface', async () => {
   // custom property rather than a duplicated literal.
   assert.match(av[1], /border:[^;]*var\(--surface\)/, 'avatar border must use var(--surface)');
 });
+
+// Hydrate the real device template and read the CSSOM. Deliberately no
+// screenshot: this allocates no large buffers, so a failing assertion cannot
+// trigger Node's buffer diff formatter (see the captureZoom test's note above).
+async function probeStyles(browser, { data, tmpName, evaluate }) {
+  const template = path.join(here, '..', 'templates', 'device-slide.html');
+  const raw = await readFile(template, 'utf8');
+  const html = raw.replace('/*__SLIDE_JSON__*/null', JSON.stringify(data));
+  const tmp = path.join(path.dirname(template), `.tmp-${tmpName}.html`);
+  await writeFile(tmp, html);
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({ width: 1290, height: 2796, deviceScaleFactor: 1 });
+    await page.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
+    return await page.evaluate(evaluate);
+  } finally {
+    await page.close();
+    await rm(tmp, { force: true });
+  }
+}
+
+const BASE_SLIDE = {
+  kicker: 'Settle Up',
+  headline: ['Who Pays Who', 'And How'],
+  capture: '../test/fixtures/placeholder-capture.png',
+  device: 'iphone',
+  layout: 'hero',
+  cards: [],
+};
+
+test('canvas background is a flat colour, not a gradient', async () => {
+  const browser = await puppeteer.launch();
+  try {
+    const cs = await probeStyles(browser, {
+      data: BASE_SLIDE,
+      tmpName: 'bg-probe',
+      evaluate: () => {
+        const s = getComputedStyle(document.body);
+        return { backgroundImage: s.backgroundImage, backgroundColor: s.backgroundColor };
+      },
+    });
+    assert.equal(cs.backgroundImage, 'none', 'body must not paint a gradient');
+    assert.equal(cs.backgroundColor, 'rgb(42, 10, 51)', 'body must be flat #2A0A33');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('custom properties left dead by the flat background are removed', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  for (const dead of ['--bg-top', '--bg-mid', '--bg-glow']) {
+    assert.ok(!css.includes(dead), `base.css still references dead property ${dead}`);
+  }
+});
+
+test('layout-top scrim fades into the flat background colour', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  const rule = css.match(/body\.layout-top \.caption::before \{[\s\S]*?\}/);
+  assert.ok(rule, 'expected a body.layout-top .caption::before rule');
+  assert.ok(
+    rule[0].includes('rgba(42,10,51,.98)'),
+    'the scrim\'s bottom stop must match the flat background #2A0A33, '
+    + `otherwise it bands against it. Rule was:\n${rule[0]}`,
+  );
+});
+
+// The rail is a gradient BORDER, which plain CSS cannot express: a solid border
+// takes one colour, and border-image ignores border-radius. The working
+// construction is a transparent border plus two background layers clipped to
+// different boxes -- screen to padding-box, rail to border-box. Assert the clip
+// pair directly: it is the whole trick, and losing it silently reverts the rail
+// to a flat transparent border with the screen bleeding under it.
+test('device frame is a gradient rail, not a solid border', async () => {
+  const browser = await puppeteer.launch();
+  try {
+    const cs = await probeStyles(browser, {
+      data: BASE_SLIDE,
+      tmpName: 'rail-probe',
+      evaluate: () => {
+        const s = getComputedStyle(document.querySelector('.device'));
+        return {
+          borderTopWidth: s.borderTopWidth,
+          borderTopColor: s.borderTopColor,
+          borderTopLeftRadius: s.borderTopLeftRadius,
+          backgroundClip: s.backgroundClip || s.webkitBackgroundClip,
+          backgroundOrigin: s.backgroundOrigin,
+          backgroundImage: s.backgroundImage,
+        };
+      },
+    });
+
+    // This Chrome build snaps border-width to the nearest multiple of 0.8px
+    // under the host's 1.25x display scaling (confirmed: 11 -> 10.4, 17 -> 16.8,
+    // reproducible on a bare <div style="border:11px solid red">, unrelated to
+    // any CSS in this file). A tolerance keeps the assertion meaningful -- it
+    // still rejects the old 17px rail -- while staying portable to a 100%-DPI
+    // environment where 11px would serialise exactly.
+    const railWidth = parseFloat(cs.borderTopWidth);
+    assert.ok(Math.abs(railWidth - 11) < 1,
+      `rail must be ~11px; got ${cs.borderTopWidth}`);
+    assert.equal(cs.borderTopColor, 'rgba(0, 0, 0, 0)',
+      'the border itself must be transparent -- the rail is painted by the border-box background layer');
+    assert.equal(cs.borderTopLeftRadius, '74px', 'rail radius must be 74px');
+    assert.equal(cs.backgroundClip, 'padding-box, border-box',
+      'screen layer must clip to padding-box and the rail layer to border-box');
+    assert.equal(cs.backgroundOrigin, 'border-box, border-box',
+      'both layers must originate at the border box or the rail gradient is offset');
+
+    const layers = cs.backgroundImage.match(/linear-gradient/g) ?? [];
+    assert.equal(layers.length, 2,
+      `expected exactly 2 background layers (screen + rail), got ${layers.length}: ${cs.backgroundImage}`);
+    assert.ok(cs.backgroundImage.includes('138deg'),
+      `rail gradient must run at 138deg so the highlight lands on the upper-left edge: ${cs.backgroundImage}`);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('rail colours are tunable from custom properties', async () => {
+  const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
+  // Assert the knob is BOTH declared and wired up. Checking only that the name
+  // appears would still pass if someone pasted devtools output back into the
+  // gradient (devtools resolves var() away), orphaning the :root declarations
+  // and silently killing the documented tuning knob. The computed-style test
+  // above cannot catch that either -- it reads var() already resolved to rgb().
+  for (const knob of ['--rail-hi', '--rail-lo']) {
+    assert.ok(css.includes(`${knob}:`), `base.css must declare ${knob}`);
+    assert.ok(css.includes(`var(${knob})`),
+      `.device's rail gradient must reference var(${knob}), not a resolved colour`);
+  }
+  for (const dead of ['--frame', '--screen-bg']) {
+    assert.ok(!css.includes(dead), `base.css still references dead property ${dead}`);
+  }
+});
