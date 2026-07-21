@@ -226,9 +226,13 @@ body.layout-top .device {
   background: #232326; color: #6f6a73;
   font-size: 40px; font-weight: 500;
 }
-/* Same #0A84FF as the sent bubble: one accent across the whole client. This
-   does double duty -- it removes a brand colour AND matches iOS Messages'
-   blue circular send arrow, so the panel reads as a real messaging app. */
+/* Deliberately iOS Messages' blue send arrow, kept blue even though the
+   shipping sent bubble (body.sent-accent, see below) is neutral grey --
+   `.compose .send` is not scoped under body.sent-accent, so both render on
+   screen at once. That is intentional: the lone blue arrow is what still
+   signals "third-party messaging client", which matters more now that the
+   bubble itself is neutral. This is the only blue element on the rendered
+   slide, not a colour match with the bubble. */
 .compose .send {
   flex: 0 0 auto;
   width: 84px; height: 84px; border-radius: 50%;
@@ -270,12 +274,19 @@ body.layout-top .device {
   white-space: pre-wrap; word-break: break-word;
   box-shadow: 0 40px 90px rgba(0, 0, 0, .5);
 }
-/* iMessage blue, and deliberately off-brand. The slide's subject is the share
-   text AFTER it has left Cash Cage, so the bubble carrying it must read as
-   somebody else's messaging app. The previous purple-tinted fill plus purple
-   ring is what made the panel look like an in-app group chat.
-   The ring is gone rather than recoloured: it existed to separate a dark
-   tinted bubble from the dark panel, and a saturated fill separates itself. */
+/* NON-SHIPPING BRANCH. This paints iMessage blue; body.sent-accent further
+   down is what actually renders (grey) -- see sentStyle: 'accent' on slide 3
+   in slides.config.mjs, and its handle colour #C89BD4 there, not #E8D0F0 here.
+   Deliberately off-brand: the slide's subject is the share text AFTER it has
+   left Cash Cage, so the bubble carrying it must read as somebody else's
+   messaging app. The previous purple-tinted fill plus purple ring is what made
+   the panel look like an in-app group chat.
+   The ring was removed here, while the bubble was still blue: a saturated
+   fill separates itself, so no ring was needed. That reasoning does not carry
+   over to the shipping grey below -- #3A3A3E against --surface: #131315 is
+   dark-on-dark, not a saturated fill, and separates from the panel far less.
+   That lower separation was accepted at the visual gate rather than the ring
+   coming back. */
 .msg.sent {
   align-self: flex-end; max-width: 82%;
   border-bottom-right-radius: 18px;
@@ -334,14 +345,21 @@ body.layout-top .device {
 /* A short closing reply, not a second wall of text. */
 .msg.sent.reply { max-width: 62%; }
 
-/* Neutral-grey sent bubble, kept as a live A/B against the default blue.
-   Selected by SLIDE.sentStyle === 'accent'. Grey is app-agnostic but risks
-   reading as just another dark surface in an already dark-themed deck, which
-   is why blue is the default. The name is historical -- it once selected a
-   brand-purple fill, which this slide now exists to avoid. */
+/* Grey is what SHIPS. Selected by SLIDE.sentStyle === 'accent' (see slide 3
+   in slides.config.mjs) over the blue default above it on measured contrast:
+   blue's white body text failed WCAG AA and its bubble crushed the purple
+   @handles' separation from body text. Blue is kept above as the rejected,
+   non-selected alternative, retained for reference. Grey is still a lower-
+   contrast surface than blue -- reads closer to just another dark panel --
+   and that tradeoff was accepted at the visual gate. The name is historical
+   -- it once selected a brand-purple fill, which this slide now exists to
+   avoid. */
 body.sent-accent .msg.sent {
   background: #3A3A3E; color: #f2f2f4;
   box-shadow: 0 40px 90px rgba(0, 0, 0, .5);
 }
 body.sent-accent .msg.sent .handle { color: #C89BD4; }
+/* Resets the white .msg.sent .from tint above, which exists only to fix
+   legibility on the blue fill; on grey the base .msg .from colour already
+   reads fine, so the blue-only override is undone here rather than inherited. */
 body.sent-accent .msg.sent .from { color: var(--kicker); }

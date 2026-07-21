@@ -43,7 +43,9 @@
   // messaging app, and a row of brand-purple circles was the loudest signal
   // that the panel was an in-app feature. These are the mixed colours a real
   // client auto-assigns per contact. Cyan is #64D2FF rather than an iOS blue
-  // so the avatars stay distinct from the #0A84FF sent bubble (Task 2).
+  // so the avatars stay distinct from the #0A84FF sent bubble (Task 2) --
+  // true of the blue .msg.sent branch in base.css; the shipping sent bubble
+  // (body.sent-accent) is grey, not blue, but the avatar colours are unchanged.
   const AV_COLORS = ['#FF9500', '#30D158', '#FF453A', '#64D2FF'];
   const avatars = document.querySelector('.avatars');
   SLIDE.chat.members.forEach((initial, i) => {
