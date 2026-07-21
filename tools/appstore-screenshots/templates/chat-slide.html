@@ -39,7 +39,12 @@
   // Chat header: overlapped initial avatars, group title, member count. The
   // avatar row is truncated (4 of 6) beside the full count, which is standard
   // chat-client behavior.
-  const AV_COLORS = ['#B072BB', '#7A4A86', '#8E5C99', '#49264F'];
+  // Colours are deliberately NOT Cash Cage purple. This chat is a third-party
+  // messaging app, and a row of brand-purple circles was the loudest signal
+  // that the panel was an in-app feature. These are the mixed colours a real
+  // client auto-assigns per contact. Cyan is #64D2FF rather than an iOS blue
+  // so the avatars stay distinct from the #0A84FF sent bubble (Task 2).
+  const AV_COLORS = ['#FF9500', '#30D158', '#FF453A', '#64D2FF'];
   const avatars = document.querySelector('.avatars');
   SLIDE.chat.members.forEach((initial, i) => {
     const el = document.createElement('span');
