@@ -47,9 +47,11 @@ export const SLIDES = [
     kicker: 'Share It', headline: ['Get Paid In', 'The Group Chat'],
     shareText: SHARE_TEXT,
     chat: { title: 'Friday Night Poker', members: ['D', 'M', 'P', 'W'], count: 6 },
-    // The oldest message in the thread. It is deliberately clipped by the
-    // surface's top edge (see .msgs in base.css), which both sells
-    // "mid-conversation" and frames the share text as the answer to it.
+    // The oldest message in the thread. `.msgs` still clips at the surface's
+    // top edge (see base.css), which sells "mid-conversation" -- but with only
+    // two replies below the share bubble the thread no longer overflows enough
+    // to eat into this bubble, so it renders in full and frames the share text
+    // as the answer to it.
     // Rail-agnostic by the same contract as `replies`.
     preface: { from: 'Johnny', text: "who owes what for last night?" },
     // Matches the 11:27 shown in slide 1's status bar.
@@ -59,10 +61,12 @@ export const SLIDES = [
     // .suits watermark, which are proven to render in this pipeline.
     reactions: { emoji: ['\u{1F525}', '\u{1F4B0}'], count: 3 },
     // Rail-agnostic by contract -- see the 'reply copy names no payment rail' test.
-    // The third reply is `side: 'sent'` so it right-aligns: it balances the
+    // Daniel's confirmation ("sent") was dropped so the thread no longer overflows
+    // the panel enough to clip the `preface` bubble above -- Wolfgang's reply
+    // already names two of the three settlements, so it carries the beat alone.
+    // The last reply is `side: 'sent'` so it right-aligns: it balances the
     // otherwise-empty bottom-right quadrant and states the product's payoff.
     replies: [
-      { from: 'Daniel', text: 'sent' },
       { from: 'Wolfgang', text: 'paid Maria + Phil' },
       { from: 'You', text: 'all square \u{1F389}', side: 'sent' },
     ],
