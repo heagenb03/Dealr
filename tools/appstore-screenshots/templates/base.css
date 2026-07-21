@@ -7,7 +7,9 @@
   --canvas: #2A0A33;
   --kicker: #a89fae; --headline: #f4eef6;
   --headline-grad-a: #e9d5f0; --headline-grad-b: #a855c8;
-  --frame: #4a4a4e; --screen-bg: #000;
+  /* Rail highlight and shadow. If slide 4's left edge reads too hot in the
+     final render, lower --rail-hi -- do NOT add a per-layout gradient angle. */
+  --rail-hi: #6e6e78; --rail-lo: #141417;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; }
@@ -39,9 +41,28 @@ body.ipad .headline { font-size: 96px; }
 .device {
   position: absolute; left: 50%; top: var(--device-y, 8%);
   transform: translateX(-50%);
-  background: var(--screen-bg);
-  border: 17px solid var(--frame); border-radius: 78px;
-  box-shadow: 0 0 0 3px #221f24, 0 70px 140px rgba(0,0,0,.55), inset 0 0 4px rgba(255,255,255,.25);
+  /* Graphite rail. A solid border takes exactly one colour and border-image
+     does not follow border-radius, so the rail is a TRANSPARENT border with two
+     stacked background layers clipped to different boxes: the flat black screen
+     to padding-box, the gradient rail to border-box. Both layers must originate
+     at border-box or the rail gradient is offset by the border width.
+     At 138deg the rail is bright at upper-left and lower-right and near-black
+     through the middle, so it catches light on two edges instead of reading as
+     a uniform gray ring. The gradient is painted in the phone's LOCAL space and
+     rotates with the element, so layout-left and layout-right (mirror rotations)
+     expose different stops on their one visible edge. That was reviewed and
+     accepted: they bleed off opposite edges and are never seen side by side. */
+  border: 11px solid transparent; border-radius: 74px;
+  background-image:
+    linear-gradient(#000, #000),
+    linear-gradient(138deg,
+      var(--rail-hi) 0%, #26262b 22%, var(--rail-lo) 50%, #2c2c32 74%, #85858f 100%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.10),
+    0 95px 165px rgba(0,0,0,.68),
+    0 10px 28px rgba(0,0,0,.5);
   overflow: hidden;
 }
 .device.iphone { width: var(--device-width, 76%); aspect-ratio: 1179 / 2556; }
