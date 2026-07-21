@@ -35,6 +35,33 @@ test('renderSlide produces an exact-size PNG with injected data', async () => {
 // NOTE: this exercises the render ENGINE at two sizes (incl. iPad dims) on purpose —
 // it proves the template renders at any viewport. Product scope is iPhone-only (see
 // DEVICES in slides.config.mjs); this test does not read DEVICES and is not product scope.
+// Reproduces the reviewer's defect: a template whose inline script throws
+// (e.g. slide 3's `reactions: { count: 3 }` missing `emoji`, which broke
+// `SLIDE.reactions.emoji.join` and silently killed the Delivered receipt
+// and every reply) still screenshotted at the exact viewport size, because
+// PNG dimensions come from the viewport, not the content. renderSlide must
+// surface the page error by rejecting instead of resolving with a
+// half-rendered PNG.
+test('renderSlide rejects when the template throws', async () => {
+  const out = path.join(here, 'out', 'throws.png');
+  await rm(path.dirname(out), { recursive: true, force: true });
+  const browser = await puppeteer.launch();
+  try {
+    await assert.rejects(
+      renderSlide(browser, {
+        template: path.join(here, 'fixtures', 'throws.html'),
+        data: { headline: 'HELLO-TOKEN' },
+        width: 1290,
+        height: 2796,
+        outPath: out,
+      }),
+      /threw during render.*boom/,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test('device-slide renders at iPhone and iPad sizes', async () => {
   const browser = await puppeteer.launch();
   try {

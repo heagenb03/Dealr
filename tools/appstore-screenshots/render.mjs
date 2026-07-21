@@ -20,9 +20,20 @@ export async function renderSlide(browser, { template, data, width, height, outP
   await writeFile(tmp, html);
   const page = await browser.newPage();
   try {
+    // A screenshot's PNG dimensions come from the VIEWPORT, not the content --
+    // so a template whose inline script throws partway (e.g. a typo like
+    // `SLIDE.reactions.emoji.join` when `emoji` is missing) still produces an
+    // exact-size PNG with the broken half silently missing, and nothing here
+    // would otherwise notice. Collect page errors and fail loudly instead.
+    const pageErrors = [];
+    page.on('pageerror', (err) => pageErrors.push(err));
+
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await page.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
     await page.evaluate(() => document.fonts.ready);
+    if (pageErrors.length > 0) {
+      throw new Error(`Template ${template} threw during render: ${pageErrors[0].message}`);
+    }
     await mkdir(path.dirname(outPath), { recursive: true });
     await page.screenshot({ path: outPath });
   } finally {
