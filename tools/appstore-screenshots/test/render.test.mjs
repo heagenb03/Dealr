@@ -407,8 +407,16 @@ test('device frame is a gradient rail, not a solid border', async () => {
 
 test('rail colours are tunable from custom properties', async () => {
   const css = await readFile(path.join(here, '..', 'templates', 'base.css'), 'utf8');
-  assert.ok(css.includes('--rail-hi'), 'base.css must expose --rail-hi');
-  assert.ok(css.includes('--rail-lo'), 'base.css must expose --rail-lo');
+  // Assert the knob is BOTH declared and wired up. Checking only that the name
+  // appears would still pass if someone pasted devtools output back into the
+  // gradient (devtools resolves var() away), orphaning the :root declarations
+  // and silently killing the documented tuning knob. The computed-style test
+  // above cannot catch that either -- it reads var() already resolved to rgb().
+  for (const knob of ['--rail-hi', '--rail-lo']) {
+    assert.ok(css.includes(`${knob}:`), `base.css must declare ${knob}`);
+    assert.ok(css.includes(`var(${knob})`),
+      `.device's rail gradient must reference var(${knob}), not a resolved colour`);
+  }
   for (const dead of ['--frame', '--screen-bg']) {
     assert.ok(!css.includes(dead), `base.css still references dead property ${dead}`);
   }

@@ -14,8 +14,11 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; }
 /* Flat canvas. The old four-stop gradient was brighter at the bottom, which is
-   what the phone's drop shadow used to read against; the frame's own rail
-   gradient now carries that depth instead. The card-suit watermark is
+   what the phone's drop shadow used to read against; against a flat canvas that
+   separation is carried by the rail gradient AND .device's drop shadow, which
+   was strengthened to compensate. Do not read this as "the shadow is now
+   redundant" -- nothing asserts box-shadow, so deleting it would silently cost
+   the phone its only separation from the background. The card-suit watermark is
    unchanged and reads fine against the flat colour. */
 body { font-family: Inter, sans-serif; background: var(--canvas); }
 
