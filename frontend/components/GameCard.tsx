@@ -7,6 +7,7 @@ import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/R
 import { Ionicons } from '@expo/vector-icons';
 import { Game } from '@/types/game';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { calculateBuyinTotal } from '@/utils/gamePot';
 
 interface GameCardProps {
   game: Game;
@@ -87,12 +88,9 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPress, onDelete, isComplete
       }
     }), [animateScaleDown, animateScaleUp, handleTapSuccess]);
 
-  const totalPot = useMemo(
-    () => game.transactions
-      .filter(t => t.type === 'buyin')
-      .reduce((sum, t) => sum + t.amount, 0),
-    [game.transactions]
-  );
+  // Recomputed every render on purpose — see calculateBuyinTotal. Mutators
+  // rewrite game.transactions in place, so its reference is not a change signal.
+  const totalPot = calculateBuyinTotal(game.transactions);
 
   return (
     <Swipeable
@@ -236,15 +234,11 @@ const styles = StyleSheet.create({
   },
 });
 
-export default React.memo(GameCard, (prevProps, nextProps) => {
-  return (
-    prevProps.game.id === nextProps.game.id &&
-    prevProps.game.name === nextProps.game.name &&
-    prevProps.game.date === nextProps.game.date &&
-    prevProps.game.players.length === nextProps.game.players.length &&
-    prevProps.game.transactions === nextProps.game.transactions &&
-    prevProps.reduceMotion === nextProps.reduceMotion &&
-    prevProps.isCompleted === nextProps.isCompleted &&
-    prevProps.entryIndex === nextProps.entryIndex
-  );
-});
+// Default shallow compare — do NOT add a custom comparator. React does not
+// snapshot props: after an in-place mutation the previous and next props hold
+// the SAME players/transactions arrays, so any hand-rolled field compare reads
+// one array against itself and reports "unchanged". The reliable signal
+// is the game object identity, which GameContext.updateGame replaces on every
+// edit, and which this default compare already checks. The list items are built
+// in a useMemo keyed on [games, isPro], so unedited cards still skip re-render.
+export default React.memo(GameCard);
