@@ -10,17 +10,18 @@ docs/
 .superpowers/
 
 functions/
-# Ignore tools/ contents via tools/* (NOT tools/) so git still descends into tools/
-# and the negation below can re-include the App Store screenshot tool. A blanket
-# tools/ excludes the dir itself, blocking any re-include of paths beneath it.
-tools/*
-# Track the whole App Store screenshot tool so the ASO slide set is reproducible from
-# the repo, with no add-friction on its tracked source. The tool's own
-# tools/appstore-screenshots/.gitignore already excludes node_modules/, dist/,
-# test/out/, and templates/.tmp-*. Re-ignore only the generated artifacts it doesn't
-# cover: the redundant .jpeg capture exports and the test-bootstrapped placeholder.
-!tools/appstore-screenshots/
-tools/appstore-screenshots/captures/*.jpeg
-tools/appstore-screenshots/test/fixtures/placeholder-capture.png
+
+# tools/ is ALLOW-BY-DEFAULT. Each tool owns its own .gitignore for its build output
+# (node_modules/, dist/, temp files), which is where that knowledge belongs and where
+# it keeps working if the tool is ever moved or extracted.
+#
+# This replaced a `tools/*` blanket plus a `!tools/appstore-screenshots/` negation.
+# That worked, but made every NEW tool invisible until someone remembered to add
+# another negation, and nothing warns you: an untracked-but-ignored directory never
+# shows up in `git status`. If you add a tool, give it a .gitignore, not a rule here.
+#
+# (For the record, since the old form looked like a typo: the blanket had to be
+# `tools/*` and not `tools/`, because git does not descend into an excluded directory,
+# so a negation under a plain `tools/` can never be evaluated.)
 
 nul

@@ -2,3 +2,10 @@ node_modules/
 dist/
 templates/.tmp-*.html
 test/out/
+
+# Moved here from the root .gitignore when tools/ became allow-by-default.
+# Generated artifacts this tool produces that the rules above do not cover:
+# the redundant .jpeg exports alongside the tracked .png captures, and the
+# placeholder capture that the test suite bootstraps on first run.
+captures/*.jpeg
+test/fixtures/placeholder-capture.png
