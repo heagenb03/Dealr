@@ -9,6 +9,13 @@
  *
  * Served from the nested `legal/` git repo (github.com/heagenb03/cashcage), which
  * deploys to GitHub Pages on push to its own main.
+ *
+ * Note (2026-07-25): these are the `/cashcage/` Pages paths. The old
+ * `/cashcage-legal/*` paths are forward-redirect stubs in a separate repo
+ * (github.com/heagenb03/cashcage-legal) that keep already-shipped app builds
+ * working - do not delete that repo. If these values ever change, App Store
+ * Connect's Privacy Policy URL, Support URL, and the two in-description URL
+ * lines must change with them.
  */
 
 export const PRIVACY_POLICY_URL =
