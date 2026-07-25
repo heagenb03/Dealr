@@ -1,0 +1,13 @@
+{
+  "name": "producthunt-gallery",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "comment": "node_modules is a directory junction to ../appstore-screenshots/node_modules (puppeteer + @fontsource/inter). Recreate on a fresh clone with: mklink /J node_modules ..\\appstore-screenshots\\node_modules (Windows) or ln -s ../appstore-screenshots/node_modules node_modules (POSIX).",
+  "dependencies": {
+    "@fontsource/inter": "^5.0.0",
+    "puppeteer": "^23.0.0"
+  }
+}
