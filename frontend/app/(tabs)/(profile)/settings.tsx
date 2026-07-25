@@ -34,6 +34,7 @@ import { useGameDefaults } from '@/contexts/GameDefaultsContext';
 import { resolveCashUnit, EXACT_CASH_UNIT } from '@/constants/CashUnits';
 import { resolveTolerance, EXACT_TOLERANCE } from '@/constants/Tolerances';
 import { CurrencyCode } from '@/constants/Currencies';
+import { SUPPORT_EMAIL } from '@/constants/Links';
 import { getTrialLabel } from '@/utils/trialUtils';
 import { useOAuthPrompt, isOAuthCancel } from '@/hooks/useOAuthPrompt';
 
@@ -311,9 +312,8 @@ export default function SettingsScreen() {
   }, [reauthPassword, email, handleDeleteAccount]);
 
   const handleHelpPress = useCallback(() => {
-    const supportEmail = 'cashcageapp@gmail.com';
     const subject = 'Cash Cage Support Request';
-    const mailto = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}`;
+    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
     Linking.openURL(mailto).catch((err) => {
       console.error('Failed to open email client:', err);
     });

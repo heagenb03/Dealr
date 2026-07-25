@@ -3,14 +3,11 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { Text, View } from '@/components/Themed';
 import HudSectionHeader from '@/components/HudSectionHeader';
-
-const PRIVACY_POLICY_URL = 'https://heagenb03.github.io/cashcage-legal/privacy-policy.html';
-const TERMS_URL = 'https://heagenb03.github.io/cashcage-legal/terms-of-service.html';
+import { PRIVACY_POLICY_URL, TERMS_URL, SUPPORT_EMAIL } from '@/constants/Links';
 
 export default function AboutScreen() {
   const handleEmailPress = () => {
-    const email = 'cashcageapp@gmail.com';
-    const mailto = `mailto:${email}`;
+    const mailto = `mailto:${SUPPORT_EMAIL}`;
     Linking.openURL(mailto).catch(err => {
       console.error('Failed to open email client:', err);
     });

@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Text, View } from '@/components/Themed';
 import ModalButton from '@/components/ModalButton';
+import { PRIVACY_POLICY_URL, TERMS_URL } from '@/constants/Links';
 import { PurchasesPackage } from 'react-native-purchases';
 import {
   getOfferings,
@@ -70,9 +71,6 @@ const FEATURES = [
   'Save & bulk-manage players',
   'All your devices',
 ];
-
-const PRIVACY_POLICY_URL = 'https://heagenb03.github.io/cashcage-legal/privacy-policy.html';
-const TERMS_URL = 'https://heagenb03.github.io/cashcage-legal/terms-of-service.html';
 
 // ---------------------------------------------------------------------------
 // SectionLabel
