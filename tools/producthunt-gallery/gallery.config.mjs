@@ -32,6 +32,22 @@
  *     across six named players (Doyle, Daniel, Maria, Johnny, Wolfgang, Phil). It is the
  *     same worked example the live landing page uses. Do not move that headline onto an
  *     image where the numbers are not visible, and do not generalise it to "usually".
+ *   - Do NOT market offline capability. Offline is a DEGRADED path, not a feature: the
+ *     client falls back to `client-greedy-v1`, which leaves an avoidable transfer on the
+ *     table in ~27.6% of simulated games (measured against the minimum possible transfer
+ *     count; see greedy-vs-optimal.mjs in this directory) and, on an unbalanced table,
+ *     silently leaves the whole imbalance on one or more unnamed players (short-changed
+ *     creditors when cash-outs exceed buy-ins, debtors never collected from when buy-ins
+ *     exceed cash-outs) instead of spreading it proportionally the way
+ *     backend/src/solvers/milp_solver.cpp:58-74 does. That contrast holds only within the
+ *     game's configured imbalance tolerance (per-currency and user-selectable; $2.50 is
+ *     just the USD default): above it the server returns no settlements and the client
+ *     falls back to this same greedy, so an out-of-tolerance table strands the money
+ *     online too.
+ *   - Claims must be consistent ACROSS THE SET, not merely true one image at a time. No
+ *     image may promise something another image's promise contradicts. Worked example:
+ *     image 2 used to say "Works offline" while image 3 says a solver finds the fewest
+ *     transfers. Offline there is no solver, so the two could never both hold.
  */
 
 export const CANVAS = { width: 1270, height: 760 };
@@ -70,7 +86,7 @@ export const IMAGES = [
     side: 'right',
     headline: 'Log it',
     headlineAccent: 'at the table',
-    subhead: 'Buy-ins and cash-outs in a tap. Works offline, so a basement with no signal is fine.',
+    subhead: 'Buy-ins and cash-outs in a tap. The table stays current all night, so nobody rebuilds it later.',
   },
   {
     n: 3,
