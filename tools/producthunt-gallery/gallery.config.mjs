@@ -39,7 +39,11 @@
  *     silently leaves the whole imbalance on one or more unnamed players (short-changed
  *     creditors when cash-outs exceed buy-ins, debtors never collected from when buy-ins
  *     exceed cash-outs) instead of spreading it proportionally the way
- *     backend/src/solvers/milp_solver.cpp:58-74 does.
+ *     backend/src/solvers/milp_solver.cpp:58-74 does. That contrast holds only within the
+ *     game's configured imbalance tolerance (per-currency and user-selectable; $2.50 is
+ *     just the USD default): above it the server returns no settlements and the client
+ *     falls back to this same greedy, so an out-of-tolerance table strands the money
+ *     online too.
  *   - Claims must be consistent ACROSS THE SET, not merely true one image at a time. No
  *     image may promise something another image's promise contradicts. Worked example:
  *     image 2 used to say "Works offline" while image 3 says a solver finds the fewest

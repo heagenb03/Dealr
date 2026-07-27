@@ -1,5 +1,5 @@
 // Does client-greedy-v1 actually match the optimal transfer count?
-// Exact greedy body from frontend/services/settlementService.ts:33-72.
+// Exact greedy body from frontend/services/settlementService.ts:34-72.
 function calculateOptimalSettlements(balances) {
   const settlements = [];
   const debtorsDict = balances.filter(b => b.netBalance < 0)
