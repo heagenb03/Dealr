@@ -23,11 +23,10 @@ the table?
 
 That is not the same as pairing the biggest loser with the biggest winner and
 repeating. Sorted greedy pairing is a heuristic, and it can be beaten. Take six
-players at `+3, +3, -2, -2, -1, -1` (in whatever chip unit you like). Greedy
-walks the sorted debtor and creditor lists in lockstep and emits five transfers:
-`2→A`, `1→A`, `1→B`, `1→B`, `1→B`. But the table splits cleanly into two
-zero-sum groups — `+3, -2, -1` twice — and each group closes in two payments, so
-four transfers suffice.
+players at `+15, +15, -10, -10, -5, -5`. Greedy walks the sorted debtor and
+creditor lists in lockstep and emits five transfers: `10→A`, `5→A`, `5→B`, `5→B`,
+`5→B`. But the table splits cleanly into two zero-sum groups — `+15, -10, -5`
+twice — and each group closes in two payments, so four transfers suffice.
 
 Finding those groups is the actual problem. It is a search over which subsets of
 players can be made to sum to zero, not a sorting problem, and the number of
@@ -42,7 +41,7 @@ labels which one produced the result you are looking at:
 
 | Algorithm ID | Where it runs | What it does |
 | --- | --- | --- |
-| `server-milp-v1` | AWS Lambda, C++ | Minimises the transfer count exactly, via MILP |
+| `server-milp-v1` | AWS Lambda, C++ | Minimises the transfer count with a MILP |
 | `client-greedy-v1` | On device, TypeScript | Sorted greedy two-pointer fallback |
 | `client-banker-v1` | On device, TypeScript | Banker mode — the banker pays out every stack |
 
@@ -77,10 +76,12 @@ actually MILP constraints; the other two act before the model is ever built:
 | `cashRoundingUnit` | Pre-solve transform | Rounds balances to a bill increment before solving |
 | `imbalanceTolerance` | Pre-solve gate | Accept-and-redistribute below the threshold, reject above it |
 
-The MILP minimises the transfer count *for the balances it is handed*. Stages 1
-and 2 both modify those balances before the model sees them, so "fewest transfers"
-is a statement about the post-adjustment table, not about the raw numbers you
-typed in.
+Two caveats on "fewest transfers". First, the MILP minimises the transfer count
+*for the balances it is handed* — stages 1 and 2 both modify those balances before
+the model sees them, so the claim is about the post-adjustment table, not about the
+raw numbers you typed in. Second, the handler accepts a *feasible* solution as well
+as a proven-optimal one, and labels both `server-milp-v1`; if CBC returns a valid
+solution without proving optimality, that result is what you get.
 
 ### Falling back to the client
 
@@ -149,9 +150,12 @@ The settlement service is stateless and holds no game data — it receives a lis
 balances and returns a list of transfers. Everything durable lives in Firestore
 under the signed-in user, mirrored locally on the device.
 
-The same C++ request handling compiles into two binaries from one `CMakeLists.txt`:
-`cashcage-backend`, a Crow HTTP server, and `cashcage-lambda`, an AWS Lambda
-runtime handler. Both dispatch the same three routes:
+One `CMakeLists.txt` builds two binaries: `cashcage-backend`, a Crow HTTP server,
+and `cashcage-lambda`, an AWS Lambda runtime handler. What they share is the
+**solver** — that is the only file in `COMMON_SOURCES`. Each entry point carries
+its own route layer, one returning Crow responses and one returning a
+framework-agnostic struct that the Lambda runtime adapts. So: one shared solver,
+two independently maintained route layers, exposing the same three paths:
 
 | Route | Purpose |
 | --- | --- |
