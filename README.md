@@ -10,55 +10,24 @@ night. [Download on the App Store](https://apps.apple.com/us/app/cash-cage/id675
   <img src="tools/appstore-screenshots/captures/slide3-settings-new.png" width="24%" alt="Settings" />
 </p>
 
-## The problem
-
-At the end of a home game every player has a net position: what they cashed out
-minus what they bought in for. The winners are owed money, the losers owe it, and
-somebody has to hand cash across the table. The naive settlement — everyone who is
-down pays everyone who is up — produces a mess of small payments nobody wants to
-count out at 2am.
-
-The interesting question is: what is the *smallest* number of payments that clears
-the table?
-
-That is not the same as pairing the biggest loser with the biggest winner and
-repeating. Sorted greedy pairing is a heuristic, and it can be beaten. Take six
-players at `+15, +15, -10, -10, -5, -5`. Greedy walks the sorted debtor and
-creditor lists in lockstep and emits five transfers: `10→A`, `5→A`, `5→B`, `5→B`,
-`5→B`. But the table splits cleanly into two zero-sum groups — `+15, -10, -5`
-twice — and each group closes in two payments, so four transfers suffice.
-
-Finding those groups is the actual problem. It is a search over which subsets of
-players can be made to sum to zero, not a sorting problem, and the number of
-candidate subsets grows exponentially with the table size. Cash Cage models it as
-a mixed-integer program on the server, and falls back to the greedy heuristic
-on-device. The fallback is not offline-only: an unreachable server triggers it,
-but so does a table whose buy-ins and cash-outs disagree by more than the game's
-tolerance, because the server declines to solve that and returns nothing to use.
-
 ## The settlement engine
-
-There are three settlement identities in the codebase. They are internal labels
-carried on the result object, not something the summary screen puts in front of
-you — the screen shows a notice only when a game *fell back*, never when the
-server solved it:
 
 | Algorithm ID | Where it runs | What it does |
 | --- | --- | --- |
 | `server-milp-v1` | AWS Lambda, C++ | Minimises the transfer count with a MILP |
 | `client-greedy-v1` | On device, TypeScript | Sorted greedy two-pointer fallback |
-| `client-banker-v1` | On device, TypeScript | Banker mode — the banker pays out every stack |
+| `client-banker-v1` | On device, TypeScript | Banker mode for when a designated player pays out everyone |
 
 ### `server-milp-v1`
 
 `POST /settlements/optimal` takes the per-player balances and runs three stages
 in `backend/src/solvers/milp_solver.cpp`:
 
-1. **Imbalance handling.** Real tables rarely balance to the cent. The solver sums
-   the debts and the credits; if the gap is within the request's
+1. **Imbalance handling.** The solver sums
+   the debts and the credits, and if the gap is within the request's
    `imbalanceTolerance` it is redistributed across the players in proportion to
    the size of their positions and a warning is attached to the response. If the
-   gap exceeds the tolerance the request is **rejected** — the response carries a
+   gap exceeds the tolerance the request is **rejected**, the response carries a
    warning and *no settlements at all*.
 2. **Cash rounding.** Balances are rounded to the game's `cashRoundingUnit` so the
    payouts come out in whole bills, with the biggest winner absorbing the rounding
@@ -67,8 +36,8 @@ in `backend/src/solvers/milp_solver.cpp`:
 3. **MILP.** For every debtor–creditor pair the model carries a continuous amount
    variable `x` and a binary indicator `y`, linked by a big-M constraint. Each
    debtor must pay out exactly their debt, each creditor must receive exactly
-   their credit, and the objective minimises the sum of the `y` indicators — that
-   is, the number of transfers. Solved with CBC through Google OR-Tools.
+   their credit, and the objective minimises the sum of the `y` indicators.
+   Solved with CBC through Google OR-Tools.
 
 Four optional request parameters tune the run. Note that only two of them are
 actually MILP constraints; the other two act before the model is ever built:
@@ -76,7 +45,7 @@ actually MILP constraints; the other two act before the model is ever built:
 | Parameter | Kind | Effect |
 | --- | --- | --- |
 | `maxTransfersPerPlayer` | MILP constraint | Caps how many payments any one debtor sends or any one creditor receives |
-| `minTransferAmount` | MILP constraint | Forbids trivially small payments — any transfer that happens must clear this floor |
+| `minTransferAmount` | MILP constraint | Forbids trivially small payments. Any transfer that happens must clear this floor |
 | `cashRoundingUnit` | Pre-solve transform | Rounds balances to a bill increment before solving |
 | `imbalanceTolerance` | Pre-solve gate | Accept-and-redistribute below the threshold, reject above it |
 
@@ -102,30 +71,11 @@ failure. Concretely, the client returns `client-greedy-v1` when:
   returns a well-formed 200 with an empty settlements array
 - every entry in the returned array fails validation, leaving nothing usable
 
-Because rejection and network failure funnel into the same fallback, an
-unbalanced table still gets a greedy answer while online. The summary screen
-raises a dismissible notice when a result came from the fallback, with a retry
-control — but only when retrying could plausibly help. An out-of-tolerance table
-is classified as not retryable, since the data itself is the problem, so there the
-notice is the whole of the signal.
-
-The greedy fallback walks the debtor and creditor lists sorted largest-first and
-pairs them off. As the example above shows, it does not always find the minimum.
-More importantly, its pairing loop runs only until *one* side empties, so on a
-table that does not balance the residual is simply left with whichever players
-outlast the loop — a short-changed creditor, or a debtor never collected from.
-What the server does with such a gap depends on which side of the tolerance it
-falls. Within tolerance it redistributes the gap proportionally — across every
-player who is not already square — and solves the adjusted table. Above tolerance
-it redistributes nothing at all: it rejects, returns no settlements, and that is
-precisely what hands the table to this greedy loop in the first place. The client
-fallback has no equivalent step on either side of that line.
-
 ### Banker mode
 
 Banker mode is a different settlement shape, not an optimisation of the same one.
 When buy-ins are handed to a banker who holds the pot, losers are never chased at
-the end — their money is already in. So the banker simply pays each remaining
+the end as their money is already in. So the banker simply pays each remaining
 player their full cash-out, and the result is labelled `client-banker-v1`. It is
 computed on-device only and never touches the solver.
 
@@ -272,24 +222,6 @@ endpoint for subscription lifecycle events.
 | `legal/` | Git submodule holding the published legal and landing pages |
 | `tools/` | Store and launch assets, including the screenshots at the top of this file |
 | `firestore.rules`, `firebase.json`, `.firebaserc` | Firebase project configuration and security rules |
-
-### What is not in this repo
-
-The backend's local-dev and deployment configuration — the Compose file, the AWS
-SAM template and its config, and the deploy scripts — are gitignored and are
-**not** published here. They exist in the private working tree but no tracked copy
-ships with this repository, so the service is not deployable from a clone as-is.
-This is deliberate; it is called out explicitly so nobody spends an afternoon on
-instructions that cannot run.
-
-What *is* tracked for the backend: the full C++ source, `CMakeLists.txt`, and both
-`Dockerfile` and `Dockerfile.lambda`. The solver is readable, buildable in
-principle, and reviewable — it just is not wired to anyone's AWS account.
-
-The app also expects a `frontend/.env` supplying `EXPO_PUBLIC_API_BASE_URL` plus
-Firebase, RevenueCat, and Google OAuth keys. That file is not published either.
-Without `EXPO_PUBLIC_API_BASE_URL` the app still runs — it simply resolves no
-endpoint and settles every game with the on-device greedy solver.
 
 ## License
 
