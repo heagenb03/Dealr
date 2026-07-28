@@ -30,14 +30,18 @@ twice — and each group closes in two payments, so four transfers suffice.
 
 Finding those groups is the actual problem. It is a search over which subsets of
 players can be made to sum to zero, not a sorting problem, and the number of
-candidate subsets grows exponentially with the table size. Cash Cage solves it
-exactly with a mixed-integer program on the server, and falls back to the greedy
-heuristic on-device when the server is not reachable.
+candidate subsets grows exponentially with the table size. Cash Cage models it as
+a mixed-integer program on the server, and falls back to the greedy heuristic
+on-device. The fallback is not offline-only: an unreachable server triggers it,
+but so does a table whose buy-ins and cash-outs disagree by more than the game's
+tolerance, because the server declines to solve that and returns nothing to use.
 
 ## The settlement engine
 
-There are three settlement identities in the codebase, and the summary screen
-labels which one produced the result you are looking at:
+There are three settlement identities in the codebase. They are internal labels
+carried on the result object, not something the summary screen puts in front of
+you — the screen shows a notice only when a game *fell back*, never when the
+server solved it:
 
 | Algorithm ID | Where it runs | What it does |
 | --- | --- | --- |
@@ -100,11 +104,18 @@ failure. Concretely, the client returns `client-greedy-v1` when:
 
 Because rejection and network failure funnel into the same fallback, an
 unbalanced table still gets a greedy answer while online. The summary screen
-surfaces this with a banner and a retry button rather than hiding it.
+raises a dismissible notice when a result came from the fallback, with a retry
+control — but only when retrying could plausibly help. An out-of-tolerance table
+is classified as not retryable, since the data itself is the problem, so there the
+notice is the whole of the signal.
 
 The greedy fallback walks the debtor and creditor lists sorted largest-first and
-pairs them off. It always clears the table, but as the example above shows it does
-not always find the minimum, and it inherits whatever imbalance the input carried.
+pairs them off. As the example above shows, it does not always find the minimum.
+More importantly, its pairing loop runs only until *one* side empties, so on a
+table that does not balance the residual is simply left with whichever players
+outlast the loop — a short-changed creditor, or a debtor never collected from.
+The server redistributes such a gap proportionally across every player before
+solving; the client fallback has no equivalent step.
 
 ### Banker mode
 
@@ -151,7 +162,9 @@ balances and returns a list of transfers. Everything durable lives in Firestore
 under the signed-in user, mirrored locally on the device.
 
 One `CMakeLists.txt` builds two binaries: `cashcage-backend`, a Crow HTTP server,
-and `cashcage-lambda`, an AWS Lambda runtime handler. What they share is the
+and `cashcage-lambda`, an AWS Lambda runtime handler. The Lambda target is gated
+behind a `BUILD_LAMBDA` option that defaults to `ON`, so a stock configure gets
+both. What they share is the
 **solver** — that is the only file in `COMMON_SOURCES`. Each entry point carries
 its own route layer, one returning Crow responses and one returning a
 framework-agnostic struct that the Lambda runtime adapts. So: one shared solver,
@@ -233,9 +246,11 @@ typed routes are both enabled.
 | Serverless | aws-lambda-cpp v0.2.8 |
 | Build | CMake 3.16+ |
 
-OR-Tools is resolved with a plain `find_package` and is deliberately not pinned to
-a version in the build file; the other three dependencies are fetched at pinned
-tags.
+Crow and nlohmann/json are always fetched at the pinned tags above. OR-Tools is
+resolved with a plain `find_package` and is deliberately not pinned to a version
+in the build file. aws-lambda-cpp sits between the two: the build prefers an
+already-installed copy and only falls back to fetching the pinned `v0.2.8` when
+`find_package` does not find one, so the version you get depends on your machine.
 
 **Cloud Functions** — `functions/`
 
