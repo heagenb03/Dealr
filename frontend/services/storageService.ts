@@ -26,9 +26,11 @@ export class StorageService {
         ...game,
         date: new Date(game.date),
         createdAt: new Date(game.createdAt),
+        // Spread, don't whitelist. A field-by-field rebuild silently drops any
+        // Player field added later (preferredPayment, savedPlayerId), and the
+        // stripped result gets written straight back to storage and Firestore.
         players: game.players.map((p: any) => ({
-          id: p.id,
-          name: p.name,
+          ...p,
           completedAt: p.completedAt ? new Date(p.completedAt) : undefined,
         })),
         transactions: game.transactions.map((t: any) => ({

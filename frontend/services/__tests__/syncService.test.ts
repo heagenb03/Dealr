@@ -358,3 +358,85 @@ describe('reopen-vs-complete cross-device conflict (last-write-wins by syncedAt)
     expect(stored[0].statsCounted).toBe(false);
   });
 });
+
+describe('payment handles survive repeated app launches (the reported bug)', () => {
+  // A handle added in an active game vanished after the SECOND app close.
+  //
+  // StorageService.loadGames() rebuilt players from a {id, name, completedAt}
+  // whitelist, so every read dropped preferredPayment. Launch 1 still looked
+  // fine: local syncedAt lags remote by one write (saveGame persists the
+  // in-memory game while Firestore stamps serverTimestamp), so remote won the
+  // merge and restored the handle — and wrote remote's syncedAt into local.
+  // Launch 2 then had local syncedAt EQUAL to remote's, and mergeGames uses a
+  // strict `remoteTime > localTime`, so the stripped local copy won and the
+  // handle was gone for good.
+  it('keeps a handle across two launches even once local syncedAt ties remote', async () => {
+    const REMOTE_SYNCED = new Date('2026-07-02T00:00:00Z');
+    const withHandle = (syncedAt: Date): Game => ({
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      players: [
+        {
+          id: 'A',
+          name: 'Alice',
+          preferredPayment: { method: 'venmo', handle: 'alice-h' },
+          savedPlayerId: 'sp_alice',
+        },
+      ],
+      syncedAt,
+    });
+
+    // Local lags remote by one write, exactly as saveGame leaves it.
+    await StorageService.saveGames([withHandle(new Date('2026-07-01T00:00:00Z'))]);
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([withHandle(REMOTE_SYNCED)]);
+
+    // ---- Launch 1: remote is newer, so it wins and stamps REMOTE_SYNCED locally.
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    const afterFirst = await StorageService.loadGames();
+    expect(afterFirst[0].players[0].preferredPayment).toEqual({
+      method: 'venmo',
+      handle: 'alice-h',
+    });
+
+    // ---- Launch 2: local syncedAt now ties remote, so the LOCAL copy wins the
+    // merge. It must still carry the handle — that is the whole bug.
+    const secondLaunch = await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    expect(secondLaunch[0].players[0].preferredPayment).toEqual({
+      method: 'venmo',
+      handle: 'alice-h',
+    });
+    expect(secondLaunch[0].players[0].savedPlayerId).toBe('sp_alice');
+
+    const afterSecond = await StorageService.loadGames();
+    expect(afterSecond[0].players[0].preferredPayment).toEqual({
+      method: 'venmo',
+      handle: 'alice-h',
+    });
+  });
+
+  it('saving one game does not strip a handle off another game', async () => {
+    const gameWithHandle: Game = {
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      id: 'gameA',
+      players: [
+        { id: 'A', name: 'Alice', preferredPayment: { method: 'cashapp', handle: 'alice-c' } },
+      ],
+    };
+    const otherGame: Game = { ...makeGame([{ id: 'B', name: 'Bob' }]), id: 'gameB' };
+    await StorageService.saveGames([gameWithHandle, otherGame]);
+
+    // saveGame does loadGames -> replace target -> saveGames, so a lossy read
+    // damages every untouched game caught in the same write.
+    await SyncService.saveGame(UID, { ...otherGame, name: 'Saturday' });
+
+    const stored = await StorageService.loadGames();
+    const reloadedA = stored.find(g => g.id === 'gameA')!;
+    expect(reloadedA.players[0].preferredPayment).toEqual({
+      method: 'cashapp',
+      handle: 'alice-c',
+    });
+  });
+});
