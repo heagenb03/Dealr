@@ -19,11 +19,10 @@ links below.
 | [nlohmann/json](https://github.com/nlohmann/json) | v3.11.3 | MIT |
 
 Crow is copyright 2014-2017 ipkn and 2020-2022 CrowCpp. aws-lambda-cpp is only
-fetched at v0.2.8 when the build doesn't find a system install already
-providing it.
+fetched at v0.2.8 when `BUILD_LAMBDA` is enabled (the default) and no system
+install of aws-lambda-runtime is found.
 
 ## Frontend
 
 The mobile app is built with React Native, Expo, Firebase, and RevenueCat.
-Their licenses are declared in `frontend/package-lock.json` and reproduced in
-each package's distribution.
+Their licenses are declared in `frontend/package-lock.json`.
