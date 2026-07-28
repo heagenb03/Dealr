@@ -1,7 +1,7 @@
 # Cash Cage
 
-Poker buy-in and cash-out tracking that settles the table in the fewest possible
-transfers. [Download on the App Store](https://apps.apple.com/us/app/cash-cage/id6759301097)
+Poker buy-in and cash-out tracking that works out who pays whom at the end of the
+night. [Download on the App Store](https://apps.apple.com/us/app/cash-cage/id6759301097)
 
 <p align="center">
   <img src="tools/appstore-screenshots/captures/slide1-summary.png" width="24%" alt="Game summary" />
@@ -83,7 +83,7 @@ actually MILP constraints; the other two act before the model is ever built:
 Two caveats on "fewest transfers". First, the MILP minimises the transfer count
 *for the balances it is handed* — stages 1 and 2 both modify those balances before
 the model sees them, so the claim is about the post-adjustment table, not about the
-raw numbers you typed in. Second, the handler accepts a *feasible* solution as well
+raw numbers you typed in. Second, the solver accepts a *feasible* solution as well
 as a proven-optimal one, and labels both `server-milp-v1`; if CBC returns a valid
 solution without proving optimality, that result is what you get.
 
@@ -295,8 +295,8 @@ endpoint and settles every game with the on-device greedy solver.
 
 Licensed under the [PolyForm Perimeter License 1.0.1](LICENSE).
 
-You may use, modify, and share this code freely. You may **not** use it to provide
-a product that competes with Cash Cage.
+You may use, modify, and share this code subject to those terms. You may **not**
+use it to provide a product that competes with Cash Cage.
 
 Third-party dependency attributions are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
