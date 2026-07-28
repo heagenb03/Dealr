@@ -114,8 +114,12 @@ pairs them off. As the example above shows, it does not always find the minimum.
 More importantly, its pairing loop runs only until *one* side empties, so on a
 table that does not balance the residual is simply left with whichever players
 outlast the loop — a short-changed creditor, or a debtor never collected from.
-The server redistributes such a gap proportionally across every player before
-solving; the client fallback has no equivalent step.
+What the server does with such a gap depends on which side of the tolerance it
+falls. Within tolerance it redistributes the gap proportionally — across every
+player who is not already square — and solves the adjusted table. Above tolerance
+it redistributes nothing at all: it rejects, returns no settlements, and that is
+precisely what hands the table to this greedy loop in the first place. The client
+fallback has no equivalent step on either side of that line.
 
 ### Banker mode
 
