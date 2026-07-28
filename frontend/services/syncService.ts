@@ -219,6 +219,10 @@ export class SyncService {
         const remoteTime = remoteGame.syncedAt ?? remoteGame.createdAt;
         if (remoteTime > localTime) {
           merged.set(remoteGame.id, remoteGame);
+        } else {
+          // Local wins, but it may be a copy that the old loadGames whitelist
+          // stripped. Fill only the fields it is missing from remote.
+          merged.set(remoteGame.id, unionRecoverablePlayerFields(localGame, remoteGame));
         }
       }
     }
@@ -236,6 +240,53 @@ function deserializeSyncedAt(game: Game & { syncedAt?: any }): Game {
     return { ...game, syncedAt: new Date(game.syncedAt) };
   }
   return game;
+}
+
+/**
+ * Fill in player fields that the local copy is missing but remote still has.
+ *
+ * Recovery for the whitelist bug in StorageService.loadGames(), which dropped
+ * preferredPayment and savedPlayerId on every read. That loss only ever reached
+ * AsyncStorage on the launch path (the background merge writes locally, never to
+ * Firestore), so remote frequently still holds the handle — but local `syncedAt`
+ * ties remote from the second launch onward, and mergeGames' strict `>` hands a
+ * tie to local, so the intact remote copy would otherwise stay unreachable.
+ *
+ * Only fills fields local LACKS, so a live local value is never overwritten.
+ *
+ * The name guard is load-bearing: the one place that deliberately drops these
+ * fields is the rename re-resolve in active.tsx, which unbinds a player whose
+ * new name matches 0 or 2+ saved entries — and it always changes the name. If
+ * that rename was made offline, remote still holds the PREVIOUS person's handle,
+ * and adopting it would attach the wrong payee to the renamed player. Matching
+ * on name as well as id keeps recovery away from every deliberate unbind.
+ *
+ * Returns the input unchanged when nothing is recoverable, so the merge does not
+ * churn object identity for callers memoising on it.
+ */
+export function unionRecoverablePlayerFields(local: Game, remote: Game): Game {
+  const remoteById = new Map(remote.players.map(p => [p.id, p]));
+  let changed = false;
+
+  const players = local.players.map(lp => {
+    const rp = remoteById.get(lp.id);
+    if (!rp || rp.name !== lp.name) return lp;
+
+    const preferredPayment = lp.preferredPayment ?? rp.preferredPayment;
+    const savedPlayerId = lp.savedPlayerId ?? rp.savedPlayerId;
+    if (preferredPayment === lp.preferredPayment && savedPlayerId === lp.savedPlayerId) {
+      return lp;
+    }
+
+    changed = true;
+    return {
+      ...lp,
+      ...(preferredPayment ? { preferredPayment } : {}),
+      ...(savedPlayerId ? { savedPlayerId } : {}),
+    };
+  });
+
+  return changed ? { ...local, players } : local;
 }
 
 /**

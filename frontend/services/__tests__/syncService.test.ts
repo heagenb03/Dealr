@@ -10,7 +10,12 @@ jest.mock('@/services/firebaseService', () => ({
 }));
 
 import { Game } from '@/types/game';
-import { SyncService, applyPendingMutations, withStorageLock } from '@/services/syncService';
+import {
+  SyncService,
+  applyPendingMutations,
+  withStorageLock,
+  unionRecoverablePlayerFields,
+} from '@/services/syncService';
 import { StorageService } from '@/services/storageService';
 import {
   fetchGamesFromFirestore,
@@ -438,5 +443,101 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
       method: 'cashapp',
       handle: 'alice-c',
     });
+  });
+});
+
+describe('unionRecoverablePlayerFields — recovering handles the old whitelist stripped', () => {
+  const local = (players: any[]): Game => ({ ...makeGame([]), players } as Game);
+
+  it('adopts remote preferredPayment and savedPlayerId when local lost them', () => {
+    const result = unionRecoverablePlayerFields(
+      local([{ id: 'A', name: 'Alice' }]),
+      local([
+        {
+          id: 'A',
+          name: 'Alice',
+          preferredPayment: { method: 'venmo', handle: 'alice-h' },
+          savedPlayerId: 'sp_alice',
+        },
+      ]),
+    );
+
+    expect(result.players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
+    expect(result.players[0].savedPlayerId).toBe('sp_alice');
+  });
+
+  it('never overwrites a payment the local copy already has', () => {
+    const result = unionRecoverablePlayerFields(
+      local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'cash' } }]),
+      local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'venmo', handle: 'stale' } }]),
+    );
+
+    expect(result.players[0].preferredPayment).toEqual({ method: 'cash' });
+  });
+
+  it('does NOT resurrect a payment onto a RENAMED player (deliberate unbind)', () => {
+    // active.tsx drops preferredPayment + savedPlayerId on rename when the new
+    // name matches 0 or 2+ saved entries, so a later edit cannot write back to
+    // the wrong saved entry. If that rename is made offline, remote still holds
+    // the OLD person's handle — adopting it would show the wrong payee.
+    const result = unionRecoverablePlayerFields(
+      local([{ id: 'A', name: 'Bob' }]),
+      local([
+        {
+          id: 'A',
+          name: 'Alice',
+          preferredPayment: { method: 'venmo', handle: 'alice-h' },
+          savedPlayerId: 'sp_alice',
+        },
+      ]),
+    );
+
+    expect(result.players[0].preferredPayment).toBeUndefined();
+    expect(result.players[0].savedPlayerId).toBeUndefined();
+  });
+
+  it('leaves players absent from remote untouched', () => {
+    const input = local([{ id: 'Z', name: 'Zoe' }]);
+    const result = unionRecoverablePlayerFields(input, local([]));
+    expect(result.players[0].preferredPayment).toBeUndefined();
+  });
+
+  it('returns the SAME object when nothing is recoverable (no identity churn)', () => {
+    const input = local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'cash' } }]);
+    const result = unionRecoverablePlayerFields(
+      input,
+      local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'cash' } }]),
+    );
+    expect(result).toBe(input);
+  });
+
+  it('recovers through a real merge when local wins the syncedAt tie', async () => {
+    const TIE = new Date('2026-07-02T00:00:00Z');
+    const stripped: Game = {
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      syncedAt: TIE,
+    };
+    const remoteIntact: Game = {
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      players: [
+        {
+          id: 'A',
+          name: 'Alice',
+          preferredPayment: { method: 'venmo', handle: 'alice-h' },
+          savedPlayerId: 'sp_alice',
+        },
+      ],
+      syncedAt: TIE,
+    };
+
+    await StorageService.saveGames([stripped]);
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([remoteIntact]);
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    const stored = await StorageService.loadGames();
+    expect(stored[0].players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
+    expect(stored[0].players[0].savedPlayerId).toBe('sp_alice');
   });
 });
