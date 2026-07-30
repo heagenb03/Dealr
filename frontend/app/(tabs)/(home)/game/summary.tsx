@@ -785,7 +785,10 @@ setSettlementResult(cachedResult);
       if (p.preferredPayment) map.set(p.name, p.preferredPayment);
     });
     return map;
-  }, [summary?.game.players]);
+    // Dep is the summary object, NOT summary.game.players — the players array is
+    // mutated in place (active.tsx index-assigns into it), so its reference never
+    // changes and a dep on it freezes this map for the lifetime of the mount.
+  }, [summary]);
 
   if (!activeGame || !summary) {
     return (
