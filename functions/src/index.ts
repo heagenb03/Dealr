@@ -11,7 +11,9 @@ admin.initializeApp();
 //   2. Recursively delete all Firestore data under /users/{uid}
 //   3. Delete the Firebase Auth user
 // ---------------------------------------------------------------------------
-export const deleteUserData = onCall(async (request) => {
+// The secret MUST be declared here or firebase-functions v2 never mounts it
+// into process.env and cancelRevenueCatSubscriber silently skips (bug-355).
+export const deleteUserData = onCall({ secrets: ['REVENUECAT_SECRET_API_KEY'] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be signed in.');
   }
