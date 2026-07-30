@@ -79,6 +79,7 @@ function createLocalSettlementResult(
   balances: PlayerBalance[],
   reason?: string,
   cashRoundingUnit?: number,
+  warnings?: string[],
 ): SettlementResult {
   const prepared =
     typeof cashRoundingUnit === 'number' && cashRoundingUnit > 0
@@ -90,6 +91,7 @@ function createLocalSettlementResult(
     source: 'client',
     generatedAt: new Date().toISOString(),
     error: reason,
+    warnings,
   };
 }
 
@@ -227,6 +229,18 @@ export async function getSettlements(
     }
 
     const payload = (await response.json()) as SettlementApiResponse;
+
+    // An empty settlements array WITH warnings is a deliberate server rejection
+    // (e.g. imbalance over tolerance), not a malformed payload — fall back to
+    // the local solver but keep the server's explanation.
+    if (Array.isArray(payload.settlements) && payload.settlements.length === 0 && payload.warnings?.length) {
+      return createLocalSettlementResult(
+        balances,
+        payload.warnings[0],
+        options.settings?.cashRoundingUnit,
+        payload.warnings,
+      );
+    }
 
     if (!Array.isArray(payload.settlements) || payload.settlements.length === 0) {
       throw new Error('Invalid settlement payload received');

@@ -363,6 +363,24 @@ describe('getSettlements', () => {
     expect(result.error).toContain('Invalid settlement payload');
   });
 
+  it('falls back to local with the server explanation when the server rejects with warnings', async () => {
+    const warning = 'Game imbalance ($4.00) exceeds tolerance ($2.50)';
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ settlements: [], warnings: [warning] }),
+    });
+
+    const result = await getSettlements(balances, {
+      endpoint: 'https://api.example.com/settlements/optimal',
+    });
+
+    expect(result.source).toBe('client');
+    expect(result.algorithm).toBe('client-greedy-v1');
+    expect(result.error).toBe(warning);
+    expect(result.warnings).toEqual([warning]);
+    expect(result.settlements).toHaveLength(1);
+  });
+
   it('uses EXPO_PUBLIC_API_BASE_URL when no custom endpoint provided', async () => {
     process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.example.com';
 
