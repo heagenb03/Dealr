@@ -387,6 +387,19 @@ export default function ActiveGameScreen() {
   // Calculate balances - must be before early return to avoid hooks error
   const balances = activeGame ? GameService.calculateBalances(activeGame) : [];
 
+  // Alphabetical, not the service's updatedAt-desc order: every add bumps updatedAt, so
+  // recency order would reorder the list under the user's finger mid-session. Hoisted above
+  // the early return below (Rules of Hooks).
+  const sortedSaved = useMemo(() => sortSavedByName(savedPlayers), [savedPlayers]);
+
+  // Latest-ref wrapper: `onSelectSaved` never changes identity, so SavedPickerRow's memo
+  // holds across search keystrokes, while taps still run the current handler. Hoisted above
+  // the early return below (Rules of Hooks); `selectSavedRef.current` is assigned further
+  // down, after `handleSelectSaved` is defined. Assigning a ref during render is safe there
+  // because handlers are never read during render.
+  const selectSavedRef = useRef<(id: string) => void>(() => {});
+  const onSelectSaved = useCallback((id: string) => selectSavedRef.current(id), []);
+
   const getPlayerBalance = (playerId: string): PlayerBalance | undefined => {
     return balances.find(b => b.playerId === playerId);
   };
@@ -451,9 +464,6 @@ export default function ActiveGameScreen() {
   // Save-toggle state for the Add Player modal (spec: the cap is never silent).
   const savedListFull = !canAddMoreSavedPlayers(savedPlayers.length, isPro);
   const trimmedName = newPlayerName.trim();
-  // Alphabetical, not the service's updatedAt-desc order: every add bumps updatedAt, so
-  // recency order would reorder the list under the user's finger mid-session.
-  const sortedSaved = useMemo(() => sortSavedByName(savedPlayers), [savedPlayers]);
   const filteredSaved = filterSavedByQuery(sortedSaved, newPlayerName);
   // No window — the whole roster must be tappable. Kept as a named binding because it is
   // the argument to shouldShowAddedConfirmation below and that helper's parameter name.
@@ -499,15 +509,11 @@ export default function ActiveGameScreen() {
     requestAnimationFrame(() => buyInInputRef.current?.focus());
   };
 
-  // Latest-ref wrapper: `onSelectSaved` never changes identity, so SavedPickerRow's memo
-  // holds across search keystrokes, while taps still run the current handler. Assigning a
-  // ref during render is safe here because handlers are never read during render.
-  const selectSavedRef = useRef<(id: string) => void>(() => {});
+  // Assigns the latest handler into the ref declared above (Rules of Hooks — see there).
   selectSavedRef.current = (id: string) => {
     const p = savedPlayers.find(x => x.id === id);
     if (p) handleSelectSaved(p);
   };
-  const onSelectSaved = useCallback((id: string) => selectSavedRef.current(id), []);
 
   // Editing the name un-selects any tapped saved player.
   const handleNameChange = (text: string) => {
