@@ -1166,6 +1166,21 @@ export default function ActiveGameScreen() {
                 )}
               </View>
 
+              {/* Default buy-in — omitted entirely when off (0), since that means the
+                  feature is disabled rather than sitting at a default value. Same
+                  banker-unchosen suppression as the rounding and tolerance segments. */}
+              {gameDefaultBuyIn > 0 && showTrailingSegments && (
+                <>
+                  <Text style={styles.settingsSummaryDot}>·</Text>
+                  <View style={styles.settingsSummaryGroup}>
+                    <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                      {buyInValueLabel}
+                    </Text>
+                  </View>
+                </>
+              )}
+
               {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
               {showTrailingSegments && (
                 <>
@@ -1187,21 +1202,6 @@ export default function ActiveGameScreen() {
                       <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
                       <Text style={styles.settingsSummaryValue} numberOfLines={1}>
                         {toleranceLabel}
-                      </Text>
-                    </View>
-                  </>
-                )}
-
-              {/* Default buy-in — omitted entirely when off (0), since that means the
-                  feature is disabled rather than sitting at a default value. Same
-                  banker-unchosen suppression as rounding and tolerance. */}
-              {gameDefaultBuyIn > 0 && showTrailingSegments && (
-                  <>
-                    <Text style={styles.settingsSummaryDot}>·</Text>
-                    <View style={styles.settingsSummaryGroup}>
-                      <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
-                      <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                        {buyInValueLabel}
                       </Text>
                     </View>
                   </>
