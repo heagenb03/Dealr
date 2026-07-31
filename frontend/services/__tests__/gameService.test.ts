@@ -80,6 +80,21 @@ describe('GameService.createGame', () => {
     expect(game.cashUnit).toBeUndefined();
     expect(game.settlementMode).toBeUndefined();
   });
+
+  it('stamps defaultBuyIn when a buy-in default is given', () => {
+    const game = GameService.createGame('Test', { buyIn: 20 });
+    expect(game.defaultBuyIn).toBe(20);
+  });
+
+  it('leaves defaultBuyIn undefined when the buy-in default is 0 (off)', () => {
+    const game = GameService.createGame('Test', { buyIn: 0 });
+    expect(game.defaultBuyIn).toBeUndefined();
+  });
+
+  it('leaves defaultBuyIn undefined when no buy-in default is given', () => {
+    const game = GameService.createGame('Test', { tolerance: 5 });
+    expect(game.defaultBuyIn).toBeUndefined();
+  });
 });
 
 // ---- addPlayer ----

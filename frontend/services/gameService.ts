@@ -246,7 +246,7 @@ export class GameService {
 
   static createGame(
     name: string,
-    defaults?: { cashUnit?: number; settlementMode?: 'optimal' | 'banker'; tolerance?: number },
+    defaults?: { cashUnit?: number; settlementMode?: 'optimal' | 'banker'; tolerance?: number; buyIn?: number },
   ): Game {
     const game: Game = {
       id: `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -264,6 +264,9 @@ export class GameService {
     if (defaults?.cashUnit !== undefined) game.cashUnit = defaults.cashUnit;
     if (defaults?.settlementMode !== undefined) game.settlementMode = defaults.settlementMode;
     if (defaults?.tolerance !== undefined) game.imbalanceTolerance = defaults.tolerance;
+    // 0 means "off", which is what an absent field already means — stamp only
+    // a live default so stored games don't accumulate inert zeros.
+    if (defaults?.buyIn !== undefined && defaults.buyIn > 0) game.defaultBuyIn = defaults.buyIn;
     return game;
   }
 

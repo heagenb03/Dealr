@@ -53,6 +53,12 @@ export interface Game {
    */
   bankerPlayerId?: string;
 
+  /** Default buy-in auto-applied when adding players, in the game's native
+   *  currency units. Absent or 0 = off (the Add Player modal shows the manual
+   *  Buy-In field). Stamped at creation from the user's global default;
+   *  editable per game. Changing it affects subsequent adds only. */
+  defaultBuyIn?: number;
+
   // Settlement cache
   cachedSettlements?: SettlementResult;
   transactionHash?: string;
