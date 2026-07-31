@@ -27,7 +27,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const { user } = useAuth();
   const { isOnline } = useNetwork();
-  const { defaultCashUnit, defaultSettlementMode, defaultTolerance } = useGameDefaults();
+  const { defaultCashUnit, defaultSettlementMode, defaultTolerance, defaultBuyIn } = useGameDefaults();
   const uid = user?.uid ?? null;
   const abortRef = useRef<AbortController | null>(null);
   const prevUidRef = useRef<string | null | undefined>(undefined); // undefined = not yet initialized
@@ -157,13 +157,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       cashUnit: defaultCashUnit,
       settlementMode: defaultSettlementMode,
       tolerance: defaultTolerance,
+      buyIn: defaultBuyIn,
     });
     setGames(prev => [...prev, newGame]);
     await SyncService.saveGame(uid, newGame);
     setActiveGameState(newGame);
     await StorageService.saveActiveGameId(newGame.id);
     return newGame;
-  }, [uid, defaultCashUnit, defaultSettlementMode, defaultTolerance]);
+  }, [uid, defaultCashUnit, defaultSettlementMode, defaultTolerance, defaultBuyIn]);
 
   const setActiveGame = useCallback(async (gameId: string | null) => {
     if (gameId) {

@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 const CASH_UNIT_KEY = 'cc.defaultCashUnit';
 const MODE_KEY = 'cc.defaultSettlementMode';
 const TOLERANCE_KEY = 'cc.defaultTolerance';
+const BUYIN_KEY = 'cc.defaultBuyIn';
 
 type SettlementMode = 'optimal' | 'banker';
 
@@ -21,9 +22,12 @@ interface GameDefaultsContextType {
   defaultSettlementMode: SettlementMode | undefined;
   /** User-preferred imbalance tolerance for new games (native currency units). Undefined = currency default. */
   defaultTolerance: number | undefined;
+  /** User-preferred default buy-in for new games (native currency units). Undefined or 0 = off. */
+  defaultBuyIn: number | undefined;
   setDefaultCashUnit: (unit: number) => Promise<void>;
   setDefaultSettlementMode: (mode: SettlementMode) => Promise<void>;
   setDefaultTolerance: (tolerance: number) => Promise<void>;
+  setDefaultBuyIn: (amount: number) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,6 +42,7 @@ export function GameDefaultsProvider({ children }: { children: ReactNode }) {
   const [defaultCashUnit, setCashUnitState] = useState<number | undefined>(undefined);
   const [defaultSettlementMode, setModeState] = useState<SettlementMode | undefined>(undefined);
   const [defaultTolerance, setToleranceState] = useState<number | undefined>(undefined);
+  const [defaultBuyIn, setBuyInState] = useState<number | undefined>(undefined);
 
   // On mount / auth change: read from userDoc first, then AsyncStorage for
   // whatever userDoc did not supply. Mirrors CurrencyContext.
@@ -46,9 +51,11 @@ export function GameDefaultsProvider({ children }: { children: ReactNode }) {
       const docUnit = (userDoc as any)?.defaultCashUnit;
       const docMode = (userDoc as any)?.defaultSettlementMode;
       const docTol = (userDoc as any)?.defaultTolerance;
+      const docBuyIn = (userDoc as any)?.defaultBuyIn;
       let unitResolved = false;
       let modeResolved = false;
       let tolResolved = false;
+      let buyInResolved = false;
       if (typeof docUnit === 'number') {
         setCashUnitState(docUnit);
         unitResolved = true;
@@ -60,6 +67,10 @@ export function GameDefaultsProvider({ children }: { children: ReactNode }) {
       if (typeof docTol === 'number') {
         setToleranceState(docTol);
         tolResolved = true;
+      }
+      if (typeof docBuyIn === 'number') {
+        setBuyInState(docBuyIn);
+        buyInResolved = true;
       }
       try {
         if (!unitResolved) {
@@ -78,6 +89,13 @@ export function GameDefaultsProvider({ children }: { children: ReactNode }) {
           if (storedTol !== null) {
             const n = parseFloat(storedTol);
             if (Number.isFinite(n)) setToleranceState(n);
+          }
+        }
+        if (!buyInResolved) {
+          const storedBuyIn = await AsyncStorage.getItem(BUYIN_KEY);
+          if (storedBuyIn !== null) {
+            const n = parseFloat(storedBuyIn);
+            if (Number.isFinite(n)) setBuyInState(n);
           }
         }
       } catch {
@@ -135,15 +153,33 @@ export function GameDefaultsProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  const setDefaultBuyIn = useCallback(async (amount: number) => {
+    setBuyInState(amount);
+    try {
+      await AsyncStorage.setItem(BUYIN_KEY, String(amount));
+    } catch {
+      // ignore
+    }
+    if (user) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { defaultBuyIn: amount });
+      } catch {
+        // offline or permission failure — AsyncStorage copy is the source of truth
+      }
+    }
+  }, [user]);
+
   return (
     <GameDefaultsContext.Provider
       value={{
         defaultCashUnit,
         defaultSettlementMode,
         defaultTolerance,
+        defaultBuyIn,
         setDefaultCashUnit,
         setDefaultSettlementMode,
         setDefaultTolerance,
+        setDefaultBuyIn,
       }}
     >
       {children}
