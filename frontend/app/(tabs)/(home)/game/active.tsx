@@ -318,6 +318,8 @@ export default function ActiveGameScreen() {
   const [showSolvingModal, setShowSolvingModal] = useState(false);
   const [showCashUnitPicker, setShowCashUnitPicker] = useState(false);
   const [showTolerancePicker, setShowTolerancePicker] = useState(false);
+  const [showDefaultBuyInModal, setShowDefaultBuyInModal] = useState(false);
+  const [defaultBuyInInput, setDefaultBuyInInput] = useState('');
   const [showSettlementModePicker, setShowSettlementModePicker] = useState(false);
   const [showDistortionModal, setShowDistortionModal] = useState(false);
   const [distortions, setDistortions] = useState<PlayerDistortion[]>([]);
@@ -764,6 +766,9 @@ export default function ActiveGameScreen() {
       ? 'Exact'
       : formatAmount(resolveCashUnit(activeGame.cashUnit, currency));
 
+  const gameDefaultBuyIn = activeGame.defaultBuyIn ?? 0;
+  const defaultBuyInLabel = gameDefaultBuyIn > 0 ? formatAmount(gameDefaultBuyIn) : 'Off';
+
   const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, currency);
   // Expanded-row value (always shown, plain like the Rounding value).
   const toleranceValueLabel =
@@ -782,6 +787,22 @@ export default function ActiveGameScreen() {
   const applySettlementMode = async (mode: 'optimal' | 'banker', bankerId?: string) => {
     GameService.setSettlementMode(activeGame, mode, bankerId);
     await updateGame(activeGame);
+  };
+
+  const handleSaveDefaultBuyIn = async () => {
+    const raw = defaultBuyInInput.trim();
+    if (raw !== '' && !isValidNumericInput(raw)) {
+      Alert.alert('Error', 'Please enter a valid numeric amount (digits and decimal point only) or leave it empty');
+      return;
+    }
+    const n = raw === '' ? 0 : parseFloat(raw);
+    if (isNaN(n) || n < 0) {
+      Alert.alert('Error', 'Please enter a valid amount or leave it empty');
+      return;
+    }
+    activeGame.defaultBuyIn = n; // in-place + updateGame, matching the tolerance/cashUnit handlers
+    await updateGame(activeGame);
+    setShowDefaultBuyInModal(false);
   };
 
   const handleTapDirect = () => {
@@ -1062,6 +1083,26 @@ export default function ActiveGameScreen() {
                 </View>
                 <View style={styles.menuItemRight}>
                   <Text style={styles.menuItemValue}>{toleranceValueLabel}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setDefaultBuyInInput(gameDefaultBuyIn > 0 ? String(gameDefaultBuyIn) : '');
+                  setShowDefaultBuyInModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.menuItemLabel}>Default buy-in</Text>
+                </View>
+                <View style={styles.menuItemRight}>
+                  <Text style={styles.menuItemValue}>{defaultBuyInLabel}</Text>
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
                 </View>
               </TouchableOpacity>
@@ -1641,6 +1682,30 @@ export default function ActiveGameScreen() {
         }}
         onClose={() => setShowTolerancePicker(false)}
       />
+
+      <AppModal
+        visible={showDefaultBuyInModal}
+        title="Default Buy-In"
+        onClose={() => setShowDefaultBuyInModal(false)}
+      >
+        <Text style={styles.pickHint}>
+          Auto-applied when adding players to this game. Leave empty or 0 to turn off.
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={defaultBuyInInput}
+          onChangeText={setDefaultBuyInInput}
+          placeholder="Amount"
+          placeholderTextColor="#666"
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          onSubmitEditing={handleSaveDefaultBuyIn}
+        />
+        <View style={styles.modalButtons}>
+          <ModalButton variant="cancel" title="Cancel" onPress={() => setShowDefaultBuyInModal(false)} />
+          <ModalButton variant="confirm" title="Save" onPress={handleSaveDefaultBuyIn} />
+        </View>
+      </AppModal>
 
       <SettlementModePicker
         visible={showSettlementModePicker}
