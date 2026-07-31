@@ -1,11 +1,4 @@
 /**
- * One-line summary of the active game's settlement settings, shown on the
- * collapsed Settings row. Rounding and tolerance are intentionally dropped
- * while in banker mode before a banker is chosen, to avoid a wordy incomplete
- * state — this mirrors the collapsed row, which suppresses both segments in
- * that state, so the accessibility label and the visible row stay in step.
- */
-/**
  * Caption for a resolved imbalance tolerance, shown in both the collapsed
  * Settings row and its accessibility label. Always produces a segment — even at
  * the currency default — so tolerance reads consistently with rounding rather
@@ -19,14 +12,29 @@ export function toleranceCaption(
   return resolvedTolerance === 0 ? 'Exact' : `±${formatAmount(resolvedTolerance)}`;
 }
 
+/**
+ * One-line summary of the active game's settlement settings, shown on the
+ * collapsed Settings row. Rounding, tolerance and the default buy-in are
+ * intentionally dropped while in banker mode before a banker is chosen, to
+ * avoid a wordy incomplete state — this mirrors the collapsed row, which
+ * suppresses all three segments in that state, so the accessibility label and
+ * the visible row stay in step.
+ *
+ * The buy-in label is spoken as "Buy-in $20" while the row renders a bare
+ * "$20" beside a cash icon. This asymmetry is deliberate: a screen reader gets
+ * no icon, and a bare "$20" following the bare "$5" announced for rounding
+ * would be indistinguishable.
+ */
 export function formatSettingsSummary(
   isBanker: boolean,
   bankerName: string | undefined,
   roundingLabel: string,
   toleranceLabel?: string,
+  buyInLabel?: string,
 ): string {
   const tol = toleranceLabel ? ` · ${toleranceLabel}` : '';
-  if (!isBanker) return `Direct · ${roundingLabel}${tol}`;
+  const buyIn = buyInLabel ? ` · ${buyInLabel}` : '';
+  if (!isBanker) return `Direct · ${roundingLabel}${tol}${buyIn}`;
   if (!bankerName) return `Banker · Choose banker`;
-  return `Banker · ${bankerName} · ${roundingLabel}${tol}`;
+  return `Banker · ${bankerName} · ${roundingLabel}${tol}${buyIn}`;
 }

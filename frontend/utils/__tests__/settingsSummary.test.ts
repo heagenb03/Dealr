@@ -33,6 +33,37 @@ describe('formatSettingsSummary', () => {
   it('banker mode with a banker keeps the tolerance', () => {
     expect(formatSettingsSummary(true, 'Alex', '$5', '±$10')).toBe('Banker · Alex · $5 · ±$10');
   });
+
+  it('appends the buy-in label after the tolerance', () => {
+    expect(formatSettingsSummary(false, undefined, '$5', '±$10', 'Buy-in $20')).toBe(
+      'Direct · $5 · ±$10 · Buy-in $20',
+    );
+  });
+
+  it('appends the buy-in label when there is no tolerance label', () => {
+    expect(formatSettingsSummary(false, undefined, '$5', undefined, 'Buy-in $20')).toBe(
+      'Direct · $5 · Buy-in $20',
+    );
+  });
+
+  it('omits the buy-in segment when no label is provided (default buy-in off)', () => {
+    expect(formatSettingsSummary(false, undefined, '$5', '±$10')).toBe('Direct · $5 · ±$10');
+  });
+
+  it('banker mode with no banker drops the buy-in too, matching the visible row', () => {
+    // Same parity invariant as the tolerance test above: the collapsed row
+    // suppresses rounding, tolerance AND buy-in in this state, so the
+    // accessibility label must not announce a segment the user cannot see.
+    expect(formatSettingsSummary(true, undefined, '$5', '±$10', 'Buy-in $20')).toBe(
+      'Banker · Choose banker',
+    );
+  });
+
+  it('banker mode with a banker keeps the buy-in', () => {
+    expect(formatSettingsSummary(true, 'Alex', '$5', '±$10', 'Buy-in $20')).toBe(
+      'Banker · Alex · $5 · ±$10 · Buy-in $20',
+    );
+  });
 });
 
 describe('toleranceCaption', () => {
