@@ -306,6 +306,7 @@ export default function ActiveGameScreen() {
   // Running per-session confirmation for the stay-open Add Player modal.
   const [addedCount, setAddedCount] = useState(0);
   const [lastAddedName, setLastAddedName] = useState<string | null>(null);
+  const [lastAddedAmount, setLastAddedAmount] = useState<number | null>(null);
   // Synchronous re-entry guard for commitAddPlayer (state-based `disabled` has a race window).
   const addingPlayerRef = useRef(false);
   const nameInputRef = useRef<TextInput>(null);
@@ -458,7 +459,11 @@ export default function ActiveGameScreen() {
     matchSavedByExactName(savedPlayers, newPlayerName).length === 0;
   const atPlayerCap = !isPro && activeGame.players.length >= 12;
 
-  const addedConfirmLabel = formatAddedConfirmation(lastAddedName, addedCount);
+  const addedConfirmLabel = formatAddedConfirmation(
+    lastAddedName,
+    addedCount,
+    lastAddedAmount != null ? formatAmount(lastAddedAmount) : undefined,
+  );
 
   const hasSubject = trimmedName.length > 0;
   // The single saved player an untapped typed name exactly matches (else null).
@@ -477,9 +482,13 @@ export default function ActiveGameScreen() {
     setPendingBankerDesignation(false);
   };
 
-  // Tapping a saved player selects (does not commit) them, so a buy-in can ride
-  // along in the same Add. Focus moves to the buy-in field.
+  // With a default buy-in active there is nothing left to enter, so a tap IS
+  // the add (1 tap per regular). Otherwise: select, then buy-in rides along.
   const handleSelectSaved = (p: SavedPlayer) => {
+    if (gameDefaultBuyIn > 0) {
+      commitAddPlayer(p);
+      return;
+    }
     setNewPlayerName(p.name);
     setSelectedSavedId(p.id);
     requestAnimationFrame(() => buyInInputRef.current?.focus());
@@ -499,7 +508,7 @@ export default function ActiveGameScreen() {
     requestAnimationFrame(() => nameInputRef.current?.focus());
   };
 
-  const commitAddPlayer = async () => {
+  const commitAddPlayer = async (tapped?: SavedPlayer) => {
     if (addingPlayerRef.current) return;
 
     // Pro gate: free tier caps at 12 players. Enforced on EVERY add because the
@@ -512,17 +521,19 @@ export default function ActiveGameScreen() {
       return;
     }
 
-    const name = newPlayerName.trim();
+    const name = (tapped?.name ?? newPlayerName).trim();
     if (!name) {
       Alert.alert('Error', 'Please enter a player name');
       return;
     }
-    if (newPlayerBuyIn.trim() && !isValidNumericInput(newPlayerBuyIn)) {
-      Alert.alert('Error', 'Please enter a valid numeric amount (digits and decimal point only) or leave it empty');
-      return;
+    if (gameDefaultBuyIn === 0) {
+      if (newPlayerBuyIn.trim() && !isValidNumericInput(newPlayerBuyIn)) {
+        Alert.alert('Error', 'Please enter a valid numeric amount (digits and decimal point only) or leave it empty');
+        return;
+      }
     }
-    const buyInAmount = parseFloat(newPlayerBuyIn);
-    if (newPlayerBuyIn.trim() && (isNaN(buyInAmount) || buyInAmount < 0)) {
+    const buyInAmount = gameDefaultBuyIn > 0 ? gameDefaultBuyIn : parseFloat(newPlayerBuyIn);
+    if (gameDefaultBuyIn === 0 && newPlayerBuyIn.trim() && (isNaN(buyInAmount) || buyInAmount < 0)) {
       Alert.alert('Error', 'Please enter a valid buy-in amount or leave it empty');
       return;
     }
@@ -537,9 +548,11 @@ export default function ActiveGameScreen() {
     }
 
     // Resolve which saved identity (if any) to bind.
-    let bound: SavedPlayer | null = selectedSavedId
-      ? savedPlayers.find(p => p.id === selectedSavedId) ?? null
-      : null;
+    let bound: SavedPlayer | null = tapped
+      ? tapped
+      : selectedSavedId
+        ? savedPlayers.find(p => p.id === selectedSavedId) ?? null
+        : null;
     if (!bound && !forceUnlinked) {
       const exact = matchSavedByExactName(savedPlayers, name);
       if (exact.length === 1) {
@@ -595,6 +608,7 @@ export default function ActiveGameScreen() {
       // Reset for the next add; keep the modal open.
       setAddedCount(c => c + 1);
       setLastAddedName(name);
+      setLastAddedAmount(gameDefaultBuyIn > 0 ? gameDefaultBuyIn : null);
       setNewPlayerName('');
       setNewPlayerBuyIn('');
       setSelectedSavedId(null);
@@ -1325,7 +1339,7 @@ export default function ActiveGameScreen() {
         )}
 
         {/* Buy-in — only once a subject exists (Commit). */}
-        {hasSubject && (
+        {hasSubject && gameDefaultBuyIn === 0 && (
           <TextInput
             ref={buyInInputRef}
             style={styles.input}
@@ -1335,7 +1349,7 @@ export default function ActiveGameScreen() {
             placeholderTextColor="#666"
             keyboardType="decimal-pad"
             returnKeyType="done"
-            onSubmitEditing={commitAddPlayer}
+            onSubmitEditing={() => commitAddPlayer()}
           />
         )}
 
@@ -1395,9 +1409,15 @@ export default function ActiveGameScreen() {
           <Text style={styles.pickHint}>Free limit reached · 12 players. Upgrade to Pro for unlimited.</Text>
         )}
 
+        {gameDefaultBuyIn > 0 && (
+          <Text style={styles.pickHint}>
+            Buy-in {formatAmount(gameDefaultBuyIn)} · game settings
+          </Text>
+        )}
+
         <View style={styles.modalButtons}>
           {hasSubject ? (
-            <ModalButton variant="confirm" title="Add" onPress={commitAddPlayer} />
+            <ModalButton variant="confirm" title="Add" onPress={() => commitAddPlayer()} />
           ) : (
             <ModalButton variant="cancel" title="Done" onPress={closeAddModal} />
           )}
