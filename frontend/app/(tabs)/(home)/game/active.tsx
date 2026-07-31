@@ -1431,12 +1431,6 @@ export default function ActiveGameScreen() {
           <Text style={styles.pickHint}>Free limit reached · 12 players. Upgrade to Pro for unlimited.</Text>
         )}
 
-        {gameDefaultBuyIn > 0 && (
-          <Text style={styles.pickHint}>
-            Buy-in {formatAmount(gameDefaultBuyIn)} · game settings
-          </Text>
-        )}
-
         <View style={styles.modalButtons}>
           {hasSubject ? (
             <ModalButton variant="confirm" title="Add" onPress={() => commitAddPlayer()} />
