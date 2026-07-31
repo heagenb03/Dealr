@@ -36,7 +36,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList } from '@/utils/addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -782,11 +782,14 @@ export default function ActiveGameScreen() {
 
   const gameDefaultBuyIn = activeGame.defaultBuyIn ?? 0;
   const defaultBuyInLabel = gameDefaultBuyIn > 0 ? formatAmount(gameDefaultBuyIn) : 'Off';
+  // Bare formatted amount, shared by the collapsed-row segment (renders it as-is)
+  // and buyInSummaryLabel below (prefixes it for the a11y label). null when off,
+  // so both derived values can key off "is there an amount to show" consistently.
+  const buyInValueLabel = gameDefaultBuyIn > 0 ? formatAmount(gameDefaultBuyIn) : null;
   // Collapsed-row a11y segment. Spoken as "Buy-in $20" while the row shows a
   // bare "$20" beside a cash icon — a screen reader has no icon to disambiguate
   // it from the rounding value. Undefined when off, so the segment is omitted.
-  const buyInSummaryLabel =
-    gameDefaultBuyIn > 0 ? `Buy-in ${formatAmount(gameDefaultBuyIn)}` : undefined;
+  const buyInSummaryLabel = buyInValueLabel ? `Buy-in ${buyInValueLabel}` : undefined;
 
   const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, currency);
   // Expanded-row value (always shown, plain like the Rounding value).
@@ -795,6 +798,12 @@ export default function ActiveGameScreen() {
   // Collapsed caption segment + a11y label: always shown (like rounding), so the
   // summary stays consistent at the currency default instead of dropping it.
   const toleranceLabel = toleranceCaption(resolvedTolerance, formatAmount);
+
+  // Shared visibility gate for the rounding/tolerance/buy-in trailing segments
+  // in the collapsed settings row: suppressed only while banker mode has no
+  // banker chosen yet. One const keeps the three JSX copies from drifting out
+  // of sync with each other (and with the a11y label, which is unaffected).
+  const showTrailingSegments = activeGame.settlementMode !== 'banker' || !!bankerName;
 
   const settingsSummary = formatSettingsSummary(
     activeGame.settlementMode === 'banker',
@@ -1158,7 +1167,7 @@ export default function ActiveGameScreen() {
               </View>
 
               {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
-              {(activeGame.settlementMode !== 'banker' || !!bankerName) && (
+              {showTrailingSegments && (
                 <>
                   <Text style={styles.settingsSummaryDot}>·</Text>
                   <View style={styles.settingsSummaryGroup}>
@@ -1171,7 +1180,7 @@ export default function ActiveGameScreen() {
               )}
 
               {/* Tolerance — always shown, same banker-unchosen suppression as rounding */}
-              {(activeGame.settlementMode !== 'banker' || !!bankerName) && (
+              {showTrailingSegments && (
                   <>
                     <Text style={styles.settingsSummaryDot}>·</Text>
                     <View style={styles.settingsSummaryGroup}>
@@ -1186,14 +1195,13 @@ export default function ActiveGameScreen() {
               {/* Default buy-in — omitted entirely when off (0), since that means the
                   feature is disabled rather than sitting at a default value. Same
                   banker-unchosen suppression as rounding and tolerance. */}
-              {gameDefaultBuyIn > 0 &&
-                (activeGame.settlementMode !== 'banker' || !!bankerName) && (
+              {gameDefaultBuyIn > 0 && showTrailingSegments && (
                   <>
                     <Text style={styles.settingsSummaryDot}>·</Text>
                     <View style={styles.settingsSummaryGroup}>
                       <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
                       <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                        {formatAmount(gameDefaultBuyIn)}
+                        {buyInValueLabel}
                       </Text>
                     </View>
                   </>
@@ -1293,7 +1301,7 @@ export default function ActiveGameScreen() {
           <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
         )}
 
-        {addedConfirmLabel && !isLastAddVisibleInList(lastAddedName, visibleSaved, activeGame.players) && (
+        {shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
           <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
         )}
 

@@ -1,4 +1,4 @@
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList } from '../addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation } from '../addPlayer';
 import type { Player } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
@@ -117,5 +117,33 @@ describe('isLastAddVisibleInList', () => {
   it('false when lastAddedName is null or whitespace', () => {
     expect(isLastAddVisibleInList(null, [mike], [player('Mike')])).toBe(false);
     expect(isLastAddVisibleInList('  ', [mike], [player('Mike')])).toBe(false);
+  });
+});
+
+describe('shouldShowAddedConfirmation', () => {
+  const mike = saved('Mike');
+  const visibleWithMike = [mike];
+  const playersWithMike = [player('Mike')];
+
+  it('shows when an amount is present, even though the row is already visible in the list', () => {
+    expect(
+      shouldShowAddedConfirmation('Added Mike · $20.00 · 3 total', 20, 'Mike', visibleWithMike, playersWithMike),
+    ).toBe(true);
+  });
+
+  it('suppresses when there is no amount and the row is already visible in the list', () => {
+    expect(
+      shouldShowAddedConfirmation('Added Mike · 3 total', null, 'Mike', visibleWithMike, playersWithMike),
+    ).toBe(false);
+  });
+
+  it('shows when there is no amount but the row is not visible in the list', () => {
+    expect(
+      shouldShowAddedConfirmation('Added Dave · 3 total', null, 'Dave', visibleWithMike, playersWithMike),
+    ).toBe(true);
+  });
+
+  it('suppresses when there is no confirmation label at all, regardless of amount', () => {
+    expect(shouldShowAddedConfirmation(null, 20, 'Mike', visibleWithMike, playersWithMike)).toBe(false);
   });
 });

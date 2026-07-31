@@ -75,3 +75,23 @@ export function isLastAddVisibleInList(
   if (!target) return false;
   return visibleSaved.some(p => norm(p.name) === target && isNameTakenInGame(players, p.name));
 }
+
+/**
+ * True when the post-add confirmation banner should render. The banner is
+ * normally suppressed once the just-added player's row is already visible in
+ * the list (isLastAddVisibleInList) — the in-list "Added ✓" row already
+ * conveys the add. But that row carries no amount, so when the add carried a
+ * default buy-in (lastAddedAmount !== null), the banner is the only place the
+ * amount is shown — always show it in that case. Also requires a label to
+ * exist at all (mirrors formatAddedConfirmation's own null cases).
+ */
+export function shouldShowAddedConfirmation(
+  addedConfirmLabel: string | null,
+  lastAddedAmount: number | null,
+  lastAddedName: string | null,
+  visibleSaved: SavedPlayer[],
+  players: Player[],
+): boolean {
+  if (!addedConfirmLabel) return false;
+  return lastAddedAmount !== null || !isLastAddVisibleInList(lastAddedName, visibleSaved, players);
+}
