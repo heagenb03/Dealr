@@ -26,7 +26,7 @@ export function matchSavedByExactName(saved: SavedPlayer[], name: string): Saved
 
 /**
  * Saved players whose name contains `query` (trimmed, case-insensitive substring).
- * An empty query returns the same list reference (preserves recent-first order).
+ * An empty query returns the same list reference (preserves input order).
  */
 export function filterSavedByQuery(saved: SavedPlayer[], query: string): SavedPlayer[] {
   const q = norm(query);
@@ -94,4 +94,14 @@ export function shouldShowAddedConfirmation(
 ): boolean {
   if (!addedConfirmLabel) return false;
   return lastAddedAmount !== null || !isLastAddVisibleInList(lastAddedName, visibleSaved, players);
+}
+
+/**
+ * Saved players ordered by name, case-insensitive. Returns a NEW array; the input is not
+ * mutated. This is the display order for the Add Players modal — deliberately not the
+ * `updatedAt` desc order that savedPlayersService returns, because that key is bumped on
+ * every add and would reorder the list under the user mid-session.
+ */
+export function sortSavedByName(saved: SavedPlayer[]): SavedPlayer[] {
+  return [...saved].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 }

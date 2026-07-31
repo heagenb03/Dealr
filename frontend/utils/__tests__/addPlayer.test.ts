@@ -1,4 +1,4 @@
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation } from '../addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation, sortSavedByName } from '../addPlayer';
 import type { Player } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
@@ -145,5 +145,28 @@ describe('shouldShowAddedConfirmation', () => {
 
   it('suppresses when there is no confirmation label at all, regardless of amount', () => {
     expect(shouldShowAddedConfirmation(null, 20, 'Mike', visibleWithMike, playersWithMike)).toBe(false);
+  });
+});
+
+describe('sortSavedByName', () => {
+  it('orders case-insensitively by name', () => {
+    const list = [saved('mike'), saved('Alice'), saved('bob')];
+    expect(sortSavedByName(list).map(p => p.name)).toEqual(['Alice', 'bob', 'mike']);
+  });
+  it('leaves an already-sorted list in the same order', () => {
+    const list = [saved('Alice'), saved('bob'), saved('mike')];
+    expect(sortSavedByName(list).map(p => p.name)).toEqual(['Alice', 'bob', 'mike']);
+  });
+  it('does not mutate the input array', () => {
+    const list = [saved('mike'), saved('Alice')];
+    sortSavedByName(list);
+    expect(list.map(p => p.name)).toEqual(['mike', 'Alice']);
+  });
+  it('orders accented names via localeCompare', () => {
+    const list = [saved('Zoe'), saved('Émile'), saved('Adam')];
+    expect(sortSavedByName(list).map(p => p.name)).toEqual(['Adam', 'Émile', 'Zoe']);
+  });
+  it('returns an empty array unchanged', () => {
+    expect(sortSavedByName([])).toEqual([]);
   });
 });
