@@ -6,6 +6,7 @@ import {
   readPref,
   writePref,
   purgeLegacyPrefKeys,
+  seedPrefIfAbsent,
   resolveFloatPref,
   resolveIntPref,
   resolveEnumPref,
@@ -172,6 +173,44 @@ describe('resolveEnumPref', () => {
 // Migrating them would hand account A's value to whoever signs in first,
 // which is the reported bug all over again.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Write-through — what makes dropping the legacy keys lossless.
+// ---------------------------------------------------------------------------
+
+describe('seedPrefIfAbsent', () => {
+  it('caches a doc-resolved value when the account has no local copy', async () => {
+    await seedPrefIfAbsent(PREF_KEYS.defaultBuyIn, UID_A, null, 20);
+    expect(await readPref(PREF_KEYS.defaultBuyIn, UID_A)).toBe('20');
+  });
+
+  it('caches an explicit 0 rather than treating it as nothing to cache', async () => {
+    await seedPrefIfAbsent(PREF_KEYS.defaultBuyIn, UID_A, null, 0);
+    expect(await readPref(PREF_KEYS.defaultBuyIn, UID_A)).toBe('0');
+  });
+
+  it('never clobbers an existing local value', async () => {
+    await writePref(PREF_KEYS.defaultBuyIn, UID_A, '7');
+    await seedPrefIfAbsent(PREF_KEYS.defaultBuyIn, UID_A, '7', 20);
+    expect(await readPref(PREF_KEYS.defaultBuyIn, UID_A)).toBe('7');
+  });
+
+  it('writes nothing when there is no value to cache', async () => {
+    await seedPrefIfAbsent(PREF_KEYS.defaultBuyIn, UID_A, null, undefined);
+    expect(await readPref(PREF_KEYS.defaultBuyIn, UID_A)).toBeNull();
+  });
+
+  it('writes nothing when signed out', async () => {
+    await seedPrefIfAbsent(PREF_KEYS.defaultBuyIn, undefined, null, 20);
+    expect(await AsyncStorage.getAllKeys()).toHaveLength(0);
+  });
+
+  it('seeds into the account’s own key, never a shared one', async () => {
+    await seedPrefIfAbsent(PREF_KEYS.defaultBuyIn, UID_A, null, 20);
+    expect(await AsyncStorage.getItem(PREF_KEYS.defaultBuyIn)).toBeNull();
+    expect(await readPref(PREF_KEYS.defaultBuyIn, UID_B)).toBeNull();
+  });
+});
 
 describe('purgeLegacyPrefKeys', () => {
   it('removes every legacy device-global key', async () => {

@@ -169,6 +169,57 @@ describe('GameDefaultsProvider account isolation (bug-364)', () => {
     expect(seen!.defaultBuyIn).toBe(50);
   });
 
+  // Without this, dropping the legacy keys is NOT lossless. An existing user's
+  // first launch after the update can be offline, in which case AuthContext's
+  // `unavailable` path leaves userDoc null on a cold start, the legacy key has
+  // just been purged, and the namespaced key was never written — the value is
+  // gone. It does not self-heal either: coming back online populates userDoc for
+  // display but writes nothing locally, so every later offline start reverts.
+  it('caches a doc-resolved value locally so it survives an offline cold start', async () => {
+    // Value exists ONLY in the user doc — never set through the app on this device.
+    mockAuth = { user: { uid: UID_B }, userDoc: { defaultBuyIn: 20 } };
+    const first = await renderProvider();
+    expect(seen!.defaultBuyIn).toBe(20);
+    await act(async () => {
+      first.unmount();
+    });
+
+    seen = null;
+    mockAuth = { user: { uid: UID_B }, userDoc: null }; // offline: no doc at all
+    await renderProvider();
+    expect(seen!.defaultBuyIn).toBe(20);
+  });
+
+  it('caches a doc-resolved 0 (OFF) rather than treating it as nothing to cache', async () => {
+    mockAuth = { user: { uid: UID_B }, userDoc: { defaultBuyIn: 0 } };
+    const first = await renderProvider();
+    await act(async () => {
+      first.unmount();
+    });
+
+    seen = null;
+    mockAuth = { user: { uid: UID_B }, userDoc: null };
+    await renderProvider();
+    expect(seen!.defaultBuyIn).toBe(0);
+  });
+
+  it('does not let the doc write-through clobber a newer local value', async () => {
+    mockAuth = { user: { uid: UID_B }, userDoc: { defaultBuyIn: 20 } };
+    const renderer = await renderProvider();
+    await act(async () => {
+      await seen!.setDefaultBuyIn(7); // user changes it while the doc still says 20
+    });
+    expect(seen!.defaultBuyIn).toBe(7);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+    seen = null;
+    mockAuth = { user: { uid: UID_B }, userDoc: null };
+    await renderProvider();
+    expect(seen!.defaultBuyIn).toBe(7);
+  });
+
   it('preserves an explicit 0 (the OFF switch) from B’s user doc', async () => {
     mockAuth = { user: { uid: UID_A }, userDoc: {} };
     const renderer = await renderProvider();
@@ -248,6 +299,20 @@ describe('CurrencyProvider account isolation (bug-364)', () => {
     mockAuth = { user: { uid: UID_B }, userDoc: {} };
     await renderCurrency();
     expect(seenCurrency!.currency).toBe('USD');
+  });
+
+  it('caches a doc-resolved currency locally so it survives an offline cold start', async () => {
+    mockAuth = { user: { uid: UID_B }, userDoc: { currency: 'JPY' } };
+    const first = await renderCurrency();
+    expect(seenCurrency!.currency).toBe('JPY');
+    await act(async () => {
+      first.unmount();
+    });
+
+    seenCurrency = null;
+    mockAuth = { user: { uid: UID_B }, userDoc: null };
+    await renderCurrency();
+    expect(seenCurrency!.currency).toBe('JPY');
   });
 
   it('still restores B’s OWN currency on a cold start with no user doc', async () => {

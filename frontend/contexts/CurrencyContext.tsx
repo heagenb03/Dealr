@@ -13,6 +13,7 @@ import {
   readPref,
   writePref,
   ensureLegacyPrefsPurged,
+  seedPrefIfAbsent,
   resolveEnumPref,
 } from '@/services/userPrefsService';
 
@@ -65,9 +66,11 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       const stored = await readPref(PREF_KEYS.currency, uid);
       // Guard against a fast account switch resolving out of order.
       if (cancelled) return;
-      setCurrencyState(
-        resolveEnumPref<CurrencyCode>(userDoc?.currency, stored, CURRENCY_CODES) ?? DEFAULT_CURRENCY
-      );
+      const resolved = resolveEnumPref<CurrencyCode>(userDoc?.currency, stored, CURRENCY_CODES);
+      setCurrencyState(resolved ?? DEFAULT_CURRENCY);
+      // Keep an offline copy of a doc-supplied currency for this account — see
+      // seedPrefIfAbsent for why purging the legacy key needs this to be lossless.
+      await seedPrefIfAbsent(PREF_KEYS.currency, uid, stored, resolved);
     };
     load();
     return () => {

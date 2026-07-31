@@ -70,6 +70,32 @@ export async function writePref(
   }
 }
 
+/**
+ * Cache a value that resolved from the Firestore user doc into this account's
+ * local key, but only when there is no local copy yet.
+ *
+ * This is what makes purging the legacy keys lossless. Without it, an existing
+ * user whose first launch after the update happens OFFLINE loses the value
+ * outright: `AuthContext` leaves `userDoc` null on the `unavailable` path, the
+ * legacy key has just been purged, and the namespaced key was never written
+ * (only the setters write it). It would not self-heal either — coming back
+ * online populates `userDoc` for display but writes nothing locally, so every
+ * later offline cold start would revert again. Seeding on resolve also gives a
+ * second device a local cache without the user re-picking anything.
+ *
+ * `stored !== null` short-circuits, so a value the user changed on this device
+ * is never clobbered by a staler doc copy.
+ */
+export async function seedPrefIfAbsent(
+  base: string,
+  uid: string | undefined,
+  stored: string | null,
+  resolved: string | number | undefined
+): Promise<void> {
+  if (!uid || stored !== null || resolved === undefined) return;
+  await writePref(base, uid, String(resolved));
+}
+
 /** Drop the legacy device-global keys. Idempotent; never throws. */
 export async function purgeLegacyPrefKeys(): Promise<void> {
   try {
