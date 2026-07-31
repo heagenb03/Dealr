@@ -782,6 +782,11 @@ export default function ActiveGameScreen() {
 
   const gameDefaultBuyIn = activeGame.defaultBuyIn ?? 0;
   const defaultBuyInLabel = gameDefaultBuyIn > 0 ? formatAmount(gameDefaultBuyIn) : 'Off';
+  // Collapsed-row a11y segment. Spoken as "Buy-in $20" while the row shows a
+  // bare "$20" beside a cash icon — a screen reader has no icon to disambiguate
+  // it from the rounding value. Undefined when off, so the segment is omitted.
+  const buyInSummaryLabel =
+    gameDefaultBuyIn > 0 ? `Buy-in ${formatAmount(gameDefaultBuyIn)}` : undefined;
 
   const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, currency);
   // Expanded-row value (always shown, plain like the Rounding value).
@@ -796,6 +801,7 @@ export default function ActiveGameScreen() {
     bankerName,
     roundingLabel,
     toleranceLabel,
+    buyInSummaryLabel,
   );
 
   const applySettlementMode = async (mode: 'optimal' | 'banker', bankerId?: string) => {
@@ -1172,6 +1178,22 @@ export default function ActiveGameScreen() {
                       <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
                       <Text style={styles.settingsSummaryValue} numberOfLines={1}>
                         {toleranceLabel}
+                      </Text>
+                    </View>
+                  </>
+                )}
+
+              {/* Default buy-in — omitted entirely when off (0), since that means the
+                  feature is disabled rather than sitting at a default value. Same
+                  banker-unchosen suppression as rounding and tolerance. */}
+              {gameDefaultBuyIn > 0 &&
+                (activeGame.settlementMode !== 'banker' || !!bankerName) && (
+                  <>
+                    <Text style={styles.settingsSummaryDot}>·</Text>
+                    <View style={styles.settingsSummaryGroup}>
+                      <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
+                      <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                        {formatAmount(gameDefaultBuyIn)}
                       </Text>
                     </View>
                   </>
@@ -2249,5 +2271,5 @@ const styles = StyleSheet.create({
   settingsSummaryModeGroup: { flexShrink: 1, minWidth: 0 },
   settingsSummaryLabel: { fontSize: 15, color: 'rgba(255,255,255,0.5)' },
   settingsSummaryValue: { fontSize: 15, color: 'rgba(255,255,255,0.75)' },
-  settingsSummaryDot: { fontSize: 15, color: 'rgba(255,255,255,0.3)', marginHorizontal: 10 },
+  settingsSummaryDot: { fontSize: 15, color: 'rgba(255,255,255,0.3)', marginHorizontal: 8 },
 });
