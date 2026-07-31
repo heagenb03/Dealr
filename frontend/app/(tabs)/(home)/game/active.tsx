@@ -1086,6 +1086,26 @@ export default function ActiveGameScreen() {
 
               <TouchableOpacity
                 style={styles.menuItem}
+                onPress={() => {
+                  setDefaultBuyInInput(gameDefaultBuyIn > 0 ? String(gameDefaultBuyIn) : '');
+                  setShowDefaultBuyInModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.menuItemLabel}>Default buy-in</Text>
+                </View>
+                <View style={styles.menuItemRight}>
+                  <Text style={styles.menuItemValue}>{defaultBuyInLabel}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
+              <TouchableOpacity
+                style={styles.menuItem}
                 onPress={() => setShowCashUnitPicker(true)}
                 activeOpacity={0.7}
               >
@@ -1112,26 +1132,6 @@ export default function ActiveGameScreen() {
                 </View>
                 <View style={styles.menuItemRight}>
                   <Text style={styles.menuItemValue}>{toleranceValueLabel}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.menuDivider} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setDefaultBuyInInput(gameDefaultBuyIn > 0 ? String(gameDefaultBuyIn) : '');
-                  setShowDefaultBuyInModal(true);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.menuItemLabel}>Default buy-in</Text>
-                </View>
-                <View style={styles.menuItemRight}>
-                  <Text style={styles.menuItemValue}>{defaultBuyInLabel}</Text>
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
                 </View>
               </TouchableOpacity>
