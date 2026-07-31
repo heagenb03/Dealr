@@ -37,6 +37,7 @@ import { CurrencyCode } from '@/constants/Currencies';
 import { SUPPORT_EMAIL } from '@/constants/Links';
 import { getTrialLabel } from '@/utils/trialUtils';
 import { useOAuthPrompt, isOAuthCancel } from '@/hooks/useOAuthPrompt';
+import { isValidNumericInput } from '@/utils/validationUtils';
 
 // ---------------------------------------------------------------------------
 // Error message helper
@@ -80,6 +81,7 @@ function friendlyFirebaseError(err: any): string {
 type ActiveModal =
   | 'none'
   | 'editName'
+  | 'editDefaultBuyIn'
   | 'changePassword'
   | 'signOutConfirm'
   | 'deleteAccountConfirm'
@@ -143,7 +145,7 @@ export default function SettingsScreen() {
   // ---------------------------------------------------------------------------
 
   const { currency, setCurrency, meta, formatAmount } = useCurrency();
-  const { defaultCashUnit, defaultSettlementMode, defaultTolerance, setDefaultCashUnit, setDefaultSettlementMode, setDefaultTolerance } =
+  const { defaultCashUnit, defaultSettlementMode, defaultTolerance, defaultBuyIn, setDefaultCashUnit, setDefaultSettlementMode, setDefaultTolerance, setDefaultBuyIn } =
     useGameDefaults();
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [showRoundingPicker, setShowRoundingPicker] = useState(false);
@@ -157,6 +159,9 @@ export default function SettingsScreen() {
 
   // Edit name
   const [nameInput, setNameInput] = useState('');
+
+  // Edit default buy-in
+  const [buyInInput, setBuyInInput] = useState('');
 
   // Change password
   const [currentPassword, setCurrentPassword] = useState('');
@@ -175,6 +180,7 @@ export default function SettingsScreen() {
 
     // Pre-fill inputs
     if (modal === 'editName') setNameInput(displayName);
+    if (modal === 'editDefaultBuyIn') setBuyInInput(defaultBuyIn && defaultBuyIn > 0 ? String(defaultBuyIn) : '');
     if (modal === 'changePassword') {
       setCurrentPassword('');
       setNewPassword('');
@@ -184,7 +190,7 @@ export default function SettingsScreen() {
     if (modal === 'deleteAccountReauth') setReauthPassword('');
 
     setActiveModal(modal);
-  }, [displayName]);
+  }, [displayName, defaultBuyIn]);
 
   const closeModal = useCallback(() => {
     setActiveModal('none');
@@ -219,6 +225,22 @@ export default function SettingsScreen() {
       setModalLoading(false);
     }
   }, [nameInput, refreshUserDoc, closeModal]);
+
+  const handleSaveDefaultBuyIn = useCallback(() => {
+    const raw = buyInInput.trim();
+    // Empty = explicit Off. Otherwise require a valid non-negative number.
+    if (raw !== '' && !isValidNumericInput(raw)) {
+      Alert.alert('Error', 'Please enter a valid numeric amount (digits and decimal point only) or leave it empty');
+      return;
+    }
+    const n = raw === '' ? 0 : parseFloat(raw);
+    if (isNaN(n) || n < 0) {
+      Alert.alert('Error', 'Please enter a valid amount or leave it empty');
+      return;
+    }
+    setDefaultBuyIn(n);
+    closeModal();
+  }, [buyInInput, setDefaultBuyIn, closeModal]);
 
   const handleChangePassword = useCallback(async () => {
     if (!currentPassword) {
@@ -463,6 +485,26 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.menuItemRight}>
                 <Text style={styles.menuItemValue}>{toleranceDefaultLabel}</Text>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            {/* Default buy-in */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => openModal('editDefaultBuyIn')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="cash-outline" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Default Buy-In</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>
+                  {defaultBuyIn && defaultBuyIn > 0 ? formatAmount(defaultBuyIn) : 'Off'}
+                </Text>
                 <Ionicons name="chevron-forward" size={20} color="#666" />
               </View>
             </TouchableOpacity>
@@ -735,6 +777,31 @@ export default function SettingsScreen() {
             onPress={handleSaveName}
             disabled={modalLoading || !nameInput.trim()}
           />
+        </View>
+      </AppModal>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* Modal: Default Buy-In                                                */}
+      {/* ------------------------------------------------------------------- */}
+      <AppModal visible={activeModal === 'editDefaultBuyIn'} onClose={closeModal}>
+        <Ionicons name="cash-outline" size={32} color="#B072BB" style={styles.modalIcon} />
+        <Text style={appModalStyles.title}>Default Buy-In</Text>
+        <Text style={styles.modalSubtitle}>
+          Auto-applied when adding players. Leave empty or 0 to turn off.
+        </Text>
+
+        <TextInput
+          style={styles.textInput}
+          value={buyInInput}
+          onChangeText={setBuyInInput}
+          placeholder="Amount"
+          placeholderTextColor="rgba(255,255,255,0.3)"
+          keyboardType="decimal-pad"
+        />
+
+        <View style={styles.modalButtons}>
+          <ModalButton title="Cancel" variant="cancel" onPress={closeModal} />
+          <ModalButton title="Save" variant="confirm" onPress={handleSaveDefaultBuyIn} />
         </View>
       </AppModal>
 
