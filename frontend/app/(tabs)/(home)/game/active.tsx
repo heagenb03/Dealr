@@ -20,6 +20,7 @@ import { loadSavedPlayers, SavedPlayer, FREE_SAVED_CAP, PRO_SAVED_CAP, savedCapF
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PlayerCardActive from '@/components/PlayerCardActive';
 import PlayerCardCompleted from '@/components/PlayerCardCompleted';
+import SavedPickerRow from '@/components/SavedPickerRow';
 import Button from '@/components/Button';
 import ModalButton from '@/components/ModalButton';
 import PaywallModal from '@/components/PaywallModal';
@@ -493,6 +494,16 @@ export default function ActiveGameScreen() {
     setSelectedSavedId(p.id);
     requestAnimationFrame(() => buyInInputRef.current?.focus());
   };
+
+  // Latest-ref wrapper: `onSelectSaved` never changes identity, so SavedPickerRow's memo
+  // holds across search keystrokes, while taps still run the current handler. Assigning a
+  // ref during render is safe here because handlers are never read during render.
+  const selectSavedRef = useRef<(id: string) => void>(() => {});
+  selectSavedRef.current = (id: string) => {
+    const p = savedPlayers.find(x => x.id === id);
+    if (p) handleSelectSaved(p);
+  };
+  const onSelectSaved = useCallback((id: string) => selectSavedRef.current(id), []);
 
   // Editing the name un-selects any tapped saved player.
   const handleNameChange = (text: string) => {
@@ -1340,25 +1351,17 @@ export default function ActiveGameScreen() {
             <View style={styles.pickerList}>
               {visibleSaved.map((p, index) => {
                 const inGame = isNameTakenInGame(activeGame.players, p.name);
-                const badge = savedBadge(p);
                 return (
-                  <TouchableOpacity
+                  <SavedPickerRow
                     key={p.id}
+                    id={p.id}
+                    name={p.name}
+                    badge={savedBadge(p)}
+                    inGame={inGame}
                     disabled={inGame || atPlayerCap}
-                    onPress={() => handleSelectSaved(p)}
-                    style={[
-                      styles.pickerRow,
-                      index === visibleSaved.length - 1 && styles.pickerRowLast,
-                      (inGame || atPlayerCap) && styles.pickerRowDisabled,
-                    ]}
-                  >
-                    <Text style={styles.pickerRowName}>{p.name}</Text>
-                    {inGame ? (
-                      <Text style={styles.pickerAddedTag}>Added ✓</Text>
-                    ) : badge ? (
-                      <Text style={styles.pickerRowBadge} numberOfLines={1}>{badge}</Text>
-                    ) : null}
-                  </TouchableOpacity>
+                    isLast={index === visibleSaved.length - 1}
+                    onSelect={onSelectSaved}
+                  />
                 );
               })}
             </View>
@@ -2171,27 +2174,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     overflow: 'hidden',
   },
-  pickerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  pickerRowLast: { borderBottomWidth: 0 },
-  pickerRowDisabled: { opacity: 0.4 },
-  pickerRowName: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  pickerRowBadge: {
-    fontSize: 11,
-    color: 'rgba(176,114,187,0.9)',
-    fontFamily: 'SpaceMono',
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  pickerAddedTag: { fontSize: 12, color: '#00D66F', fontFamily: 'SpaceMono' },
   pickHint: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
