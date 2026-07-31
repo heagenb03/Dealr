@@ -7,6 +7,7 @@ import {
   readPref,
   writePref,
   ensureLegacyPrefsPurged,
+  seedPrefIfAbsent,
   resolveIntPref,
   resolveFloatPref,
   resolveEnumPref,
@@ -92,10 +93,26 @@ export function GameDefaultsProvider({ children }: { children: ReactNode }) {
       // landing on top of B.
       if (cancelled) return;
 
-      setCashUnitState(resolveIntPref(userDoc?.defaultCashUnit, storedUnit));
-      setModeState(resolveEnumPref(userDoc?.defaultSettlementMode, storedMode, SETTLEMENT_MODES));
-      setToleranceState(resolveFloatPref(userDoc?.defaultTolerance, storedTol));
-      setBuyInState(resolveFloatPref(userDoc?.defaultBuyIn, storedBuyIn));
+      const unit = resolveIntPref(userDoc?.defaultCashUnit, storedUnit);
+      const mode = resolveEnumPref(userDoc?.defaultSettlementMode, storedMode, SETTLEMENT_MODES);
+      const tol = resolveFloatPref(userDoc?.defaultTolerance, storedTol);
+      const buyIn = resolveFloatPref(userDoc?.defaultBuyIn, storedBuyIn);
+
+      setCashUnitState(unit);
+      setModeState(mode);
+      setToleranceState(tol);
+      setBuyInState(buyIn);
+
+      // Cache anything that came from the user doc, so this account keeps an
+      // offline copy. Without it, purging the legacy keys loses the value for a
+      // user whose first launch after the update is offline (userDoc is null on
+      // that path) and it never self-heals.
+      await Promise.all([
+        seedPrefIfAbsent(PREF_KEYS.defaultCashUnit, uid, storedUnit, unit),
+        seedPrefIfAbsent(PREF_KEYS.defaultSettlementMode, uid, storedMode, mode),
+        seedPrefIfAbsent(PREF_KEYS.defaultTolerance, uid, storedTol, tol),
+        seedPrefIfAbsent(PREF_KEYS.defaultBuyIn, uid, storedBuyIn, buyIn),
+      ]);
     };
     load();
     return () => {
