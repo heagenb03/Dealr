@@ -150,6 +150,21 @@ describe('deserializeFirestoreGame', () => {
     const game = deserializeFirestoreGame(baseDoc);
     expect(game.imbalanceTolerance).toBeUndefined();
   });
+
+  it('preserves defaultBuyIn through deserialization', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, defaultBuyIn: 20 });
+    expect(game.defaultBuyIn).toBe(20);
+  });
+
+  it('preserves a defaultBuyIn of 0 (off) — no falsy coercion', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, defaultBuyIn: 0 });
+    expect(game.defaultBuyIn).toBe(0);
+  });
+
+  it('leaves defaultBuyIn undefined when absent', () => {
+    const game = deserializeFirestoreGame(baseDoc);
+    expect(game.defaultBuyIn).toBeUndefined();
+  });
 });
 
 describe('fetchSavedPlayersFromFirestore', () => {

@@ -113,3 +113,16 @@ describe('StorageService.loadGames — player field fidelity', () => {
     expect(loadedA.players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'a-h' });
   });
 });
+
+describe('StorageService.loadGames — game field fidelity', () => {
+  it('round-trips defaultBuyIn, including an explicit 0 (off)', async () => {
+    await StorageService.saveGames([
+      makeGame({ id: 'g1', defaultBuyIn: 20 }),
+      makeGame({ id: 'g2', defaultBuyIn: 0 }),
+    ]);
+    const loaded = await StorageService.loadGames();
+
+    expect(loaded.find(g => g.id === 'g1')?.defaultBuyIn).toBe(20);
+    expect(loaded.find(g => g.id === 'g2')?.defaultBuyIn).toBe(0);
+  });
+});
