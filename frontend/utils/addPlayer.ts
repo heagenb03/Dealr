@@ -40,9 +40,14 @@ export function filterSavedByQuery(saved: SavedPlayer[], query: string): SavedPl
  * appears once there is something to confirm. Excludes the ✓ glyph — the
  * caller renders that as styled prefix.
  */
-export function formatAddedConfirmation(lastAddedName: string | null, count: number): string | null {
+export function formatAddedConfirmation(
+  lastAddedName: string | null,
+  count: number,
+  amountLabel?: string | null,
+): string | null {
   if (count < 1 || !lastAddedName) return null;
-  return `Added ${lastAddedName} · ${count} total`;
+  const amount = amountLabel ? ` · ${amountLabel}` : '';
+  return `Added ${lastAddedName}${amount} · ${count} total`;
 }
 
 /**

@@ -70,6 +70,20 @@ describe('formatAddedConfirmation', () => {
     expect(formatAddedConfirmation('Mike', 1)).toBe('Added Mike · 1 total');
     expect(formatAddedConfirmation('Gabe R.', 3)).toBe('Added Gabe R. · 3 total');
   });
+
+  it('inserts the amount label between name and count when provided', () => {
+    expect(formatAddedConfirmation('Mike', 3, '$20')).toBe('Added Mike · $20 · 3 total');
+  });
+
+  it('output is unchanged when no amount label is provided', () => {
+    expect(formatAddedConfirmation('Mike', 3)).toBe('Added Mike · 3 total');
+    expect(formatAddedConfirmation('Mike', 3, null)).toBe('Added Mike · 3 total');
+  });
+
+  it('still returns null before any add, amount label or not', () => {
+    expect(formatAddedConfirmation(null, 0, '$20')).toBeNull();
+    expect(formatAddedConfirmation('Mike', 0, '$20')).toBeNull();
+  });
 });
 
 describe('singleExactSavedMatch', () => {
