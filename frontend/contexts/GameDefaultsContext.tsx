@@ -1,15 +1,20 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/services/firebaseService';
 import { useAuth } from '@/contexts/AuthContext';
-
-const CASH_UNIT_KEY = 'cc.defaultCashUnit';
-const MODE_KEY = 'cc.defaultSettlementMode';
-const TOLERANCE_KEY = 'cc.defaultTolerance';
-const BUYIN_KEY = 'cc.defaultBuyIn';
+import {
+  PREF_KEYS,
+  readPref,
+  writePref,
+  ensureLegacyPrefsPurged,
+  resolveIntPref,
+  resolveFloatPref,
+  resolveEnumPref,
+} from '@/services/userPrefsService';
 
 type SettlementMode = 'optimal' | 'banker';
+
+const SETTLEMENT_MODES: readonly SettlementMode[] = ['optimal', 'banker'];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,136 +43,113 @@ const GameDefaultsContext = createContext<GameDefaultsContextType | undefined>(u
 
 export function GameDefaultsProvider({ children }: { children: ReactNode }) {
   const { user, userDoc } = useAuth();
+  const uid = user?.uid;
 
   const [defaultCashUnit, setCashUnitState] = useState<number | undefined>(undefined);
   const [defaultSettlementMode, setModeState] = useState<SettlementMode | undefined>(undefined);
   const [defaultTolerance, setToleranceState] = useState<number | undefined>(undefined);
   const [defaultBuyIn, setBuyInState] = useState<number | undefined>(undefined);
 
-  // On mount / auth change: read from userDoc first, then AsyncStorage for
-  // whatever userDoc did not supply. Mirrors CurrencyContext.
+  // Clear the previous account's defaults DURING RENDER, not in an effect.
+  // GameContext stamps these four values onto every new game, so an async reset
+  // leaves a window in which the incoming user could create a game carrying the
+  // previous user's values — and once stamped they are persisted into the game
+  // document, which is far worse than a transient UI flash. Adjusting state in
+  // render means no child ever observes the stale value.
+  //
+  // Keyed on `uid` and nothing else: `userDoc` gets a fresh object identity on
+  // every Firestore snapshot for the SAME user (and goes transiently null on
+  // the offline/missing-doc paths), so keying on it would blank the defaults
+  // repeatedly mid-session.
+  const lastUidRef = useRef<string | undefined>(uid);
+  if (lastUidRef.current !== uid) {
+    lastUidRef.current = uid;
+    setCashUnitState(undefined);
+    setModeState(undefined);
+    setToleranceState(undefined);
+    setBuyInState(undefined);
+  }
+
+  // Resolve each value: this account's Firestore user doc first, then this
+  // account's locally cached copy for whatever the doc did not supply.
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      const docUnit = (userDoc as any)?.defaultCashUnit;
-      const docMode = (userDoc as any)?.defaultSettlementMode;
-      const docTol = (userDoc as any)?.defaultTolerance;
-      const docBuyIn = (userDoc as any)?.defaultBuyIn;
-      let unitResolved = false;
-      let modeResolved = false;
-      let tolResolved = false;
-      let buyInResolved = false;
-      if (typeof docUnit === 'number') {
-        setCashUnitState(docUnit);
-        unitResolved = true;
-      }
-      if (docMode === 'optimal' || docMode === 'banker') {
-        setModeState(docMode);
-        modeResolved = true;
-      }
-      if (typeof docTol === 'number') {
-        setToleranceState(docTol);
-        tolResolved = true;
-      }
-      if (typeof docBuyIn === 'number') {
-        setBuyInState(docBuyIn);
-        buyInResolved = true;
-      }
-      try {
-        if (!unitResolved) {
-          const stored = await AsyncStorage.getItem(CASH_UNIT_KEY);
-          if (stored !== null) {
-            const n = parseInt(stored, 10);
-            if (Number.isFinite(n)) setCashUnitState(n);
-          }
-        }
-        if (!modeResolved) {
-          const storedMode = await AsyncStorage.getItem(MODE_KEY);
-          if (storedMode === 'optimal' || storedMode === 'banker') setModeState(storedMode);
-        }
-        if (!tolResolved) {
-          const storedTol = await AsyncStorage.getItem(TOLERANCE_KEY);
-          if (storedTol !== null) {
-            const n = parseFloat(storedTol);
-            if (Number.isFinite(n)) setToleranceState(n);
-          }
-        }
-        if (!buyInResolved) {
-          const storedBuyIn = await AsyncStorage.getItem(BUYIN_KEY);
-          if (storedBuyIn !== null) {
-            const n = parseFloat(storedBuyIn);
-            if (Number.isFinite(n)) setBuyInState(n);
-          }
-        }
-      } catch {
-        // ignore storage errors — stay unset
-      }
+      // One-time hygiene: drop the pre-account-scoping device-global keys.
+      ensureLegacyPrefsPurged();
+
+      // Signed out: hold "unset" and read no account's preferences.
+      if (!uid) return;
+
+      const [storedUnit, storedMode, storedTol, storedBuyIn] = await Promise.all([
+        readPref(PREF_KEYS.defaultCashUnit, uid),
+        readPref(PREF_KEYS.defaultSettlementMode, uid),
+        readPref(PREF_KEYS.defaultTolerance, uid),
+        readPref(PREF_KEYS.defaultBuyIn, uid),
+      ]);
+      // A fast account switch can resolve this read after the next account's
+      // reset has already run — dropping it here is what keeps A's value from
+      // landing on top of B.
+      if (cancelled) return;
+
+      setCashUnitState(resolveIntPref(userDoc?.defaultCashUnit, storedUnit));
+      setModeState(resolveEnumPref(userDoc?.defaultSettlementMode, storedMode, SETTLEMENT_MODES));
+      setToleranceState(resolveFloatPref(userDoc?.defaultTolerance, storedTol));
+      setBuyInState(resolveFloatPref(userDoc?.defaultBuyIn, storedBuyIn));
     };
     load();
-  }, [userDoc]);
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, userDoc]);
 
   const setDefaultCashUnit = useCallback(async (unit: number) => {
     setCashUnitState(unit);
-    try {
-      await AsyncStorage.setItem(CASH_UNIT_KEY, String(unit));
-    } catch {
-      // ignore
-    }
-    if (user) {
+    await writePref(PREF_KEYS.defaultCashUnit, uid, String(unit));
+    if (uid) {
       try {
-        await updateDoc(doc(db, 'users', user.uid), { defaultCashUnit: unit });
+        await updateDoc(doc(db, 'users', uid), { defaultCashUnit: unit });
       } catch {
-        // offline or permission failure — AsyncStorage copy is the source of truth
+        // offline or permission failure — the per-account local copy stands in
       }
     }
-  }, [user]);
+  }, [uid]);
 
   const setDefaultSettlementMode = useCallback(async (mode: SettlementMode) => {
     setModeState(mode);
-    try {
-      await AsyncStorage.setItem(MODE_KEY, mode);
-    } catch {
-      // ignore
-    }
-    if (user) {
+    await writePref(PREF_KEYS.defaultSettlementMode, uid, mode);
+    if (uid) {
       try {
-        await updateDoc(doc(db, 'users', user.uid), { defaultSettlementMode: mode });
+        await updateDoc(doc(db, 'users', uid), { defaultSettlementMode: mode });
       } catch {
-        // offline or permission failure — AsyncStorage copy is the source of truth
+        // offline or permission failure — the per-account local copy stands in
       }
     }
-  }, [user]);
+  }, [uid]);
 
   const setDefaultTolerance = useCallback(async (tolerance: number) => {
     setToleranceState(tolerance);
-    try {
-      await AsyncStorage.setItem(TOLERANCE_KEY, String(tolerance));
-    } catch {
-      // ignore
-    }
-    if (user) {
+    await writePref(PREF_KEYS.defaultTolerance, uid, String(tolerance));
+    if (uid) {
       try {
-        await updateDoc(doc(db, 'users', user.uid), { defaultTolerance: tolerance });
+        await updateDoc(doc(db, 'users', uid), { defaultTolerance: tolerance });
       } catch {
-        // offline or permission failure — AsyncStorage copy is the source of truth
+        // offline or permission failure — the per-account local copy stands in
       }
     }
-  }, [user]);
+  }, [uid]);
 
   const setDefaultBuyIn = useCallback(async (amount: number) => {
     setBuyInState(amount);
-    try {
-      await AsyncStorage.setItem(BUYIN_KEY, String(amount));
-    } catch {
-      // ignore
-    }
-    if (user) {
+    await writePref(PREF_KEYS.defaultBuyIn, uid, String(amount));
+    if (uid) {
       try {
-        await updateDoc(doc(db, 'users', user.uid), { defaultBuyIn: amount });
+        await updateDoc(doc(db, 'users', uid), { defaultBuyIn: amount });
       } catch {
-        // offline or permission failure — AsyncStorage copy is the source of truth
+        // offline or permission failure — the per-account local copy stands in
       }
     }
-  }, [user]);
+  }, [uid]);
 
   return (
     <GameDefaultsContext.Provider

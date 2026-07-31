@@ -42,6 +42,8 @@ interface UserDocument {
   defaultCashUnit?: number;
   defaultSettlementMode?: 'optimal' | 'banker';
   defaultTolerance?: number;
+  /** Default buy-in for new games (native currency units). Undefined or 0 = off. */
+  defaultBuyIn?: number;
 }
 
 interface AuthContextType {

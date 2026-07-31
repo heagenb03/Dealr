@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/services/firebaseService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,8 +8,15 @@ import {
   SUPPORTED_CURRENCIES,
   DEFAULT_CURRENCY,
 } from '@/constants/Currencies';
+import {
+  PREF_KEYS,
+  readPref,
+  writePref,
+  ensureLegacyPrefsPurged,
+  resolveEnumPref,
+} from '@/services/userPrefsService';
 
-const ASYNC_STORAGE_KEY = 'cc.currency';
+const CURRENCY_CODES = Object.keys(SUPPORTED_CURRENCIES) as CurrencyCode[];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,49 +40,54 @@ const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const { user, userDoc } = useAuth();
+  const uid = user?.uid;
 
-  // Resolve starting currency: userDoc > AsyncStorage fallback handled in effect
+  // Resolve starting currency: userDoc > this account's local copy (in effect)
   const [currency, setCurrencyState] = useState<CurrencyCode>(DEFAULT_CURRENCY);
 
-  // On mount / auth change: read from userDoc first, then AsyncStorage
+  // Drop the previous account's currency DURING RENDER so no child ever formats
+  // an amount in a currency belonging to a different account. Keyed on `uid`
+  // alone — `userDoc` gets a new identity on every Firestore snapshot for the
+  // same user and goes transiently null while offline.
+  const lastUidRef = useRef<string | undefined>(uid);
+  if (lastUidRef.current !== uid) {
+    lastUidRef.current = uid;
+    setCurrencyState(DEFAULT_CURRENCY);
+  }
+
+  // On auth change: read from this account's userDoc first, then its local copy
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      // 1. Prefer Firestore value if it came through userDoc
-      const docCurrency = (userDoc as any)?.currency as CurrencyCode | undefined;
-      if (docCurrency && SUPPORTED_CURRENCIES[docCurrency]) {
-        setCurrencyState(docCurrency);
-        return;
-      }
-      // 2. Fall back to locally cached preference
-      try {
-        const stored = await AsyncStorage.getItem(ASYNC_STORAGE_KEY);
-        if (stored && SUPPORTED_CURRENCIES[stored as CurrencyCode]) {
-          setCurrencyState(stored as CurrencyCode);
-        }
-      } catch {
-        // ignore storage errors — stay on default
-      }
+      ensureLegacyPrefsPurged();
+      // Signed out: stay on the default and read no account's preference.
+      if (!uid) return;
+      const stored = await readPref(PREF_KEYS.currency, uid);
+      // Guard against a fast account switch resolving out of order.
+      if (cancelled) return;
+      setCurrencyState(
+        resolveEnumPref<CurrencyCode>(userDoc?.currency, stored, CURRENCY_CODES) ?? DEFAULT_CURRENCY
+      );
     };
     load();
-  }, [userDoc]);
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, userDoc]);
 
   const setCurrency = useCallback(async (code: CurrencyCode) => {
     setCurrencyState(code);
     // Persist locally immediately (works offline)
-    try {
-      await AsyncStorage.setItem(ASYNC_STORAGE_KEY, code);
-    } catch {
-      // ignore
-    }
+    await writePref(PREF_KEYS.currency, uid, code);
     // Sync to Firestore if signed in
-    if (user) {
+    if (uid) {
       try {
-        await updateDoc(doc(db, 'users', user.uid), { currency: code });
+        await updateDoc(doc(db, 'users', uid), { currency: code });
       } catch {
-        // Offline or permission failure — AsyncStorage copy is the source of truth
+        // Offline or permission failure — the per-account local copy stands in
       }
     }
-  }, [user]);
+  }, [uid]);
 
   const meta = SUPPORTED_CURRENCIES[currency];
 
