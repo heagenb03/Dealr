@@ -37,7 +37,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation } from '@/utils/addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -167,7 +167,6 @@ function SolvingOverlay() {
 
 const PLAYERS_PAYWALL_MESSAGE = 'Upgrade to Pro for unlimited players per game.';
 const SAVED_CAP_PAYWALL_MESSAGE = `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
-const RECENT_LIMIT = 5;
 const HELP_HINT_SEEN_KEY = 'help_hint_seen';
 const DEFAULT_GAME_NAME = 'Untitled Game';
 
@@ -452,8 +451,13 @@ export default function ActiveGameScreen() {
   // Save-toggle state for the Add Player modal (spec: the cap is never silent).
   const savedListFull = !canAddMoreSavedPlayers(savedPlayers.length, isPro);
   const trimmedName = newPlayerName.trim();
-  const filteredSaved = filterSavedByQuery(savedPlayers, newPlayerName);
-  const visibleSaved = filteredSaved.slice(0, RECENT_LIMIT);
+  // Alphabetical, not the service's updatedAt-desc order: every add bumps updatedAt, so
+  // recency order would reorder the list under the user's finger mid-session.
+  const sortedSaved = useMemo(() => sortSavedByName(savedPlayers), [savedPlayers]);
+  const filteredSaved = filterSavedByQuery(sortedSaved, newPlayerName);
+  // No window — the whole roster must be tappable. Kept as a named binding because it is
+  // the argument to shouldShowAddedConfirmation below and that helper's parameter name.
+  const visibleSaved = filteredSaved;
   const isTypedNew =
     trimmedName.length > 0 &&
     !selectedSavedId &&
@@ -1365,9 +1369,6 @@ export default function ActiveGameScreen() {
                 );
               })}
             </View>
-            {filteredSaved.length > RECENT_LIMIT && (
-              <Text style={styles.pickMoreHint}>+{filteredSaved.length - RECENT_LIMIT} more ›</Text>
-            )}
           </>
         )}
 
@@ -2178,12 +2179,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
     alignSelf: 'flex-start',
-    marginBottom: 12,
-  },
-  pickMoreHint: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
-    alignSelf: 'flex-end',
     marginBottom: 12,
   },
   saveToggleSlot: {
