@@ -243,6 +243,14 @@ describe('isLosslessUndo', () => {
     expect(isLosslessUndo(gabe, [tx('p_Gabe', 'cashout', 0)], DEFAULT, undefined)).toBe(false);
   });
 
+  // Pins the `only.type === 'buyin'` clause. The existing lone-cashout case uses
+  // amount 0, so it fails on the amount check and never exercises the type check.
+  // A cashout that happens to equal the default must still be lossy: removing the
+  // player would cascade-delete a real cashout.
+  it('is false with a lone cashout whose amount equals the default', () => {
+    expect(isLosslessUndo(gabe, [tx('p_Gabe', 'cashout', 20)], DEFAULT, undefined)).toBe(false);
+  });
+
   // With no default configured there is no amount a re-tap would restore.
   it('is false when the game has no default buy-in', () => {
     expect(isLosslessUndo(gabe, [tx('p_Gabe', 'buyin', 20)], 0, undefined)).toBe(false);
