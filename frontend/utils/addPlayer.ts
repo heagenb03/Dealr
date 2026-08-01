@@ -1,4 +1,4 @@
-import type { Player } from '@/types/game';
+import type { Player, Transaction } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
 /** Trim + lowercase for case-insensitive name comparison. */
@@ -119,4 +119,34 @@ export function shouldShowAddedConfirmation(
  */
 export function sortSavedByName(saved: SavedPlayer[]): SavedPlayer[] {
   return [...saved].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+}
+
+/**
+ * True when removing this player from the game is perfectly reversible by re-tapping their
+ * saved row — they hold no state a re-add would not reproduce. Gates SILENT undo in the Add
+ * Players modal; everything else must route to a confirmation, because
+ * GameService.removePlayer cascade-deletes the player's transactions.
+ *
+ * The three clauses each pin something a re-add cannot restore:
+ *  - completedAt: a cashed-out player has been reconciled; that is bookkeeping, not a mis-tap.
+ *  - bankerPlayerId: removePlayer silently resets settlementMode to 'optimal' and clears the
+ *    banker; re-adding does not re-designate them.
+ *  - transactions: only "none" or "exactly the default buy-in" are reproducible. A hand-typed
+ *    amount, a rebuy, or a cashout is real data.
+ */
+export function isLosslessUndo(
+  player: Player,
+  transactions: Transaction[],
+  gameDefaultBuyIn: number,
+  bankerPlayerId: string | undefined,
+): boolean {
+  if (player.completedAt) return false;
+  if (bankerPlayerId === player.id) return false;
+
+  const own = transactions.filter(t => t.playerId === player.id);
+  if (own.length === 0) return true;
+  if (own.length > 1) return false;
+
+  const only = own[0];
+  return only.type === 'buyin' && gameDefaultBuyIn > 0 && only.amount === gameDefaultBuyIn;
 }

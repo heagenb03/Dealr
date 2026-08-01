@@ -1,5 +1,5 @@
-import { isNameTakenInGame, findPlayerByName, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation, sortSavedByName } from '../addPlayer';
-import type { Player } from '@/types/game';
+import { isNameTakenInGame, findPlayerByName, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation, sortSavedByName, isLosslessUndo } from '../addPlayer';
+import type { Player, Transaction } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
 const player = (name: string, completed = false): Player => ({
@@ -202,5 +202,76 @@ describe('sortSavedByName', () => {
   });
   it('returns an empty array unchanged', () => {
     expect(sortSavedByName([])).toEqual([]);
+  });
+});
+
+describe('isLosslessUndo', () => {
+  const DEFAULT = 20;
+  const tx = (playerId: string, type: 'buyin' | 'cashout', amount: number): Transaction => ({
+    id: `t_${playerId}_${type}_${amount}`,
+    playerId,
+    type,
+    amount,
+    timestamp: new Date(),
+  });
+  const gabe = player('Gabe');
+
+  it('is true with no transactions at all', () => {
+    expect(isLosslessUndo(gabe, [], DEFAULT, undefined)).toBe(true);
+  });
+
+  it('is true with exactly one buyin at the game default', () => {
+    expect(isLosslessUndo(gabe, [tx('p_Gabe', 'buyin', 20)], DEFAULT, undefined)).toBe(true);
+  });
+
+  // A hand-typed amount is NOT reproducible by a re-tap — the re-add would use the default.
+  it('is false with one buyin at a different amount', () => {
+    expect(isLosslessUndo(gabe, [tx('p_Gabe', 'buyin', 47.5)], DEFAULT, undefined)).toBe(false);
+  });
+
+  it('is false with a rebuy on top of the default buyin', () => {
+    const txs = [tx('p_Gabe', 'buyin', 20), tx('p_Gabe', 'buyin', 20)];
+    expect(isLosslessUndo(gabe, txs, DEFAULT, undefined)).toBe(false);
+  });
+
+  it('is false when a cashout is present', () => {
+    const txs = [tx('p_Gabe', 'buyin', 20), tx('p_Gabe', 'cashout', 35)];
+    expect(isLosslessUndo(gabe, txs, DEFAULT, undefined)).toBe(false);
+  });
+
+  it('is false with a lone cashout and no buyin', () => {
+    expect(isLosslessUndo(gabe, [tx('p_Gabe', 'cashout', 0)], DEFAULT, undefined)).toBe(false);
+  });
+
+  // With no default configured there is no amount a re-tap would restore.
+  it('is false when the game has no default buy-in', () => {
+    expect(isLosslessUndo(gabe, [tx('p_Gabe', 'buyin', 20)], 0, undefined)).toBe(false);
+  });
+
+  it('is still true with no transactions even when the game has no default buy-in', () => {
+    expect(isLosslessUndo(gabe, [], 0, undefined)).toBe(true);
+  });
+
+  // removePlayer silently resets settlementMode to 'optimal' and clears bankerPlayerId.
+  // A re-add does not restore banker designation, so this is lossy by definition.
+  it('is false when the player is the designated banker', () => {
+    expect(isLosslessUndo(gabe, [], DEFAULT, 'p_Gabe')).toBe(false);
+  });
+
+  it('is true when someone ELSE is the banker', () => {
+    expect(isLosslessUndo(gabe, [], DEFAULT, 'p_Mike')).toBe(true);
+  });
+
+  it('is false when the player has completed', () => {
+    expect(isLosslessUndo(player('Gabe', true), [], DEFAULT, undefined)).toBe(false);
+  });
+
+  it('ignores other players transactions', () => {
+    const txs = [tx('p_Mike', 'buyin', 20), tx('p_Mike', 'cashout', 90), tx('p_Gabe', 'buyin', 20)];
+    expect(isLosslessUndo(gabe, txs, DEFAULT, undefined)).toBe(true);
+  });
+
+  it('is true with no transactions when the array holds only other players rows', () => {
+    expect(isLosslessUndo(gabe, [tx('p_Mike', 'buyin', 20)], DEFAULT, undefined)).toBe(true);
   });
 });
