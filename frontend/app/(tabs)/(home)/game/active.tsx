@@ -532,6 +532,9 @@ export default function ActiveGameScreen() {
     // removePlayer clears bankerPlayerId AND resets settlementMode to 'optimal'.
     const n = activeGame.transactions.filter(t => t.playerId === player.id).length;
     const parts: string[] = [];
+    if (player.completedAt) {
+      parts.push('They have already been marked complete — removing them undoes that.');
+    }
     if (activeGame.bankerPlayerId === player.id) {
       parts.push("They are this game's banker — removing them clears the banker and switches settlement back to Direct.");
     }
@@ -540,6 +543,10 @@ export default function ActiveGameScreen() {
         ? 'This deletes their transaction from this game.'
         : `This deletes their ${n} transactions from this game.`);
     }
+    // Defensive only: with all three refusal reasons above covered, an empty body is
+    // unreachable — isLosslessUndo returns true for zero transactions, so a refusal with
+    // no banker role and no completedAt must have come from the transaction branch, which
+    // guarantees n > 0. Kept so the Alert can never render an empty message.
     if (parts.length === 0) parts.push('This removes them from this game.');
     Alert.alert(
       `Remove ${player.name}?`,

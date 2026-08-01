@@ -40,6 +40,13 @@ describe('findPlayerByName', () => {
   it('returns null for an empty/whitespace name', () => {
     expect(findPlayerByName([player('Gabe')], '   ')).toBeNull();
   });
+  // Pins the `if (!target) return null` guard. The whitespace test above cannot: with no
+  // blank-named player in the roster the find misses regardless. Only a blank-named player
+  // makes the guard load-bearing — without it, norm('  ') === norm('   ') === '' matches.
+  it('returns null for a blank query even when the roster holds a blank-named player', () => {
+    const roster = [{ id: 'blank', name: '   ' }] as Player[];
+    expect(findPlayerByName(roster, '  ')).toBeNull();
+  });
   it('returns null for an empty roster', () => {
     expect(findPlayerByName([], 'Gabe')).toBeNull();
   });
@@ -254,6 +261,15 @@ describe('isLosslessUndo', () => {
   // With no default configured there is no amount a re-tap would restore.
   it('is false when the game has no default buy-in', () => {
     expect(isLosslessUndo(gabe, [tx('p_Gabe', 'buyin', 20)], 0, undefined)).toBe(false);
+  });
+
+  // Pins the `gameDefaultBuyIn > 0` guard. The test above cannot: it uses a buyin of 20
+  // against a default of 0, so the amount comparison returns false before the guard is
+  // reached. Only amount === default === 0 exercises it. GameService.addTransaction
+  // rejects totalAmount <= 0, so this state is not constructible through the app — the
+  // guard is dead-defensive, and this test is what keeps it from being "simplified" away.
+  it('is false for a zero-amount buyin when the game default is also zero', () => {
+    expect(isLosslessUndo(gabe, [tx('p_Gabe', 'buyin', 0)], 0, undefined)).toBe(false);
   });
 
   it('is still true with no transactions even when the game has no default buy-in', () => {
