@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,6 +39,7 @@ import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
+import { keyboardSafeCardMaxHeight } from '@/utils/modalCardHeight';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -174,6 +175,16 @@ export default function ActiveGameScreen() {
   const { activeGame, updateGame, setActiveGame, createGame } = useGame();
   const { user, isPro } = useAuth();
   const { formatAmount, meta, currency } = useCurrency();
+  const { height: windowHeight } = useWindowDimensions();
+  // Caps the Add Players card so its PINNED footer still clears the keyboard.
+  // computeCardLift cannot raise a tall card far enough, so without this cap the
+  // Add/Done button would sit behind the keyboard with no way to reach it.
+  // Declared here with the other hooks — it MUST stay above the `if (!activeGame)`
+  // early return further down, or this becomes a Rules-of-Hooks violation.
+  const addPlayerCardStyle = useMemo(
+    () => ({ maxHeight: keyboardSafeCardMaxHeight(windowHeight) }),
+    [windowHeight],
+  );
   const router = useRouter();
   const { registerHelp } = useHelp();
   const [helpVisible, setHelpVisible] = useState(false);
@@ -1383,6 +1394,47 @@ export default function ActiveGameScreen() {
         title="Add Players"
         onClose={closeAddModal}
         contentStyle={appModalStyles.centeredContent}
+        cardStyle={addPlayerCardStyle}
+        header={
+          /* Subject header (decisive pick) OR search field (Browse / typing).
+             Pinned: typing filters the list below, so it must stay visible. */
+          committingTapped ? (
+            <TouchableOpacity
+              style={styles.addingHeader}
+              onPress={clearSubject}
+              accessibilityRole="button"
+              accessibilityLabel="Back to saved players"
+            >
+              <Ionicons name="chevron-back" size={18} color="#B072BB" />
+              <Text style={styles.addingHeaderText}>
+                Adding <Text style={styles.addingHeaderName}>{trimmedName}</Text>
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TextInput
+              ref={nameInputRef}
+              style={styles.input}
+              value={newPlayerName}
+              onChangeText={handleNameChange}
+              placeholder="Search saved or type a name"
+              placeholderTextColor="#666"
+              autoFocus
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+          )
+        }
+        footer={
+          /* Pinned: this is the whole point of the change — the Done/Add button
+             must never scroll out of reach behind a long saved-player list. */
+          <View style={styles.modalButtons}>
+            {hasSubject ? (
+              <ModalButton variant="confirm" title="Add" onPress={() => commitAddPlayer()} />
+            ) : (
+              <ModalButton variant="cancel" title="Done" onPress={closeAddModal} />
+            )}
+          </View>
+        }
       >
         {pendingBankerDesignation && (
           <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
@@ -1390,33 +1442,6 @@ export default function ActiveGameScreen() {
 
         {shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
           <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
-        )}
-
-        {/* Subject header (decisive pick) OR search field (Browse / typing). */}
-        {committingTapped ? (
-          <TouchableOpacity
-            style={styles.addingHeader}
-            onPress={clearSubject}
-            accessibilityRole="button"
-            accessibilityLabel="Back to saved players"
-          >
-            <Ionicons name="chevron-back" size={18} color="#B072BB" />
-            <Text style={styles.addingHeaderText}>
-              Adding <Text style={styles.addingHeaderName}>{trimmedName}</Text>
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TextInput
-            ref={nameInputRef}
-            style={styles.input}
-            value={newPlayerName}
-            onChangeText={handleNameChange}
-            placeholder="Search saved or type a name"
-            placeholderTextColor="#666"
-            autoFocus
-            autoCapitalize="words"
-            returnKeyType="next"
-          />
         )}
 
         {/* Pick-first saved list — Browse + typing only; hidden on decisive pick.
@@ -1514,14 +1539,6 @@ export default function ActiveGameScreen() {
         {atPlayerCap && (
           <Text style={styles.pickHint}>Free limit reached · 12 players. Upgrade to Pro for unlimited.</Text>
         )}
-
-        <View style={styles.modalButtons}>
-          {hasSubject ? (
-            <ModalButton variant="confirm" title="Add" onPress={() => commitAddPlayer()} />
-          ) : (
-            <ModalButton variant="cancel" title="Done" onPress={closeAddModal} />
-          )}
-        </View>
       </AppModal>
 
       {/* Add Transaction Modal */}
