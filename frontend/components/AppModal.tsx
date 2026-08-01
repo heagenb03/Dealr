@@ -31,6 +31,16 @@ export interface AppModalCardProps {
    * as children instead.
    */
   title?: string;
+  /**
+   * Pinned between the title and the scrolling body — stays put while the body
+   * scrolls. Use for a search field or anything that must remain reachable.
+   */
+  header?: React.ReactNode;
+  /**
+   * Pinned below the scrolling body — stays put while the body scrolls. Use for
+   * an action row that must never scroll out of reach.
+   */
+  footer?: React.ReactNode;
   /** Tap on the dim backdrop closes the modal. Set false on destructive confirms. */
   dismissOnBackdrop?: boolean;
   /** Merged onto the card (e.g. tighter padding). */
@@ -75,14 +85,15 @@ const Backdrop: React.FC<{ dismissOnBackdrop: boolean; onPress: () => void }> = 
   />
 );
 
-/** Optional title + scrolling body shared by both platform cards. */
+/** Optional title + pinned header + scrolling body + pinned footer. */
 const CardBody: React.FC<
-  Pick<AppModalCardProps, 'title' | 'contentStyle' | 'children'>
-> = ({ title, contentStyle, children }) => (
+  Pick<AppModalCardProps, 'title' | 'header' | 'footer' | 'contentStyle' | 'children'>
+> = ({ title, header, footer, contentStyle, children }) => (
   <>
     {title ? <Text style={appModalStyles.title}>{title}</Text> : null}
+    {header}
     <ScrollView
-      style={styles.body}
+      style={[styles.body, header || footer ? styles.bodyShrinkable : null]}
       contentContainerStyle={[styles.bodyContent, contentStyle]}
       keyboardShouldPersistTaps="handled"
       bounces={false}
@@ -90,6 +101,7 @@ const CardBody: React.FC<
     >
       {children}
     </ScrollView>
+    {footer}
   </>
 );
 
@@ -103,6 +115,8 @@ const CardBody: React.FC<
 const IOSKeyboardCard: React.FC<AppModalCardProps> = ({
   onClose,
   title,
+  header,
+  footer,
   dismissOnBackdrop = true,
   cardStyle,
   contentStyle,
@@ -142,7 +156,7 @@ const IOSKeyboardCard: React.FC<AppModalCardProps> = ({
             cardHeight.value = e.nativeEvent.layout.height;
           }}
         >
-          <CardBody title={title} contentStyle={contentStyle}>
+          <CardBody title={title} header={header} footer={footer} contentStyle={contentStyle}>
             {children}
           </CardBody>
         </Animated.View>
@@ -159,6 +173,8 @@ const IOSKeyboardCard: React.FC<AppModalCardProps> = ({
 const AndroidKavCard: React.FC<AppModalCardProps> = ({
   onClose,
   title,
+  header,
+  footer,
   dismissOnBackdrop = true,
   cardStyle,
   contentStyle,
@@ -171,7 +187,7 @@ const AndroidKavCard: React.FC<AppModalCardProps> = ({
         onPress={() => handleBackdropPress(dismissOnBackdrop, onClose)}
       />
       <View style={[styles.card, cardStyle]}>
-        <CardBody title={title} contentStyle={contentStyle}>
+        <CardBody title={title} header={header} footer={footer} contentStyle={contentStyle}>
           {children}
         </CardBody>
       </View>
@@ -247,6 +263,16 @@ const styles = StyleSheet.create({
   },
   body: {
     flexGrow: 0,
+  },
+  // React Native defaults flexShrink to 0 (the web default is 1). Without this a
+  // body ScrollView keeps its full content height and pushes a sibling footer
+  // out of the card instead of yielding space, so the pinned footer would be
+  // clipped rather than the list scrolling. flexGrow stays 0 so short content
+  // still collapses the card to its content height rather than stretching it.
+  // Applied ONLY when header/footer are present, so every existing caller is
+  // byte-identical.
+  bodyShrinkable: {
+    flexShrink: 1,
   },
   bodyContent: {},
 });
