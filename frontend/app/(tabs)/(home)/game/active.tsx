@@ -525,12 +525,25 @@ export default function ActiveGameScreen() {
       void removeAddedPlayer(player);
       return;
     }
+    // isLosslessUndo refuses for three different reasons, so the prompt names the ones that
+    // actually apply rather than assuming it was the transaction count. A banker holding no
+    // buy-in is reachable (Add-someone from the banker picker with an empty buy-in field),
+    // and reporting "0 transactions" there is both wrong and hides the real loss:
+    // removePlayer clears bankerPlayerId AND resets settlementMode to 'optimal'.
     const n = activeGame.transactions.filter(t => t.playerId === player.id).length;
+    const parts: string[] = [];
+    if (activeGame.bankerPlayerId === player.id) {
+      parts.push("They are this game's banker — removing them clears the banker and switches settlement back to Direct.");
+    }
+    if (n > 0) {
+      parts.push(n === 1
+        ? 'This deletes their transaction from this game.'
+        : `This deletes their ${n} transactions from this game.`);
+    }
+    if (parts.length === 0) parts.push('This removes them from this game.');
     Alert.alert(
       `Remove ${player.name}?`,
-      n === 1
-        ? 'This deletes their transaction from this game.'
-        : `This deletes their ${n} transactions from this game.`,
+      parts.join(' '),
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: () => { void removeAddedPlayer(player); } },
