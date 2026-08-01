@@ -1107,6 +1107,26 @@ export default function ActiveGameScreen() {
 
               <TouchableOpacity
                 style={styles.menuItem}
+                onPress={() => {
+                  setDefaultBuyInInput(gameDefaultBuyIn > 0 ? String(gameDefaultBuyIn) : '');
+                  setShowDefaultBuyInModal(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.menuItemLabel}>Default buy-in</Text>
+                </View>
+                <View style={styles.menuItemRight}>
+                  <Text style={styles.menuItemValue}>{defaultBuyInLabel}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.menuDivider} />
+
+              <TouchableOpacity
+                style={styles.menuItem}
                 onPress={() => setShowCashUnitPicker(true)}
                 activeOpacity={0.7}
               >
@@ -1133,26 +1153,6 @@ export default function ActiveGameScreen() {
                 </View>
                 <View style={styles.menuItemRight}>
                   <Text style={styles.menuItemValue}>{toleranceValueLabel}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.menuDivider} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setDefaultBuyInInput(gameDefaultBuyIn > 0 ? String(gameDefaultBuyIn) : '');
-                  setShowDefaultBuyInModal(true);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.menuItemLabel}>Default buy-in</Text>
-                </View>
-                <View style={styles.menuItemRight}>
-                  <Text style={styles.menuItemValue}>{defaultBuyInLabel}</Text>
                   <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
                 </View>
               </TouchableOpacity>
@@ -1187,6 +1187,21 @@ export default function ActiveGameScreen() {
                 )}
               </View>
 
+              {/* Default buy-in — omitted entirely when off (0), since that means the
+                  feature is disabled rather than sitting at a default value. Same
+                  banker-unchosen suppression as the rounding and tolerance segments. */}
+              {gameDefaultBuyIn > 0 && showTrailingSegments && (
+                <>
+                  <Text style={styles.settingsSummaryDot}>·</Text>
+                  <View style={styles.settingsSummaryGroup}>
+                    <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                      {buyInValueLabel}
+                    </Text>
+                  </View>
+                </>
+              )}
+
               {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
               {showTrailingSegments && (
                 <>
@@ -1208,21 +1223,6 @@ export default function ActiveGameScreen() {
                       <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
                       <Text style={styles.settingsSummaryValue} numberOfLines={1}>
                         {toleranceLabel}
-                      </Text>
-                    </View>
-                  </>
-                )}
-
-              {/* Default buy-in — omitted entirely when off (0), since that means the
-                  feature is disabled rather than sitting at a default value. Same
-                  banker-unchosen suppression as rounding and tolerance. */}
-              {gameDefaultBuyIn > 0 && showTrailingSegments && (
-                  <>
-                    <Text style={styles.settingsSummaryDot}>·</Text>
-                    <View style={styles.settingsSummaryGroup}>
-                      <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
-                      <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                        {buyInValueLabel}
                       </Text>
                     </View>
                   </>

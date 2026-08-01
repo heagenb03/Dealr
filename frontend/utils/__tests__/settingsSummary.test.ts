@@ -34,15 +34,15 @@ describe('formatSettingsSummary', () => {
     expect(formatSettingsSummary(true, 'Alex', '$5', '±$10')).toBe('Banker · Alex · $5 · ±$10');
   });
 
-  it('appends the buy-in label after the tolerance', () => {
+  it('places the buy-in label before the rounding and tolerance labels', () => {
     expect(formatSettingsSummary(false, undefined, '$5', '±$10', 'Buy-in $20')).toBe(
-      'Direct · $5 · ±$10 · Buy-in $20',
+      'Direct · Buy-in $20 · $5 · ±$10',
     );
   });
 
-  it('appends the buy-in label when there is no tolerance label', () => {
+  it('places the buy-in label before rounding when there is no tolerance label', () => {
     expect(formatSettingsSummary(false, undefined, '$5', undefined, 'Buy-in $20')).toBe(
-      'Direct · $5 · Buy-in $20',
+      'Direct · Buy-in $20 · $5',
     );
   });
 
@@ -59,9 +59,9 @@ describe('formatSettingsSummary', () => {
     );
   });
 
-  it('banker mode with a banker keeps the buy-in', () => {
+  it('banker mode with a banker keeps the buy-in, still ahead of rounding', () => {
     expect(formatSettingsSummary(true, 'Alex', '$5', '±$10', 'Buy-in $20')).toBe(
-      'Banker · Alex · $5 · ±$10 · Buy-in $20',
+      'Banker · Alex · Buy-in $20 · $5 · ±$10',
     );
   });
 });

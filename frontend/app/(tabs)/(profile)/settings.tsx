@@ -455,6 +455,26 @@ export default function SettingsScreen() {
 
             <View style={styles.menuDivider} />
 
+            {/* Default buy-in */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => openModal('editDefaultBuyIn')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="cash-outline" size={24} color="#B072BB" />
+                <Text style={styles.menuItemLabel}>Default Buy-In</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>
+                  {defaultBuyIn && defaultBuyIn > 0 ? formatAmount(defaultBuyIn) : 'Off'}
+                </Text>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
             {/* Rounding */}
             <TouchableOpacity
               style={styles.menuItem}
@@ -485,26 +505,6 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.menuItemRight}>
                 <Text style={styles.menuItemValue}>{toleranceDefaultLabel}</Text>
-                <Ionicons name="chevron-forward" size={20} color="#666" />
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.menuDivider} />
-
-            {/* Default buy-in */}
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => openModal('editDefaultBuyIn')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.menuItemLeft}>
-                <Ionicons name="cash-outline" size={24} color="#B072BB" />
-                <Text style={styles.menuItemLabel}>Default Buy-In</Text>
-              </View>
-              <View style={styles.menuItemRight}>
-                <Text style={styles.menuItemValue}>
-                  {defaultBuyIn && defaultBuyIn > 0 ? formatAmount(defaultBuyIn) : 'Off'}
-                </Text>
                 <Ionicons name="chevron-forward" size={20} color="#666" />
               </View>
             </TouchableOpacity>
