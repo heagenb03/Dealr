@@ -1,4 +1,4 @@
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation, sortSavedByName } from '../addPlayer';
+import { isNameTakenInGame, findPlayerByName, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation, sortSavedByName } from '../addPlayer';
 import type { Player } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
@@ -21,6 +21,40 @@ describe('isNameTakenInGame', () => {
   });
   it('returns false for an empty/whitespace name', () => {
     expect(isNameTakenInGame([player('Gabe')], '   ')).toBe(false);
+  });
+});
+
+describe('findPlayerByName', () => {
+  it('finds an exact match', () => {
+    expect(findPlayerByName([player('Gabe')], 'Gabe')?.id).toBe('p_Gabe');
+  });
+  it('matches case-insensitively and trimmed', () => {
+    expect(findPlayerByName([player('Gabe')], '  gabe ')?.id).toBe('p_Gabe');
+  });
+  it('finds a completed player', () => {
+    expect(findPlayerByName([player('Gabe', true)], 'Gabe')?.id).toBe('p_Gabe');
+  });
+  it('returns null for a distinct name', () => {
+    expect(findPlayerByName([player('Gabe')], 'Gabe B')).toBeNull();
+  });
+  it('returns null for an empty/whitespace name', () => {
+    expect(findPlayerByName([player('Gabe')], '   ')).toBeNull();
+  });
+  it('returns null for an empty roster', () => {
+    expect(findPlayerByName([], 'Gabe')).toBeNull();
+  });
+  it('returns the first match when legacy data holds duplicates', () => {
+    const dupes = [{ id: 'a', name: 'Gabe' }, { id: 'b', name: 'gabe' }] as Player[];
+    expect(findPlayerByName(dupes, 'GABE')?.id).toBe('a');
+  });
+
+  // The pair MUST agree: "Added ✓" comes from isNameTakenInGame and the undo target from
+  // findPlayerByName. If they ever diverge, the row shows an Undo that does nothing.
+  it('agrees with isNameTakenInGame on every case', () => {
+    const roster = [player('Gabe'), player('Mike', true)];
+    for (const q of ['Gabe', '  gabe ', 'MIKE', 'Gabe B', '   ', '']) {
+      expect(findPlayerByName(roster, q) !== null).toBe(isNameTakenInGame(roster, q));
+    }
   });
 });
 

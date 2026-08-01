@@ -15,6 +15,21 @@ export function isNameTakenInGame(players: Player[], name: string): boolean {
 }
 
 /**
+ * The in-game player whose name matches `name` (trimmed, case-insensitive), or null.
+ * Searches active AND completed players, exactly like isNameTakenInGame.
+ *
+ * The find-one counterpart to isNameTakenInGame — they MUST agree, because a saved row's
+ * "Added ✓" state comes from one and its undo target from the other. A divergence renders
+ * an Undo control that does nothing when tapped, which is why they live side by side and
+ * share `norm`.
+ */
+export function findPlayerByName(players: Player[], name: string): Player | null {
+  const target = norm(name);
+  if (!target) return null;
+  return players.find(p => norm(p.name) === target) ?? null;
+}
+
+/**
  * Saved players whose name exactly equals `name` (trimmed, case-insensitive).
  * Saved names are unique, so this is normally 0 or 1; 2+ only for legacy data.
  */
