@@ -37,7 +37,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName } from '@/utils/addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -499,7 +499,14 @@ export default function ActiveGameScreen() {
 
   // With a default buy-in active there is nothing left to enter, so a tap IS
   // the add (1 tap per regular). Otherwise: select, then buy-in rides along.
+  // A row whose player is already in the game arrives here from its Undo control
+  // (the row itself is inert) and means "take that add back".
   const handleSelectSaved = (p: SavedPlayer) => {
+    const existing = findPlayerByName(activeGame.players, p.name);
+    if (existing) {
+      handleUndoAdd(existing);
+      return;
+    }
     if (gameDefaultBuyIn > 0) {
       commitAddPlayer(p);
       return;
@@ -507,6 +514,45 @@ export default function ActiveGameScreen() {
     setNewPlayerName(p.name);
     setSelectedSavedId(p.id);
     requestAnimationFrame(() => buyInInputRef.current?.focus());
+  };
+
+  // Silent only when a re-tap would restore the identical state. removePlayer cascade-deletes
+  // the player's transactions, so anything else must be confirmed. Alert (not the
+  // showDeleteConfirmation AppModal) because stacking modals is avoided in this file and
+  // closing the Add Players modal would lose the host's place mid-sweep.
+  const handleUndoAdd = (player: Player) => {
+    if (isLosslessUndo(player, activeGame.transactions, gameDefaultBuyIn, activeGame.bankerPlayerId)) {
+      void removeAddedPlayer(player);
+      return;
+    }
+    const n = activeGame.transactions.filter(t => t.playerId === player.id).length;
+    Alert.alert(
+      `Remove ${player.name}?`,
+      n === 1
+        ? 'This deletes their transaction from this game.'
+        : `This deletes their ${n} transactions from this game.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => { void removeAddedPlayer(player); } },
+      ],
+    );
+  };
+
+  // Reuses addingPlayerRef as the modal's mutation-in-flight lock: both this and
+  // commitAddPlayer mutate the same activeGame then await updateGame, so they must not
+  // interleave, and two fast Undo taps would otherwise double-decrement addedCount.
+  const removeAddedPlayer = async (player: Player) => {
+    if (addingPlayerRef.current) return;
+    addingPlayerRef.current = true;
+    try {
+      GameService.removePlayer(activeGame, player.id);
+      await updateGame(activeGame);
+      setLastAddedName(null);
+      setLastAddedAmount(null);
+      setAddedCount(c => Math.max(0, c - 1));
+    } finally {
+      addingPlayerRef.current = false;
+    }
   };
 
   // Assigns the latest handler into the ref declared above (Rules of Hooks — see there).
