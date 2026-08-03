@@ -240,7 +240,7 @@ export default function PaywallModal({ visible, onClose, triggerMessage }: Paywa
                 </View>
               )}
 
-              {triggerMessage && !showEndedBanner && (
+              {triggerMessage && (
                 <Text style={styles.triggerMessage}>{triggerMessage}</Text>
               )}
 

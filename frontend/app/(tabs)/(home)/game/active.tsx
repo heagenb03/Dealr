@@ -614,8 +614,8 @@ export default function ActiveGameScreen() {
   const commitAddPlayer = async (tapped?: SavedPlayer) => {
     if (addingPlayerRef.current) return;
 
-    // Pro gate: free tier caps at 12 players. Enforced on EVERY add because the
-    // modal stays open for multiple adds (not just when opening the modal).
+    // Cap gate: free caps at 12, Pro at 20 (see utils/tierLimits). Enforced on EVERY
+    // add because the modal stays open for multiple adds (not just when opening it).
     if (!canAddMorePlayers(activeGame.players.length, isPro)) {
       setShowAddPlayer(false);
       setPendingBankerDesignation(false);

@@ -28,7 +28,6 @@ import {
   renameSavedPlayer,
   savedCapFor,
   canAddMoreSavedPlayers,
-  PRO_SAVED_CAP,
   SavedPlayer,
 } from '@/services/savedPlayersService';
 import { PreferredPayment, Player } from '@/types/game';
@@ -195,10 +194,7 @@ export default function SavedPlayersScreen() {
     if (canAddMoreSavedPlayers(players.length, isPro)) {
       openAdd();
     } else if (isPro) {
-      Alert.alert(
-        'Saved Players Full',
-        `You've reached the ${PRO_SAVED_CAP}-player limit. Delete some players to add more.`,
-      );
+      Alert.alert('Saved Players Full', savedCapPaywallMessage(players.length, isPro));
     } else {
       setPaywallMessage(savedCapPaywallMessage(players.length, isPro));
       setShowPaywall(true);

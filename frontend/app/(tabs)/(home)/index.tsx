@@ -188,7 +188,7 @@ export default function HomeScreen() {
           <View style={styles.trialBannerContent}>
             <Ionicons name="time-outline" size={16} color="#FFB547" />
             <Text style={styles.trialBannerText}>
-              Your Pro trial ends {trialDaysRemaining <= 1 ? 'today' : `in ${trialDaysRemaining} days`}. Upgrade to keep unlimited access.
+              Your Pro trial ends {trialDaysRemaining <= 1 ? 'today' : `in ${trialDaysRemaining} days`}. Upgrade to keep full access.
             </Text>
           </View>
           <TouchableOpacity
