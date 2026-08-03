@@ -10,6 +10,7 @@ import {
   getIsPro,
 } from '@/services/revenueCatService';
 import { isTrialActive, getTrialDaysRemaining } from '@/utils/trialUtils';
+import { deriveLapsed } from './authDerivations';
 
 // Initialize RevenueCat once when this module loads
 initializePurchases();
@@ -67,6 +68,8 @@ interface AuthContextType {
   trialDaysRemaining: number;
   /** Whether the user had a trial that has now expired (and they haven't upgraded) */
   trialExpired: boolean;
+  /** Had a paid subscription that is no longer active (distinct from an expired trial). */
+  lapsed: boolean;
   signOut: () => Promise<void>;
   /** Re-fetch the Firestore user document (e.g., after tier changes) */
   refreshUserDoc: () => Promise<void>;
@@ -293,6 +296,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // trialExpired: had a trial, it's over, and user hasn't upgraded
   const trialExpired = !isTrialing && !!trialEndsAt && !paidPro;
 
+  // Churned subscriber vs expired trial — different copy. proSince is written once
+  // (purchase AND restore paths) and never cleared, so it survives a lapse.
+  const lapsed = deriveLapsed(paidPro, userDoc?.proSince);
+
   // Live trial expiry: schedule a re-render when the trial expires while the app is open
   useEffect(() => {
     if (trialTimerRef.current) {
@@ -329,6 +336,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isTrialing,
         trialDaysRemaining,
         trialExpired,
+        lapsed,
         signOut: handleSignOut,
         refreshUserDoc,
         refreshEntitlements,
