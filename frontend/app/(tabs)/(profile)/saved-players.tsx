@@ -28,13 +28,13 @@ import {
   renameSavedPlayer,
   savedCapFor,
   canAddMoreSavedPlayers,
-  FREE_SAVED_CAP,
   PRO_SAVED_CAP,
   SavedPlayer,
 } from '@/services/savedPlayersService';
 import { PreferredPayment, Player } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
+import { savedCapCounter, savedCapPaywallMessage } from '@/utils/capCopy';
 
 type PaymentTarget =
   | { kind: 'edit'; player: SavedPlayer }
@@ -49,7 +49,6 @@ function badgeText(p: SavedPlayer): string | null {
 }
 
 const BULK_PAYWALL_MESSAGE = 'Upgrade to Pro to bulk-manage your saved players.';
-const CAP_PAYWALL_MESSAGE = `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
 
 export default function SavedPlayersScreen() {
   const { user, isPro } = useAuth();
@@ -95,15 +94,18 @@ export default function SavedPlayersScreen() {
 
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallMessage, setPaywallMessage] = useState(BULK_PAYWALL_MESSAGE);
+  // Bulk delete is the only action select mode offers. A free user stranded over
+  // the cap after a downgrade needs it to get back under — gating it behind the
+  // paywall that the over-cap state itself triggers is a dead end.
   const requirePro = useCallback(
     (action: () => void) => {
-      if (isPro) action();
+      if (isPro || players.length > cap) action();
       else {
         setPaywallMessage(BULK_PAYWALL_MESSAGE);
         setShowPaywall(true);
       }
     },
-    [isPro],
+    [isPro, players.length, cap],
   );
 
   const toggleSelected = useCallback((id: string) => {
@@ -198,7 +200,7 @@ export default function SavedPlayersScreen() {
         `You've reached the ${PRO_SAVED_CAP}-player limit. Delete some players to add more.`,
       );
     } else {
-      setPaywallMessage(CAP_PAYWALL_MESSAGE);
+      setPaywallMessage(savedCapPaywallMessage(players.length, isPro));
       setShowPaywall(true);
     }
   }, [players.length, isPro, openAdd]);
@@ -213,7 +215,7 @@ export default function SavedPlayersScreen() {
       setAdding(true);
       try {
         if (!canAddMoreSavedPlayers(players.length, isPro)) {
-          Alert.alert('Saved Players Full', `You've reached the ${cap}-player limit.`);
+          Alert.alert('Saved Players Full', savedCapPaywallMessage(players.length, isPro));
           setShowAdd(false);
           return;
         }
@@ -289,6 +291,8 @@ export default function SavedPlayersScreen() {
     [uid, paymentTarget, reload],
   );
 
+  const counterText = savedCapCounter(players.length, isPro);
+
   const renderRow = (p: SavedPlayer) => {
     const badge = badgeText(p);
     const textBlock = (
@@ -359,18 +363,14 @@ export default function SavedPlayersScreen() {
       {!isPro && !canAddMoreSavedPlayers(players.length, isPro) ? (
         <TouchableOpacity
           onPress={() => {
-            setPaywallMessage(CAP_PAYWALL_MESSAGE);
+            setPaywallMessage(savedCapPaywallMessage(players.length, isPro));
             setShowPaywall(true);
           }}
         >
-          <Text style={[styles.capCounter, styles.capCounterFull]}>
-            {players.length} / {cap} · Upgrade for {PRO_SAVED_CAP}
-          </Text>
+          <Text style={[styles.capCounter, styles.capCounterFull]}>{counterText}</Text>
         </TouchableOpacity>
       ) : (
-        <Text style={styles.capCounter}>
-          {players.length} / {cap} saved
-        </Text>
+        <Text style={styles.capCounter}>{counterText}</Text>
       )}
 
       <ScrollView contentContainerStyle={styles.scrollContent}>

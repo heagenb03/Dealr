@@ -605,3 +605,27 @@ describe('renameSavedPlayer (id-based)', () => {
     expect(await renameSavedPlayer(A, 'sp_missing', 'X')).toEqual({ ok: false, reason: 'notfound' });
   });
 });
+
+describe('D1 grandfather: a downgrade never removes saved players', () => {
+  it('keeps all 40 entries readable while blocking new adds', async () => {
+    const names = Array.from({ length: 40 }, (_, i) => ({ name: `P${i}` }));
+    await addSavedPlayers(A, names, { limit: PRO_SAVED_CAP });
+
+    // The tier flips to free. Nothing is trimmed.
+    expect(canAddMoreSavedPlayers(40, false)).toBe(false);
+
+    const after = await getSavedPlayers(A);
+    expect(after).toHaveLength(40);
+  });
+
+  it('survives a save/load round-trip while over the free cap', async () => {
+    const names = Array.from({ length: 40 }, (_, i) => ({ name: `P${i}` }));
+    await addSavedPlayers(A, names, { limit: PRO_SAVED_CAP });
+
+    // A write performed while over the free cap must not truncate to it.
+    await savePlayer(A, 'P0', undefined, FREE_SAVED_CAP);
+
+    const after = await getSavedPlayers(A);
+    expect(after).toHaveLength(40);
+  });
+});
