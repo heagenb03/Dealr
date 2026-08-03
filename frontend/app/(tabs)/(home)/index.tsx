@@ -14,6 +14,7 @@ import { Game } from '@/types/game';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { getTrialLabel } from '@/utils/trialUtils';
 import { groupGamesByMonth } from '@/utils/historyGrouping';
+import { splitCompletedHistory } from '@/utils/tierLimits';
 import HistoryMonthHeader from '@/components/HistoryMonthHeader';
 
 function HudSectionHeader({ label }: { label: string }) {
@@ -37,7 +38,6 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-const FREE_HISTORY_LIMIT = 10;
 const MAX_ANIMATED_CARDS = 5;
 
 type ListItem =
@@ -66,8 +66,7 @@ export default function HomeScreen() {
 
     const activeGames = games.filter(g => g.status === 'active').sort(byCreatedDesc);
     const completedGames = games.filter(g => g.status === 'completed').sort(byDateDesc);
-    const visibleCompleted = isPro ? completedGames : completedGames.slice(0, FREE_HISTORY_LIMIT);
-    const hiddenCount = isPro ? 0 : Math.max(0, completedGames.length - FREE_HISTORY_LIMIT);
+    const { visible: visibleCompleted, hiddenCount } = splitCompletedHistory(completedGames, isPro);
 
     const items: ListItem[] = [];
     let entryIndex = 0;
