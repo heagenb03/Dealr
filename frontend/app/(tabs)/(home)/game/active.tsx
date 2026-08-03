@@ -16,7 +16,7 @@ import { Player, PlayerBalance, Validation, PreferredPayment } from '@/types/gam
 import { getNetBalanceColor, formatNetBalanceDisplay } from '@/utils/formatUtils';
 import { incrementProfileStats } from '@/services/firebaseService';
 import { isValidNumericInput } from '@/utils/validationUtils';
-import { loadSavedPlayers, SavedPlayer, FREE_SAVED_CAP, PRO_SAVED_CAP, savedCapFor, canAddMoreSavedPlayers, getSavedPlayersByName, getSavedPlayerById, createSavedPlayer, updateSavedPlayer } from '@/services/savedPlayersService';
+import { loadSavedPlayers, SavedPlayer, savedCapFor, canAddMoreSavedPlayers, getSavedPlayersByName, getSavedPlayerById, createSavedPlayer, updateSavedPlayer } from '@/services/savedPlayersService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PlayerCardActive from '@/components/PlayerCardActive';
 import PlayerCardCompleted from '@/components/PlayerCardCompleted';
@@ -40,6 +40,13 @@ import { formatHandleForDisplay } from '@/utils/paymentLinks';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 import { keyboardSafeCardMaxHeight } from '@/utils/modalCardHeight';
+import { canAddMorePlayers } from '@/utils/tierLimits';
+import {
+  PLAYERS_PAYWALL_MESSAGE,
+  playerCapHint,
+  savedCapModalNotice,
+  savedCapPaywallMessage,
+} from '@/utils/capCopy';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -166,8 +173,6 @@ function SolvingOverlay() {
   );
 }
 
-const PLAYERS_PAYWALL_MESSAGE = 'Upgrade to Pro for unlimited players per game.';
-const SAVED_CAP_PAYWALL_MESSAGE = `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
 const HELP_HINT_SEEN_KEY = 'help_hint_seen';
 const DEFAULT_GAME_NAME = 'Untitled Game';
 
@@ -483,7 +488,7 @@ export default function ActiveGameScreen() {
     trimmedName.length > 0 &&
     !selectedSavedId &&
     matchSavedByExactName(savedPlayers, newPlayerName).length === 0;
-  const atPlayerCap = !isPro && activeGame.players.length >= 12;
+  const atPlayerCap = !canAddMorePlayers(activeGame.players.length, isPro);
 
   const addedConfirmLabel = formatAddedConfirmation(
     lastAddedName,
@@ -611,7 +616,7 @@ export default function ActiveGameScreen() {
 
     // Pro gate: free tier caps at 12 players. Enforced on EVERY add because the
     // modal stays open for multiple adds (not just when opening the modal).
-    if (!isPro && activeGame.players.length >= 12) {
+    if (!canAddMorePlayers(activeGame.players.length, isPro)) {
       setShowAddPlayer(false);
       setPendingBankerDesignation(false);
       setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
@@ -1313,7 +1318,7 @@ export default function ActiveGameScreen() {
           <HudSectionHeader
             label="Players"
             onAction={() => {
-              if (!isPro && activeGame.players.length >= 12) {
+              if (!canAddMorePlayers(activeGame.players.length, isPro)) {
                 setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
                 setShowPaywall(true);
               } else {
@@ -1496,13 +1501,13 @@ export default function ActiveGameScreen() {
                   onPress={() => {
                     setShowAddPlayer(false);
                     setPendingBankerDesignation(false);
-                    setPaywallMessage(SAVED_CAP_PAYWALL_MESSAGE);
+                    setPaywallMessage(savedCapPaywallMessage(savedPlayers.length, isPro));
                     setShowPaywall(true);
                   }}
                 >
                   <Ionicons name="lock-closed" size={14} color="#B072BB" />
                   <Text style={styles.saveToggleFullText}>
-                    Saved players full · {savedPlayers.length}/{savedCapFor(isPro)}
+                    {savedCapModalNotice(savedPlayers.length, isPro)}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -1537,7 +1542,7 @@ export default function ActiveGameScreen() {
         )}
 
         {atPlayerCap && (
-          <Text style={styles.pickHint}>Free limit reached · 12 players. Upgrade to Pro for unlimited.</Text>
+          <Text style={styles.pickHint}>{playerCapHint(activeGame.players.length, isPro)}</Text>
         )}
       </AppModal>
 
