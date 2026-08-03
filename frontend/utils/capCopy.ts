@@ -30,6 +30,9 @@ export function playerCapHint(count: number, isPro: boolean): string {
 /** Persistent counter at the top of the Saved Players screen. */
 export function savedCapCounter(count: number, isPro: boolean): string {
   const cap = savedCapFor(isPro);
+  if (isPro && count > cap) {
+    return `${count} saved · ${cap} max`;
+  }
   if (!isPro && count > cap) {
     return `${count} saved · the free plan holds ${cap} · Upgrade for ${PRO_SAVED_CAP}`;
   }
@@ -43,7 +46,9 @@ export function savedCapCounter(count: number, isPro: boolean): string {
 export function savedCapModalNotice(count: number, isPro: boolean): string {
   const cap = savedCapFor(isPro);
   if (count > cap) {
-    return `Saved players full · ${count} saved, ${cap} on free`;
+    return isPro
+      ? `Saved players full · ${count} saved, ${cap} max`
+      : `Saved players full · ${count} saved, ${cap} on free`;
   }
   return `Saved players full · ${count}/${cap}`;
 }

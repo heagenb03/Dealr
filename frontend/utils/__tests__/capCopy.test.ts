@@ -74,6 +74,18 @@ describe('savedCapCounter', () => {
   it('reads as a plain fraction for Pro', () => {
     expect(savedCapCounter(150, true)).toBe('150 / 200 saved');
   });
+
+  // Hardening: unreachable today (savedPlayersService clamps merges to
+  // PRO_SAVED_CAP), but the copy must not mislabel 200 as a free-tier number
+  // or render an ungrammatical count/cap fraction if a Pro user ever exceeds it.
+  it('never mislabels the Pro cap as a free limit when a Pro user is over it', () => {
+    const s = savedCapCounter(250, true);
+    expect(s).toContain('250');
+    expect(s).toContain('200');
+    expect(s.toLowerCase()).not.toContain('free');
+    expect(s).not.toContain('250 / 200');
+    expect(s).not.toContain('250/200');
+  });
 });
 
 describe('savedCapModalNotice', () => {
@@ -85,6 +97,15 @@ describe('savedCapModalNotice', () => {
     const s = savedCapModalNotice(40, false);
     expect(s).toContain('40');
     expect(s).not.toContain('40/15');
+  });
+
+  // Hardening: same unreachable-today scenario as savedCapCounter above.
+  it('never mislabels the Pro cap as a free limit when a Pro user is over it', () => {
+    const s = savedCapModalNotice(250, true);
+    expect(s).toContain('250');
+    expect(s).toContain('200');
+    expect(s.toLowerCase()).not.toContain('on free');
+    expect(s).not.toContain('250/200');
   });
 });
 
