@@ -52,7 +52,7 @@ const BULK_PAYWALL_MESSAGE = 'Upgrade to Pro to bulk-manage your saved players.'
 const CAP_PAYWALL_MESSAGE = `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
 
 export default function SavedPlayersScreen() {
-  const { user, isPro, trialExpired } = useAuth();
+  const { user, isPro } = useAuth();
   const uid = user?.uid ?? null;
   const cap = savedCapFor(isPro);
   const reduceMotion = useReduceMotion();
@@ -455,7 +455,6 @@ export default function SavedPlayersScreen() {
         visible={showPaywall}
         onClose={() => setShowPaywall(false)}
         triggerMessage={paywallMessage}
-        trialExpired={trialExpired}
       />
 
       <AppModal

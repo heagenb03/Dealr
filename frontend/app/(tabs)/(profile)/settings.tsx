@@ -93,7 +93,7 @@ type ActiveModal =
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, userDoc, isPro, isTrialing, trialDaysRemaining, trialExpired, signOut, refreshUserDoc, reloadUser } = useAuth();
+  const { user, userDoc, isPro, isTrialing, trialDaysRemaining, signOut, refreshUserDoc, reloadUser } = useAuth();
 
   // Derive auth providers from the full list. Reading only `providerData[0]` is
   // unreliable: linking a provider (e.g. Google) appends an entry and Firebase
@@ -1034,7 +1034,6 @@ export default function SettingsScreen() {
       <PaywallModal
         visible={showPaywall}
         onClose={() => setShowPaywall(false)}
-        trialExpired={trialExpired}
       />
     </View>
   );

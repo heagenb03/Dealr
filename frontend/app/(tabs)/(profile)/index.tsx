@@ -22,7 +22,7 @@ import { getTrialLabel } from '@/utils/trialUtils';
 
 export default function AccountScreen() {
   const router = useRouter();
-  const { user, userDoc, isPro, isTrialing, trialDaysRemaining, trialExpired } = useAuth();
+  const { user, userDoc, isPro, isTrialing, trialDaysRemaining } = useAuth();
   const { formatAmountCompact, meta } = useCurrency();
 
   const [showPaywall, setShowPaywall] = useState(false);
@@ -127,7 +127,6 @@ export default function AccountScreen() {
       <PaywallModal
         visible={showPaywall}
         onClose={() => setShowPaywall(false)}
-        trialExpired={trialExpired}
       />
     </View>
   );

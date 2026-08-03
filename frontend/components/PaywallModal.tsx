@@ -31,8 +31,6 @@ interface PaywallModalProps {
   onClose: () => void;
   /** Optional message shown at the top to explain why the paywall appeared */
   triggerMessage?: string;
-  /** When true, shows "trial expired" messaging instead of the trigger message */
-  trialExpired?: boolean;
 }
 
 type PlanKey = 'monthly' | 'annual' | 'lifetime';
@@ -91,8 +89,11 @@ function SectionLabel({ label }: { label: string }) {
 // PaywallModal
 // ---------------------------------------------------------------------------
 
-export default function PaywallModal({ visible, onClose, triggerMessage, trialExpired }: PaywallModalProps) {
-  const { user, refreshEntitlements } = useAuth();
+export default function PaywallModal({ visible, onClose, triggerMessage }: PaywallModalProps) {
+  const { user, refreshEntitlements, lapsed, trialExpired } = useAuth();
+  // A lapsed subscriber also satisfies trialExpired (their old trialEndsAt is long
+  // past), so lapsed must be checked FIRST or they get trial copy.
+  const showEndedBanner = lapsed || trialExpired;
 
   const [selectedPeriod, setSelectedPeriod] = useState<PlanKey>('annual');
   const [offerings, setOfferings] = useState<{
@@ -225,16 +226,18 @@ export default function PaywallModal({ visible, onClose, triggerMessage, trialEx
                 <View style={styles.headerLine} />
               </View>
 
-              {trialExpired && (
+              {showEndedBanner && (
                 <View style={styles.trialExpiredBanner}>
                   <Ionicons name="time-outline" size={16} color="#FFB547" />
                   <Text style={styles.trialExpiredText}>
-                    Your free trial has ended. Upgrade to keep unlimited access.
+                    {lapsed
+                      ? 'Your Pro subscription has ended. Resubscribe to keep full access.'
+                      : 'Your free trial has ended. Upgrade to keep full access.'}
                   </Text>
                 </View>
               )}
 
-              {triggerMessage && !trialExpired && (
+              {triggerMessage && !showEndedBanner && (
                 <Text style={styles.triggerMessage}>{triggerMessage}</Text>
               )}
 
