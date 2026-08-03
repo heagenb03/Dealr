@@ -619,8 +619,12 @@ export default function ActiveGameScreen() {
     if (!canAddMorePlayers(activeGame.players.length, isPro)) {
       setShowAddPlayer(false);
       setPendingBankerDesignation(false);
-      setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
-      setShowPaywall(true);
+      if (isPro) {
+        Alert.alert('Player Limit', playerCapHint(activeGame.players.length, true));
+      } else {
+        setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
+        setShowPaywall(true);
+      }
       return;
     }
 
@@ -1319,8 +1323,12 @@ export default function ActiveGameScreen() {
             label="Players"
             onAction={() => {
               if (!canAddMorePlayers(activeGame.players.length, isPro)) {
-                setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
-                setShowPaywall(true);
+                if (isPro) {
+                  Alert.alert('Player Limit', playerCapHint(activeGame.players.length, true));
+                } else {
+                  setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
+                  setShowPaywall(true);
+                }
               } else {
                 refreshSavedNames();
                 setSavePlayerToggle(true); // toggle defaults ON each time the modal opens
