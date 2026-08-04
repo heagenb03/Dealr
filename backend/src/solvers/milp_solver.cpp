@@ -1,5 +1,7 @@
 #include "milp_solver.hpp"
 #include <ortools/linear_solver/linear_solver.h>
+#include <algorithm>
+#include <cstdint>
 #include <map>
 #include <cmath>
 #include <iostream>
@@ -7,6 +9,16 @@
 #include <iomanip>
 
 namespace cashcage {
+
+/**
+ * Wall-clock ceiling handed to CBC, in milliseconds.
+ *
+ * MUST stay comfortably below the client's DEFAULT_TIMEOUT_MS (10000) in
+ * frontend/services/settlementService.ts — a solve that outlives the client's
+ * AbortController is wasted work, because the response has nowhere to go and the
+ * client has already fallen back to client-greedy-v1.
+ */
+constexpr int64_t SOLVER_TIME_LIMIT_MS = 5000;
 
 // Helper function to adjust balances for small imbalances
 struct BalanceAdjustmentResult {
@@ -208,21 +220,37 @@ MILPResult solveMILP(
         return result;
     }
 
+    // Stop branch-and-bound before the CLIENT gives up on us. settlementService.ts
+    // uses DEFAULT_TIMEOUT_MS = 10000 and aborts to client-greedy-v1. Without a limit
+    // CBC runs to PROVEN optimality, so a hard table sailed past that abort and its
+    // answer — usually already optimal, merely unproven — was thrown away in favour of
+    // a strictly worse greedy one, while Lambda kept solving, billed, unheard. The
+    // status check after Solve() already accepts FEASIBLE, which is exactly what CBC
+    // returns when it stops on this limit holding an incumbent. 5s leaves headroom
+    // under the client's 10s for cold start, JSON and network.
+    solver->set_time_limit(SOLVER_TIME_LIMIT_MS);
+
     // Variables: x[d][c] = amount debtor d pays creditor c
     // Variables: y[d][c] = binary indicator
     std::map<std::pair<int, int>, MPVariable*> x, y;
 
-    // Big-M = sum of all debts
-    double M = 0;
-    for (int d : debtorIdx) {
-        M += std::abs(adjustedBalances[d].netBalance);
-    }
+    // Per-pair big-M. A single transfer can never exceed either endpoint's own
+    // balance: every x is non-negative and both the debtor and creditor rows are
+    // equalities, so x[d][c] <= debt_d and x[d][c] <= credit_c simultaneously.
+    // min(debt_d, credit_c) is therefore valid — it cuts no integer-feasible
+    // solution — and vastly tighter than the previous M = sum of ALL debts, under
+    // which the LP relaxation could set y = x/M ~ 0 and hand branch-and-bound a
+    // near-vacuous lower bound on the objective.
+    auto pairCap = [&](int d, int c) {
+        return std::min(std::abs(adjustedBalances[d].netBalance),
+                        adjustedBalances[c].netBalance);
+    };
 
     // Create variables
     for (int d : debtorIdx) {
         for (int c : creditorIdx) {
             x[{d, c}] = solver->MakeNumVar(
-                0, M,
+                0, pairCap(d, c),
                 "x_" + std::to_string(d) + "_" + std::to_string(c)
             );
             y[{d, c}] = solver->MakeBoolVar(
@@ -249,14 +277,14 @@ MILPResult solveMILP(
         }
     }
 
-    // Linking constraints: x[d][c] <= M * y[d][c]
+    // Linking constraints: x[d][c] <= M[d][c] * y[d][c]
     for (int d : debtorIdx) {
         for (int c : creditorIdx) {
             MPConstraint* ct = solver->MakeRowConstraint(
                 -solver->infinity(), 0
             );
             ct->SetCoefficient(x[{d, c}], 1);
-            ct->SetCoefficient(y[{d, c}], -M);
+            ct->SetCoefficient(y[{d, c}], -pairCap(d, c));
         }
     }
 
