@@ -167,7 +167,7 @@ export default function HomeScreen() {
           >
             <Ionicons name="star" size={16} color="#B072BB" style={styles.upgradeHistoryIcon} />
             <Text style={styles.upgradeHistoryText}>
-              {item.hiddenCount} older {item.hiddenCount === 1 ? 'game' : 'games'} hidden — upgrade to Pro to see your full history
+              {item.hiddenCount} older {item.hiddenCount === 1 ? 'game' : 'games'} hidden. Upgrade to Pro to see your full history.
             </Text>
             <Ionicons name="chevron-forward" size={16} color="#B072BB" />
           </TouchableOpacity>
