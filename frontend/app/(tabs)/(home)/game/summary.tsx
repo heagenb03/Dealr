@@ -11,7 +11,7 @@ import HelpSheet from '@/components/HelpSheet';
 import { getSummaryTopicIds, getTopicsByIds } from '@/constants/helpTopics';
 import { GameService } from '@/services/gameService';
 import { reverseProfileStats } from '@/services/firebaseService';
-import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
+import { getSettlements, calculateBankerSettlements, SOLVER_TIMEOUT_SENTINEL } from '@/services/settlementService';
 import { PlayerBalance, SettlementResult } from '@/types/game';
 import { groupSettlementsByRecipient, sortPaymentsByAmount } from '@/utils/settlementUtils';
 import { getNetBalanceColor } from '@/utils/formatUtils';
@@ -452,13 +452,19 @@ interface FallbackBannerProps {
 
 function FallbackBanner({ onDismiss, onRetry, isRetrying, errorMessage, balances, tolerance, formatAmount }: FallbackBannerProps) {
   const retryable = isRetryableFallback(errorMessage, balances, tolerance);
+  const timedOut = errorMessage === SOLVER_TIMEOUT_SENTINEL;
 
   const totalBuyins = (balances ?? []).reduce((sum, b) => sum + b.totalBuyins, 0);
   const totalCashouts = (balances ?? []).reduce((sum, b) => sum + b.totalCashouts, 0);
   const netDifference = Math.abs(totalBuyins - totalCashouts);
 
-  const icon = retryable ? 'cellular-outline' : 'alert-circle-outline';
-  const text = fallbackBannerCopy(retryable, isRetrying, netDifference, tolerance, formatAmount);
+  // A timeout is not a connectivity problem, so it must not wear the signal icon.
+  const icon = timedOut
+    ? 'time-outline'
+    : retryable
+      ? 'cellular-outline'
+      : 'alert-circle-outline';
+  const text = fallbackBannerCopy(retryable, isRetrying, netDifference, tolerance, formatAmount, timedOut);
 
   return (
     <View style={styles.fallbackBanner} accessibilityRole="alert">
