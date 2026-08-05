@@ -30,6 +30,17 @@ service cloud.firestore {
         allow read, delete: if request.auth != null && request.auth.uid == uid;
         // SECURITY: Enforce structural constraints and data size limits.
         // Prevents storage abuse and malformed data that could crash other devices.
+        //
+        // The players ceiling sits DELIBERATELY ABOVE the app's own cap
+        // (PRO_PLAYER_CAP = 50 in frontend/utils/tierLimits.ts) so the product
+        // number can rise without another rules deploy, while this stays a
+        // storage-abuse guard: 100 players is ~11% of the 1 MiB document limit.
+        //
+        // One-way door: once users hold games at a given size, this ceiling can
+        // never drop below their largest game without breaking their writes. A
+        // game over the ceiling fails with permission-denied, which is NOT an
+        // offline error, so the fire-and-forget write only logs a console warning
+        // and the game silently never leaves the device.
         allow create, update: if request.auth != null
           && request.auth.uid == uid
           && request.resource.data.keys().hasAll(['id', 'name', 'status'])
@@ -37,7 +48,7 @@ service cloud.firestore {
           && request.resource.data.name.size() <= 100
           && request.resource.data.status in ['active', 'completed']
           && request.resource.data.players is list
-          && request.resource.data.players.size() <= 20;
+          && request.resource.data.players.size() <= 100;
       }
 
       match /savedPlayers/{docId} {
