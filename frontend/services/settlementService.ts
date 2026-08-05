@@ -75,6 +75,18 @@ const LOCAL_ALGORITHM_ID = 'client-greedy-v1';
 const DEFAULT_SERVER_ALGORITHM_ID = 'server-milp-v1';
 const LOCAL_BANKER_ALGORITHM_ID = 'client-banker-v1';
 
+/**
+ * Marks "the solve outlived the client's budget" in `SettlementResult.error`.
+ *
+ * Deliberately not derived from the error message: an aborted fetch rejects with a
+ * platform-dependent message — "Aborted" on React Native, "The user aborted a
+ * request." elsewhere — so the message cannot be branched on.
+ *
+ * The server WAS reached in this case. Copy keyed off this value must not claim
+ * otherwise (see utils/fallbackBannerCopy.ts).
+ */
+export const SOLVER_TIMEOUT_SENTINEL = 'solver-timeout';
+
 function createLocalSettlementResult(
   balances: PlayerBalance[],
   reason?: string,
@@ -261,7 +273,15 @@ export async function getSettlements(
     } satisfies SettlementResult;
   } catch (error) {
     console.warn('[settlements] Falling back to local solver:', error);
-    const message = error instanceof Error ? error.message : 'unknown-error';
+    // Only OUR timeout counts as a solver timeout. When the caller supplies its own
+    // signal (a screen unmounting) `controller` is null, and an abort there is not a
+    // slow solve — that result is being discarded anyway.
+    const timedOut = controller?.signal.aborted === true;
+    const message = timedOut
+      ? SOLVER_TIMEOUT_SENTINEL
+      : error instanceof Error
+        ? error.message
+        : 'unknown-error';
     return createLocalSettlementResult(balances, message, options.settings?.cashRoundingUnit);
   } finally {
     if (timeoutId) {

@@ -3,6 +3,7 @@ import {
   validateSettlements,
   getSettlements,
   calculateBankerSettlements,
+  SOLVER_TIMEOUT_SENTINEL,
 } from '../settlementService';
 import { PlayerBalance } from '@/types/game';
 
@@ -332,6 +333,40 @@ describe('getSettlements', () => {
     expect(result.source).toBe('client');
     expect(result.error).toBe('Network error');
     expect(result.settlements).toHaveLength(1);
+  });
+
+  it('reports a stable sentinel when our own budget expires', async () => {
+    global.fetch = jest.fn().mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            // Mirrors a real aborted fetch: the message is platform-dependent,
+            // only `name` is reliable.
+            const err = new Error('The user aborted a request.');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        }),
+    );
+
+    const result = await getSettlements(balances, {
+      endpoint: 'https://api.example.com/settlements/optimal',
+      timeoutMs: 10,
+    });
+
+    expect(result.source).toBe('client');
+    expect(result.error).toBe(SOLVER_TIMEOUT_SENTINEL);
+  });
+
+  it('does not report a solver timeout for an ordinary network failure', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+
+    const result = await getSettlements(balances, {
+      endpoint: 'https://api.example.com/settlements/optimal',
+    });
+
+    expect(result.error).toBe('Network error');
+    expect(result.error).not.toBe(SOLVER_TIMEOUT_SENTINEL);
   });
 
   it('falls back to local on non-ok response', async () => {
