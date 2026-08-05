@@ -14,8 +14,9 @@ describe('player caps', () => {
     // app cap can rise later without a rules deploy — but that deploy is a separate,
     // human-operated step. As of this commit the DEPLOYED rule is still 20, i.e.
     // BELOW this constant. If this test fails because someone raised PRO_PLAYER_CAP,
-    // confirm the DEPLOYED rule still exceeds it before updating — a cap above the
-    // deployed rule causes silent, permanent sync loss.
+    // go read the LIVE rule in the Firebase console and confirm it is at or above the
+    // new cap before updating — a cap above the deployed rule causes silent, permanent
+    // sync loss, and the rule's value in firestore.rules is not evidence it is deployed.
     expect(PRO_PLAYER_CAP).toBe(50);
   });
 
