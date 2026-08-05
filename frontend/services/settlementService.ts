@@ -7,7 +7,19 @@ import {
 } from '@/types/game';
 import { roundBalancesToUnit, roundToUnit } from '@/utils/roundingUtils';
 
-const DEFAULT_TIMEOUT_MS = 10000;
+/**
+ * How long the client waits for the server solver before falling back to greedy.
+ *
+ * The server's own CBC budget is 5s of CPU, which is ~5s of wall clock at
+ * MemorySize: 1769 — but the limit is SOFT (CBC checks it at branch-and-bound
+ * nodes) and measured overshoot reached ~4s at N=24. Observed tail on dev at N=50
+ * with the full production request body: 8393ms. Cold starts on the container-image
+ * Lambda add another 2-3s (see backend/CLAUDE.md).
+ *
+ * 10s left roughly 1.6s of margin at N=50 and produced greedy fallbacks. Do not
+ * lower this without re-probing, and never set it equal to the solver's limit.
+ */
+const DEFAULT_TIMEOUT_MS = 15000;
 const SETTLEMENT_ENDPOINT_PATH = '/settlements/optimal';
 
 export interface SettlementOptions {
