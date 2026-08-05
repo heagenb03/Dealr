@@ -11,12 +11,26 @@
 namespace cashcage {
 
 /**
- * Wall-clock ceiling handed to CBC, in milliseconds.
+ * CPU-second ceiling handed to CBC, in milliseconds.
  *
- * MUST stay comfortably below the client's DEFAULT_TIMEOUT_MS (10000) in
- * frontend/services/settlementService.ts — a solve that outlives the client's
- * AbortController is wasted work, because the response has nowhere to go and the
- * client has already fallen back to client-greedy-v1.
+ * NOT wall-clock. CBC budgets CPU seconds, so the wall-clock cost of this value
+ * depends on how much vCPU the Lambda has — which is set by MemorySize in
+ * backend/template.yaml, NOT here:
+ *
+ *   1024MB ~= 0.58 vCPU  ->  5000 CPU-ms costs ~8.6s of wall clock
+ *   1769MB  = 1.00 vCPU  ->  5000 CPU-ms costs ~5.0s of wall clock
+ *
+ * template.yaml is pinned at 1769MB so that 5s means 5s. LOWERING MemorySize
+ * SILENTLY LENGTHENS EVERY SOLVE and will re-break 20-player games.
+ *
+ * The limit is also SOFT: CBC checks it at branch-and-bound nodes, so a solve can
+ * overshoot. Measured overshoot at N=24 with a 15000ms limit: 18940ms (~4s).
+ * The client's DEFAULT_TIMEOUT_MS must keep real margin over this, never match it.
+ *
+ * Measured on dev at 1769MB, seeds 1-3, full production request body: N=20 max
+ * 5956ms, N=50 max 8393ms (outlier; ~6.0s typical). Raising this to 15000 was
+ * tested and reverted — it gained 5 payments across 12 instances for a 15-19s
+ * wait. The gap above N=20 is problem hardness, not budget.
  */
 constexpr int64_t SOLVER_TIME_LIMIT_MS = 5000;
 
@@ -220,14 +234,15 @@ MILPResult solveMILP(
         return result;
     }
 
-    // Stop branch-and-bound before the CLIENT gives up on us. settlementService.ts
-    // uses DEFAULT_TIMEOUT_MS = 10000 and aborts to client-greedy-v1. Without a limit
-    // CBC runs to PROVEN optimality, so a hard table sailed past that abort and its
-    // answer — usually already optimal, merely unproven — was thrown away in favour of
-    // a strictly worse greedy one, while Lambda kept solving, billed, unheard. The
-    // status check after Solve() already accepts FEASIBLE, which is exactly what CBC
-    // returns when it stops on this limit holding an incumbent. 5s leaves headroom
-    // under the client's 10s for cold start, JSON and network.
+    // Without this, CBC runs to PROVEN optimality: a hard table sailed past the client's
+    // abort and its answer — usually already optimal, merely unproven — was thrown away in
+    // favour of a strictly worse greedy one, while Lambda kept solving, billed, unheard.
+    // The status check after Solve() already accepts FEASIBLE, which is exactly what CBC
+    // returns when it stops on this limit holding an incumbent, so the limit is what makes
+    // that pre-existing branch reachable at all.
+    //
+    // See SOLVER_TIME_LIMIT_MS above for why this is a CPU-second budget and why it only
+    // means 5 seconds at MemorySize: 1769.
     solver->set_time_limit(SOLVER_TIME_LIMIT_MS);
 
     // Variables: x[d][c] = amount debtor d pays creditor c
