@@ -59,13 +59,30 @@ describe('useScreenProbe census', () => {
   });
 
   it('does not increment the census on a re-render of the same instance', async () => {
+    // A wrong count after update() alone doesn't discriminate: an effect keyed
+    // on `gameId` would fire cleanup (UNMOUNT, live 1->0) then re-run (MOUNT,
+    // live 0->1) across the update, netting back to 1 despite being exactly
+    // the bug the module's dep-array comment warns against. So assert on the
+    // [probe3] MOUNT/UNMOUNT log sequence itself, not just the steady-state
+    // count. The render-body [probe4] line is expected to fire again on
+    // update and is deliberately not part of this filter.
+    const logs: string[] = [];
+    (console.log as jest.Mock).mockImplementation((...args: any[]) => {
+      logs.push(args.join(' '));
+    });
+
     let r: ReactTestRenderer;
     await act(async () => {
       r = TestRenderer.create(<Screen gameId="g1" />);
     });
+    const censusLogsBeforeUpdate = logs.filter((l) => l.includes('[probe3]'));
+
     await act(async () => {
       r!.update(<Screen gameId="g1-renamed" />);
     });
+    const censusLogsAfterUpdate = logs.filter((l) => l.includes('[probe3]'));
+
+    expect(censusLogsAfterUpdate).toEqual(censusLogsBeforeUpdate);
     expect(__getLiveCountForTests('active')).toBe(1);
   });
 
