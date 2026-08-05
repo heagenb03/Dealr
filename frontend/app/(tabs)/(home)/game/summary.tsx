@@ -15,6 +15,7 @@ import { getSettlements, calculateBankerSettlements, SOLVER_TIMEOUT_SENTINEL } f
 import { PlayerBalance, SettlementResult } from '@/types/game';
 import { groupSettlementsByRecipient, sortPaymentsByAmount } from '@/utils/settlementUtils';
 import { getNetBalanceColor } from '@/utils/formatUtils';
+import { useScreenProbe } from '@/utils/devProbes';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import Button from '@/components/Button';
 import { Ionicons } from '@expo/vector-icons';
@@ -508,6 +509,8 @@ export default function GameSummaryScreen() {
   const router = useRouter();
   const reduceMotion = useReduceMotion();
   const { formatAmount, currency } = useCurrency();
+  // TEMPORARY Phase-0 probe — removed in Task 11.
+  useScreenProbe('summary', activeGame?.id);
   const { registerHelp } = useHelp();
   const [helpVisible, setHelpVisible] = useState(false);
 
