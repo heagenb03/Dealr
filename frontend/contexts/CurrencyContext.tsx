@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, ReactNode } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/services/firebaseService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -94,19 +94,37 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   const meta = SUPPORTED_CURRENCIES[currency];
 
-  const formatAmount = useCallback((value: number): string => {
+  // One formatter per currency, not one per call. PlayerCardActive calls
+  // formatAmount 4x per card, so a 50-player active screen constructed ~200 of
+  // these per mount. `meta` is a stable module constant per code, so this
+  // rebuilds only on a real currency change.
+  //
+  // Construction can throw on a runtime with limited Intl support, and it now
+  // happens during render — so it is caught here and degrades to null rather
+  // than taking the whole provider down. `.format()` keeps its own catch.
+  const numberFormat = useMemo<Intl.NumberFormat | null>(() => {
     try {
       return new Intl.NumberFormat(meta.locale, {
         style: 'currency',
         currency: meta.code,
         minimumFractionDigits: meta.decimals,
         maximumFractionDigits: meta.decimals,
-      }).format(value);
+      });
     } catch {
-      // Fallback for environments with limited Intl support
-      return `${meta.symbol}${value.toFixed(meta.decimals)}`;
+      return null;
     }
   }, [meta]);
+
+  const formatAmount = useCallback((value: number): string => {
+    if (numberFormat) {
+      try {
+        return numberFormat.format(value);
+      } catch {
+        // fall through to the symbol fallback below
+      }
+    }
+    return `${meta.symbol}${value.toFixed(meta.decimals)}`;
+  }, [numberFormat, meta]);
 
   const formatAmountCompact = useCallback((value: number): string => {
     const absValue = Math.abs(value);
