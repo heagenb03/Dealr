@@ -53,13 +53,23 @@ vcpkg_installed/
 # OR-Tools downloaded files
 or-tools_*.tar.gz
 
-# scripts
-scripts/
-*.yaml
-*.yml
-*.toml
+# SAM build output.
+#
+# This MUST stay listed. `sam build` writes its own generated template.yaml and a
+# build.toml here, and `build/` above only covers .aws-sam/build — not build.toml,
+# cache/ or deps/. Until 2026-08-04 those were caught incidentally by blanket
+# `*.yaml` / `*.yml` / `*.toml` rules, which also hid the real deploy definition.
+.aws-sam/
 
-#misc 
+# DELIBERATELY TRACKED — do not re-add `scripts/`, `*.yaml`, `*.yml` or `*.toml` here.
+#
+# Those four patterns previously made template.yaml, samconfig.toml, docker-compose.yml
+# and the whole scripts/ directory invisible to git. Only 12 files under backend/ were
+# tracked, which meant the Lambda MemorySize the solver depends on lived in an untracked
+# file, and a fresh clone had no way to deploy the backend at all. All four are checked in
+# now and contain no credentials (samconfig.toml resolves S3/ECR at deploy time).
+
+#misc
 test-data/
 tests/
 benchmark_settlements.py

@@ -1,0 +1,33 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "dealr-backend"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+resolve_s3 = true
+resolve_image_repos = true
+region = "us-east-1"
+
+[dev]
+[dev.deploy.parameters]
+stack_name = "dealr-backend-dev"
+parameter_overrides = "Environment=dev"
+region = "us-east-1"
+
+[staging]
+[staging.deploy.parameters]
+stack_name = "dealr-backend-staging"
+parameter_overrides = "Environment=staging"
+region = "us-east-1"
+
+[prod]
+[prod.deploy.parameters]
+stack_name = "dealr-backend-prod"
+parameter_overrides = "Environment=prod"
+region = "us-east-1"

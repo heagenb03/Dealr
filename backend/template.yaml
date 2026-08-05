@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CashCage Settlement Service - Lambda Function
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1769
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment
+
+Resources:
+  SettlementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+      Tags:
+        Service: cashcage-backend
+        Environment: !Ref Environment
+    Metadata:
+      DockerTag: !Sub "${Environment}-latest"
+      DockerContext: .
+      Dockerfile: Dockerfile.lambda
+
+Outputs:
+  SettlementFunctionArn:
+    Description: "Settlement Lambda Function ARN"
+    Value: !GetAtt SettlementFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-FunctionArn"
+
+  SettlementFunctionName:
+    Description: "Settlement Lambda Function Name"
+    Value: !Ref SettlementFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-FunctionName"
