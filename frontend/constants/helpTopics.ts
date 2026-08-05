@@ -28,7 +28,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     icon: 'git-compare-outline',
     paragraphs: [
       'Cash Cage can settle any game in two ways.',
-      'Direct: the app finds the fewest possible payments between the playing players where winners get paid directly by the losers. The summary will showcase exactly who owes who, and how much.',
+      'Direct: the app works out the fewest payments it can find between the playing players, where winners get paid directly by the losers. The summary shows exactly who owes who, and how much. On big games it returns the best arrangement it found within a few seconds rather than proving no shorter one exists.',
       'Banker: one player, playing or not, is a designated banker handeling all cash. The summary will showcase who the banker needs to pay, how much, and linked to their preferred payment method just like in a real table. Note it does takes the assumption that the banker has recieved all buy-ins previously to the game ending.',
     ],
   },
