@@ -74,7 +74,7 @@ export default function AccountScreen() {
               <Text style={styles.membershipTitle}>CASH CAGE PRO</Text>
             </View>
             <Text style={styles.membershipFeatures}>
-              Unlimited history · 20 players per game · 200 saved
+              Unlimited history · 50 players per game · 200 saved
             </Text>
             <Button
               title="Upgrade Now"

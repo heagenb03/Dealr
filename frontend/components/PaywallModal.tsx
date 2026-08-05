@@ -63,12 +63,13 @@ const PLAN_ROWS: Array<{
   { key: 'lifetime', period: DISPLAY_LIFETIME.period, detail: DISPLAY_LIFETIME.detail, bestValue: true },
 ];
 
-// Every line must be literally true. "All your devices" was removed because sync
-// is ungated (free users already sync), and "Unlimited players" because
-// firestore.rules caps players.size() at 20 for every tier.
+// Every line must be literally true. "All your devices" was removed
+// because sync is ungated (free users already sync), and "Unlimited
+// players" because the app caps players at PRO_PLAYER_CAP (50) under a
+// firestore.rules ceiling of 100.
 const FEATURES = [
   'Unlimited game history',
-  'Up to 20 players per game',
+  'Up to 50 players per game',
   'Save up to 200 players',
   'Bulk-manage your saved list',
 ];

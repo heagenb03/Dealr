@@ -19,7 +19,7 @@ import {
 
 describe('PLAYERS_PAYWALL_MESSAGE', () => {
   it('names the real Pro cap and never claims unlimited', () => {
-    expect(PLAYERS_PAYWALL_MESSAGE).toContain('20');
+    expect(PLAYERS_PAYWALL_MESSAGE).toContain('50');
     expect(PLAYERS_PAYWALL_MESSAGE.toLowerCase()).not.toContain('unlimited');
   });
 });
@@ -28,7 +28,7 @@ describe('playerCapHint', () => {
   it('states the free limit when exactly at it', () => {
     const s = playerCapHint(12, false);
     expect(s).toContain('12');
-    expect(s).toContain('20');
+    expect(s).toContain('50');
     expect(s.toLowerCase()).not.toContain('unlimited');
   });
 
@@ -46,8 +46,8 @@ describe('playerCapHint', () => {
 
   // Newly reachable: before this change a Pro user could never hit a cap.
   it('uses Pro wording at the Pro cap, with no upgrade prompt', () => {
-    const s = playerCapHint(20, true);
-    expect(s).toContain('20');
+    const s = playerCapHint(50, true);
+    expect(s).toContain('50');
     expect(s.toLowerCase()).not.toContain('upgrade');
     expect(s.toLowerCase()).not.toContain('free');
   });

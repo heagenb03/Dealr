@@ -10,34 +10,42 @@ import {
 describe('player caps', () => {
   it('exposes the documented cap values', () => {
     expect(FREE_PLAYER_CAP).toBe(12);
-    // Mirrors firestore.rules `players.size() <= 20`. If this test fails because
-    // someone raised the app cap, the rule must be raised and deployed FIRST.
-    expect(PRO_PLAYER_CAP).toBe(20);
+    // The firestore.rules ceiling is deliberately HIGHER than this (100), so the app
+    // cap can rise later without a rules deploy. If this test fails because someone
+    // raised PRO_PLAYER_CAP, confirm the DEPLOYED rule still exceeds it before
+    // updating — a cap above the rule causes silent, permanent sync loss.
+    expect(PRO_PLAYER_CAP).toBe(50);
   });
 
   it('resolves the cap per tier', () => {
     expect(playerCapFor(false)).toBe(12);
-    expect(playerCapFor(true)).toBe(20);
+    expect(playerCapFor(true)).toBe(50);
   });
 
   it('allows adding below the cap', () => {
     expect(canAddMorePlayers(11, false)).toBe(true);
-    expect(canAddMorePlayers(19, true)).toBe(true);
+    expect(canAddMorePlayers(49, true)).toBe(true);
   });
 
   it('blocks adding at the cap', () => {
     expect(canAddMorePlayers(12, false)).toBe(false);
-    expect(canAddMorePlayers(20, true)).toBe(false);
+    expect(canAddMorePlayers(50, true)).toBe(false);
   });
 
   it('blocks adding over the cap (grandfathered state)', () => {
     expect(canAddMorePlayers(17, false)).toBe(false);
-    expect(canAddMorePlayers(25, true)).toBe(false);
+    expect(canAddMorePlayers(55, true)).toBe(false);
   });
 
   it('gates on count vs tier cap, never on tier alone', () => {
     // A free user below their own cap can still add.
     expect(canAddMorePlayers(0, false)).toBe(true);
+  });
+
+  it('lets a Pro user past the OLD cap of 20', () => {
+    // Regression guard for the raise itself: 20 and 25 were both hard blocks before.
+    expect(canAddMorePlayers(20, true)).toBe(true);
+    expect(canAddMorePlayers(25, true)).toBe(true);
   });
 });
 
