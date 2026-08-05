@@ -98,7 +98,6 @@ function greedy(balances) {
   return settlements;
 }
 
-// Measured MILP settlement counts, dev @1769MB, seeds 1/2/3. See the design spec.
 /**
  * Measured settlement counts, dev @1769MB, SOLVER_TIME_LIMIT_MS=5000.
  *
@@ -130,12 +129,33 @@ const OPTIMUM = { 24: [17, 17, null] };
 const SIZES = (process.argv[2] ?? '20,24,32,50').split(',').map(Number);
 const SEEDS = (process.argv[3] ?? '1,2,3').split(',').map(Number);
 
+// MILP_5S / MILP_15S / OPTIMUM are indexed POSITIONALLY — index i holds the
+// measurement for the i-th seed of the canonical run, not for seed value i+1.
+// Supplying SEEDS out of canonical order (or starting elsewhere, or skipping a
+// value) silently pairs one seed's greedy count with another seed's MILP datum.
+// This is a low-risk guard, not a table restructure: the tables stay positional
+// and tracked as-is; we only refuse to index them unsafely.
+const seedsAreCanonicalPrefix = SEEDS.every((seed, i) => seed === i + 1);
+if (!seedsAreCanonicalPrefix) {
+  console.error(
+    'ERROR: the MILP_5S / MILP_15S / OPTIMUM tables in this file are POSITIONAL ' +
+      '(index i = the i-th seed of the canonical run), not keyed by seed value. ' +
+      `SEEDS=[${SEEDS.join(',')}] is not the canonical ascending prefix starting ` +
+      'at 1, so positional indexing would silently mispair seeds with the wrong ' +
+      'MILP measurement. Supply seeds in canonical ascending order starting at 1 ' +
+      '(e.g. "1,2,3" or "1,2,3,4,5").',
+  );
+  process.exit(1);
+}
+
 console.log(`Greedy vs MILP on identical instances  (rounding unit $${ROUND_UNIT})\n`);
 console.log('   N  seed   greedy   MILP-5s   MILP-15s   optimum   greedy-vs-5s   captured');
 
 const agg = {};
+const skippedCounts = {};
 for (const n of SIZES) {
   agg[n] = { greedy: 0, milp: 0, count: 0 };
+  skippedCounts[n] = 0;
   for (let i = 0; i < SEEDS.length; i++) {
     const seed = SEEDS[i];
     const g = greedy(roundBalances(makeBalances(n, seed), ROUND_UNIT)).length;
@@ -149,10 +169,16 @@ for (const n of SIZES) {
         ? `${(((g - m5) / (g - opt)) * 100).toFixed(0)}%`
         : '—';
 
-    agg[n].greedy += g;
+    // Only instances with BOTH a greedy count and a MILP datum enter the aggregate —
+    // letting greedy accumulate unconditionally while MILP only accumulates when
+    // present inflates the reported saving (a seed with no MILP datum would count
+    // fully on the greedy side and not at all on the MILP side).
     if (m5 !== null) {
+      agg[n].greedy += g;
       agg[n].milp += m5;
       agg[n].count++;
+    } else {
+      skippedCounts[n]++;
     }
 
     console.log(
@@ -174,4 +200,10 @@ for (const n of SIZES) {
     `N=${String(n).padStart(2)}  greedy=${a.greedy}  MILP=${a.milp}  ` +
       `MILP saves ${saved} payments (${pct}% fewer)`,
   );
+  if (skippedCounts[n] > 0) {
+    console.log(
+      `note: N=${n} aggregate covers ${a.count}/${SEEDS.length} seeds ` +
+        `(${skippedCounts[n]} skipped: no MILP datum)`,
+    );
+  }
 }

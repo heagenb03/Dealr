@@ -1,9 +1,9 @@
 /**
  * Measures whether an N-player table solves via the backend MILP inside the
- * client's DEFAULT_TIMEOUT_MS (10000), or aborts to client-greedy-v1.
+ * client's DEFAULT_TIMEOUT_MS (15000), or aborts to client-greedy-v1.
  *
  * Mirrors settlementService.getSettlements: POST {balances, settings} to
- * /settlements/optimal, 10s AbortController, same PlayerBalance shape.
+ * /settlements/optimal, 15s AbortController, same PlayerBalance shape.
  */
 
 const ENDPOINT = process.env.ENDPOINT;
@@ -20,7 +20,7 @@ if (!ENDPOINT) {
   );
   process.exit(1);
 }
-const TIMEOUT_MS = Number(process.env.TIMEOUT_MS ?? 10000);
+const TIMEOUT_MS = Number(process.env.TIMEOUT_MS ?? 15000);
 
 /**
  * MUST mirror what settlementService.getSettlements actually POSTs:

@@ -94,8 +94,10 @@ const LOCAL_BANKER_ALGORITHM_ID = 'client-banker-v1';
  * platform-dependent message — "Aborted" on React Native, "The user aborted a
  * request." elsewhere — so the message cannot be branched on.
  *
- * The server WAS reached in this case. Copy keyed off this value must not claim
- * otherwise (see utils/fallbackBannerCopy.ts).
+ * This only means the request was not answered inside our own budget — the server
+ * may or may not have been reached (a DNS blackhole or dropped packets can abort
+ * here with the fetch never actually landing). Copy keyed off this value must not
+ * claim the server was reached (see utils/fallbackBannerCopy.ts).
  */
 export const SOLVER_TIMEOUT_SENTINEL = 'solver-timeout';
 

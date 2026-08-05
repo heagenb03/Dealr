@@ -65,8 +65,11 @@ const PLAN_ROWS: Array<{
 
 // Every line must be literally true. "All your devices" was removed
 // because sync is ungated (free users already sync), and "Unlimited
-// players" because the app caps players at PRO_PLAYER_CAP (50) under a
-// firestore.rules ceiling of 100.
+// players" because the app caps players at PRO_PLAYER_CAP (50). The
+// firestore.rules ceiling is currently DEPLOYED at 20 and targeted at
+// 100; until that deploy lands, 'Up to 50 players per game' is true of
+// the app's own gating but not of what will sync. Do not release this
+// build before verifying the LIVE rule.
 const FEATURES = [
   'Unlimited game history',
   'Up to 50 players per game',
