@@ -369,6 +369,38 @@ describe('getSettlements', () => {
     expect(result.error).not.toBe(SOLVER_TIMEOUT_SENTINEL);
   });
 
+  it('does not report a solver timeout when the caller supplies its own signal', async () => {
+    // A caller-supplied signal (e.g. a screen unmounting) makes `controller` null
+    // internally, so even though this abort is name/message-identical to a real
+    // solver timeout, it must NOT be reported as one — that result is being
+    // discarded anyway. This is the case that falsifies a name/message-based
+    // implementation (e.g. `error.name === 'AbortError'`), which cannot tell it
+    // apart from an internal-timeout abort.
+    const callerController = new AbortController();
+
+    global.fetch = jest.fn().mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            const err = new Error('The user aborted a request.');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        }),
+    );
+
+    const promise = getSettlements(balances, {
+      endpoint: 'https://api.example.com/settlements/optimal',
+      signal: callerController.signal,
+    });
+
+    callerController.abort();
+    const result = await promise;
+
+    expect(result.error).toBe('The user aborted a request.');
+    expect(result.error).not.toBe(SOLVER_TIMEOUT_SENTINEL);
+  });
+
   it('falls back to local on non-ok response', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
@@ -459,9 +491,10 @@ describe('getSettlements', () => {
     const result = await promise;
 
     expect(result.source).toBe('client');
-    // DOMException is not instanceof Error in the Jest/Node environment, so the
-    // service normalizes it to 'unknown-error'. Verify fallback was triggered.
-    expect(result.error).toBeDefined();
+    // The internal timeout fired `controller.abort()`, so `controller.signal.aborted`
+    // is true regardless of the rejection's shape (DOMException here isn't even
+    // `instanceof Error`) — this is precisely the case the sentinel exists to mark.
+    expect(result.error).toBe(SOLVER_TIMEOUT_SENTINEL);
   });
 });
 
