@@ -710,7 +710,10 @@ setSettlementResult(cachedResult);
 
     try {
       const result = await getSettlements(balancesRef.current, {
-        timeoutMs: 5000,
+        // 15000, not a shorter "quick retry" value: a slow solve is exactly the
+        // case this retry exists to recover, so a budget at or below the solver's
+        // own 5000ms limit guarantees the retry fails.
+        timeoutMs: 15000,
         settings: {
           cashRoundingUnit: resolveCashUnit(cashUnitRef.current, currency),
           imbalanceTolerance: resolveTolerance(
