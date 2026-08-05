@@ -11,16 +11,11 @@ export const FREE_PLAYER_CAP = 12;
  * Pro tier: max players per game.
  *
  * MUST stay at or below the DEPLOYED `firestore.rules` ceiling.
- *   Deployed today: `players.size() <= 20`.
- *   Target after the rules deploy: `players.size() <= 100`.
+ *   Deployed 2026-08-05: `players.size() <= 100` (verified by reading the
+ *   published ruleset back, not by trusting the CLI's "Deploy complete!").
  *
- * Until that deploy lands, this constant (50) EXCEEDS the live rule. That is
- * intentional and safe ONLY because no build carrying it has been released —
- * the app is offline-first, so an over-rule game still saves to AsyncStorage
- * and only its Firestore sync fails. Verify the DEPLOYED rule before shipping.
- *
- * Once the rule is at 100 the app cap sits deliberately below it, so this number
- * can rise again without a rules deploy; the rule remains the storage-abuse guard.
+ * The cap therefore sits deliberately BELOW the rule, so this number can rise
+ * again without a rules deploy; the rule remains the storage-abuse guard.
  *
  * A game past the RULE fails its Firestore write with permission-denied, which is
  * not an offline error, so the fire-and-forget write only logs a console warning
