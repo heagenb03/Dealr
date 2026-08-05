@@ -10,15 +10,24 @@ export const FREE_PLAYER_CAP = 12;
 /**
  * Pro tier: max players per game.
  *
- * MUST stay at or below the `firestore.rules` ceiling `players.size() <= 100`.
- * The app cap sits deliberately below the rule so this number can be raised
- * without a rules deploy; the rule remains the storage-abuse guard.
+ * MUST stay at or below the DEPLOYED `firestore.rules` ceiling.
+ *   Deployed today: `players.size() <= 20`.
+ *   Target after the rules deploy: `players.size() <= 100`.
+ *
+ * Until that deploy lands, this constant (50) EXCEEDS the live rule. That is
+ * intentional and safe ONLY because no build carrying it has been released —
+ * the app is offline-first, so an over-rule game still saves to AsyncStorage
+ * and only its Firestore sync fails. Verify the DEPLOYED rule before shipping.
+ *
+ * Once the rule is at 100 the app cap sits deliberately below it, so this number
+ * can rise again without a rules deploy; the rule remains the storage-abuse guard.
  *
  * A game past the RULE fails its Firestore write with permission-denied, which is
  * not an offline error, so the fire-and-forget write only logs a console warning
  * and the game never leaves the device while appearing saved.
  *
- * DO NOT raise this above the rule without raising and DEPLOYING the rule first.
+ * DO NOT raise this above the DEPLOYED rule without raising and DEPLOYING the
+ * rule first.
  *
  * 50 is measured, not guessed: over 8 seeds the MILP returns 12.6% fewer payments
  * than the greedy fallback at N=50 versus 10.5% at N=12, solve latency is flat at

@@ -10,10 +10,12 @@ import {
 describe('player caps', () => {
   it('exposes the documented cap values', () => {
     expect(FREE_PLAYER_CAP).toBe(12);
-    // The firestore.rules ceiling is deliberately HIGHER than this (100), so the app
-    // cap can rise later without a rules deploy. If this test fails because someone
-    // raised PRO_PLAYER_CAP, confirm the DEPLOYED rule still exceeds it before
-    // updating — a cap above the rule causes silent, permanent sync loss.
+    // The firestore.rules ceiling is TARGETED to sit higher than this (100) so the
+    // app cap can rise later without a rules deploy — but that deploy is a separate,
+    // human-operated step. As of this commit the DEPLOYED rule is still 20, i.e.
+    // BELOW this constant. If this test fails because someone raised PRO_PLAYER_CAP,
+    // confirm the DEPLOYED rule still exceeds it before updating — a cap above the
+    // deployed rule causes silent, permanent sync loss.
     expect(PRO_PLAYER_CAP).toBe(50);
   });
 
