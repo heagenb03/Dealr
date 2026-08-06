@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { StyleSheet, ScrollView, FlatList, ListRenderItemInfo, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
+import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +42,7 @@ import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary
 import { keyboardSafeCardMaxHeight } from '@/utils/modalCardHeight';
 import { canAddMorePlayers } from '@/utils/tierLimits';
 import { buildAddPlayerPickerListData, AddPlayerPickerItem } from '@/utils/addPlayerPickerListData';
+import { buildActiveGameListData, ActiveGameListItem } from '@/utils/activeGameListData';
 import {
   PLAYERS_PAYWALL_MESSAGE,
   playerCapHint,
@@ -369,10 +370,10 @@ export default function ActiveGameScreen() {
     }
   };
 
-  const openPaymentEditor = (player: Player) => {
+  const openPaymentEditor = useCallback((player: Player) => {
     setPaymentPlayer(player);
     setShowPaymentEditor(true);
-  };
+  }, []);
 
   const handleSavePayment = async (pref: PreferredPayment) => {
     if (!paymentPlayer || !activeGame) return;
@@ -404,8 +405,16 @@ export default function ActiveGameScreen() {
     setPaymentPlayer(null);
   };
 
-  // Calculate balances - must be before early return to avoid hooks error
-  const balances = activeGame ? GameService.calculateBalances(activeGame) : [];
+  // Calculate balances - must be before early return to avoid hooks error.
+  // Memoized so it is not a fresh array every render: openTransactionModal deps on it,
+  // and listData deps on it in turn — an unstable identity here would hand FlatList new
+  // `data` on every render and defeat its diffing. Dep is `activeGame`, NOT
+  // `activeGame.players`: updateGame shallow-clones the Game, so the players array
+  // reference never changes.
+  const balances = useMemo(
+    () => (activeGame ? GameService.calculateBalances(activeGame) : []),
+    [activeGame],
+  );
 
   // Alphabetical, not the service's updatedAt-desc order: every add bumps updatedAt, so
   // recency order would reorder the list under the user's finger mid-session. Hoisted above
@@ -501,6 +510,125 @@ export default function ActiveGameScreen() {
     setShowRenameModal(true);
   }, []);
 
+  // Hoisted above the early return below (Rules of Hooks): renderItem is a useCallback
+  // and closes over all three.
+  const confirmDeletePlayer = useCallback((player: Player) => {
+    setPlayerToDelete(player);
+    setShowDeleteConfirmation(true);
+  }, []);
+
+  const handleCompletePlayer = useCallback(async (player: Player) => {
+    if (!activeGame) return;
+
+    try {
+      GameService.markPlayerAsCompleted(activeGame, player.id);
+      await updateGame(activeGame);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to mark player as completed. Please try again.');
+      console.error('Error completing player:', error);
+    }
+  }, [activeGame, updateGame]);
+
+  const handleReactivatePlayer = useCallback(async (player: Player) => {
+    if (!activeGame) return;
+
+    try {
+      GameService.markPlayerAsActive(activeGame, player.id);
+      await updateGame(activeGame);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to reactivate player. Please try again.');
+      console.error('Error reactivating player:', error);
+    }
+  }, [activeGame, updateGame]);
+
+  const listData = useMemo(
+    () =>
+      buildActiveGameListData({
+        players: activeGame?.players ?? [],
+        balances,
+        settlementMode: activeGame?.settlementMode,
+        bankerPlayerId: activeGame?.bankerPlayerId,
+      }),
+    [activeGame, balances],
+  );
+
+  const keyExtractor = useCallback((item: ActiveGameListItem) => item.key, []);
+
+  const openAddPlayer = useCallback(() => {
+    const count = activeGame?.players.length ?? 0;
+    if (!canAddMorePlayers(count, isPro)) {
+      if (isPro) {
+        Alert.alert('Player Limit', playerCapHint(count, true));
+      } else {
+        setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
+        setShowPaywall(true);
+      }
+    } else {
+      refreshSavedNames();
+      setSavePlayerToggle(true); // toggle defaults ON each time the modal opens
+      setAddedCount(0);
+      setLastAddedName(null);
+      setShowAddPlayer(true);
+    }
+  }, [activeGame, isPro, refreshSavedNames]);
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<ActiveGameListItem>) => {
+      switch (item.type) {
+        case 'sectionHeader':
+          return item.label === 'players' ? (
+            <HudSectionHeader label="Players" onAction={openAddPlayer} actionIcon="add-circle-outline" />
+          ) : (
+            <View style={styles.completedSectionHeader}>
+              <HudSectionHeader label="Completed" />
+            </View>
+          );
+        case 'empty':
+          return <EmptyState label={item.label} icon={item.icon} />;
+        case 'activePlayer':
+          return (
+            <View style={styles.playerCardWrap}>
+              <PlayerCardActive
+                player={item.player}
+                balance={item.balance}
+                onBuyIn={handleBuyIn}
+                onCashOut={handleCashOut}
+                onComplete={handleCompletePlayer}
+                onDelete={confirmDeletePlayer}
+                onRename={openRenameModal}
+                onEditPayment={openPaymentEditor}
+                reduceMotion={reduceMotionEnabled}
+                isBanker={item.isBanker}
+              />
+            </View>
+          );
+        case 'completedPlayer':
+          return (
+            <View style={styles.playerCardWrap}>
+              <PlayerCardCompleted
+                player={item.player}
+                balance={item.balance}
+                onReactivate={handleReactivatePlayer}
+                onDelete={confirmDeletePlayer}
+                reduceMotion={reduceMotionEnabled}
+              />
+            </View>
+          );
+      }
+    },
+    [
+      openAddPlayer,
+      handleBuyIn,
+      handleCashOut,
+      handleCompletePlayer,
+      confirmDeletePlayer,
+      openRenameModal,
+      openPaymentEditor,
+      handleReactivatePlayer,
+      reduceMotionEnabled,
+    ],
+  );
+
   if (!activeGame) {
     return (
       <View style={styles.container}>
@@ -514,9 +642,6 @@ export default function ActiveGameScreen() {
       </View>
     );
   }
-
-  const activePlayers = activeGame.players.filter(p => !p.completedAt);
-  const completedPlayers = activeGame.players.filter(p => p.completedAt);
 
   // Save-toggle state for the Add Player modal (spec: the cap is never silent).
   const savedListFull = !canAddMoreSavedPlayers(savedPlayers.length, isPro);
@@ -1054,11 +1179,6 @@ export default function ActiveGameScreen() {
     setIsEditingTitle(false);
   };
 
-  const confirmDeletePlayer = (player: Player) => {
-    setPlayerToDelete(player);
-    setShowDeleteConfirmation(true);
-  };
-
   const handleDeletePlayer = async () => {
     if (!playerToDelete || !activeGame) return;
 
@@ -1071,30 +1191,6 @@ export default function ActiveGameScreen() {
     } catch (error) {
       Alert.alert('Error', 'Failed to delete player. Please try again.');
       console.error('Error deleting player:', error);
-    }
-  };
-
-  const handleCompletePlayer = async (player: Player) => {
-    if (!activeGame) return;
-
-    try {
-      GameService.markPlayerAsCompleted(activeGame, player.id);
-      await updateGame(activeGame);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to mark player as completed. Please try again.');
-      console.error('Error completing player:', error);
-    }
-  };
-
-  const handleReactivatePlayer = async (player: Player) => {
-    if (!activeGame) return;
-
-    try {
-      GameService.markPlayerAsActive(activeGame, player.id);
-      await updateGame(activeGame);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to reactivate player. Please try again.');
-      console.error('Error reactivating player:', error);
     }
   };
 
@@ -1241,299 +1337,249 @@ export default function ActiveGameScreen() {
     </View>
   );
 
+  // An ELEMENT, not an inline arrow component. `ListHeaderComponent={() => …}` is a new
+  // component type on every render, which remounts the header — and this header holds the
+  // autoFocus title TextInput, so a remount mid-edit drops the user's cursor.
+  const listHeader = (
+    <>
+      {/* Game Info */}
+      <View style={styles.header}>
+        {isEditingTitle ? (
+          <TextInput
+            style={styles.gameTitleInput}
+            value={editedTitle}
+            onChangeText={setEditedTitle}
+            onBlur={handleTitleBlur}
+            onSubmitEditing={handleTitleBlur}
+            autoFocus
+            returnKeyType="done"
+            maxLength={50}
+            placeholder="Game name"
+            placeholderTextColor="#666"
+          />
+        ) : (
+          <TouchableOpacity onPress={handleTitlePress} activeOpacity={0.7}>
+            <View style={styles.titleContainer}>
+              <Text style={styles.gameTitle}>{activeGame.name}</Text>
+              <Text style={styles.editIcon}>✎</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        <Text style={styles.gameInfo}>
+          {new Date(activeGame.date).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          })}
+        </Text>
+      </View>
+
+      {/* Settlement / Settings */}
+      <View style={styles.section}>
+        <HudSectionHeader
+          label="Settings"
+          onAction={toggleSettings}
+          actionIcon={settingsExpanded ? 'chevron-up' : 'chevron-down'}
+          accessibilityLabel={settingsExpanded ? 'Collapse settings' : 'Expand settings'}
+          accessibilityHint={
+            settingsExpanded
+              ? 'Collapses the game settings section'
+              : 'Expands the game settings section'
+          }
+        />
+
+        {settingsExpanded ? (
+          <View style={styles.settlementCard}>
+            <View style={styles.segment}>
+              <TouchableOpacity
+                style={[styles.segmentBtn, activeGame.settlementMode !== 'banker' && styles.segmentBtnActive]}
+                onPress={handleTapDirect}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.segmentText, activeGame.settlementMode !== 'banker' && styles.segmentTextActive]}>
+                  Direct
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segmentBtn, activeGame.settlementMode === 'banker' && styles.segmentBtnActive]}
+                onPress={handleTapBanker}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.segmentText, activeGame.settlementMode === 'banker' && styles.segmentTextActive]}>
+                  Banker
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeGame.settlementMode === 'banker' && (
+              <>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => setShowSettlementModePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <Ionicons name="person-outline" size={18} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.menuItemLabel}>Banker</Text>
+                  </View>
+                  <View style={styles.menuItemRight}>
+                    <Text style={styles.menuItemValue}>
+                      {bankerName ? bankerName : 'Choose banker'}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+                  </View>
+                </TouchableOpacity>
+              </>
+            )}
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setDefaultBuyInInput(gameDefaultBuyIn > 0 ? String(gameDefaultBuyIn) : '');
+                setShowDefaultBuyInModal(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.menuItemLabel}>Default buy-in</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>{defaultBuyInLabel}</Text>
+                <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setShowCashUnitPicker(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="options-outline" size={18} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.menuItemLabel}>Rounding</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>{roundingLabel}</Text>
+                <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => setShowTolerancePicker(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemLeft}>
+                <Ionicons name="git-compare-outline" size={18} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.menuItemLabel}>Imbalance tolerance</Text>
+              </View>
+              <View style={styles.menuItemRight}>
+                <Text style={styles.menuItemValue}>{toleranceValueLabel}</Text>
+                <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
+              </View>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            onPress={toggleSettings}
+            activeOpacity={0.7}
+            style={styles.settingsSummaryRow}
+            accessibilityRole="button"
+            accessibilityLabel={`Settings: ${settingsSummary}`}
+            accessibilityHint="Expands the game settings section"
+          >
+            {/* Mode group (shrinks + ellipsizes for long banker names) */}
+            <View style={[styles.settingsSummaryGroup, styles.settingsSummaryModeGroup]}>
+              <Ionicons
+                name={activeGame.settlementMode === 'banker' ? 'person-outline' : 'swap-horizontal'}
+                size={15}
+                color="rgba(255,255,255,0.5)"
+              />
+              {activeGame.settlementMode === 'banker' ? (
+                <Text style={styles.settingsSummaryLabel} numberOfLines={1}>
+                  Banker
+                  <Text style={styles.settingsSummaryValue}>
+                    {bankerName ? ` · ${bankerName}` : ' · Choose banker'}
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                  Direct
+                </Text>
+              )}
+            </View>
+
+            {/* Default buy-in — omitted entirely when off (0), since that means the
+                feature is disabled rather than sitting at a default value. Same
+                banker-unchosen suppression as the rounding and tolerance segments. */}
+            {gameDefaultBuyIn > 0 && showTrailingSegments && (
+              <>
+                <Text style={styles.settingsSummaryDot}>·</Text>
+                <View style={styles.settingsSummaryGroup}>
+                  <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                    {buyInValueLabel}
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
+            {showTrailingSegments && (
+              <>
+                <Text style={styles.settingsSummaryDot}>·</Text>
+                <View style={styles.settingsSummaryGroup}>
+                  <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                    {roundingLabel}
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {/* Tolerance — always shown, same banker-unchosen suppression as rounding */}
+            {showTrailingSegments && (
+                <>
+                  <Text style={styles.settingsSummaryDot}>·</Text>
+                  <View style={styles.settingsSummaryGroup}>
+                    <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
+                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                      {toleranceLabel}
+                    </Text>
+                  </View>
+                </>
+              )}
+          </TouchableOpacity>
+        )}
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.container}>
       <HelpHint visible={hintVisible} onDismiss={dismissHint} />
-      <ScrollView style={styles.scrollView}>
-        {/* Game Info */}
-        <View style={styles.header}>
-          {isEditingTitle ? (
-            <TextInput
-              style={styles.gameTitleInput}
-              value={editedTitle}
-              onChangeText={setEditedTitle}
-              onBlur={handleTitleBlur}
-              onSubmitEditing={handleTitleBlur}
-              autoFocus
-              returnKeyType="done"
-              maxLength={50}
-              placeholder="Game name"
-              placeholderTextColor="#666"
-            />
-          ) : (
-            <TouchableOpacity onPress={handleTitlePress} activeOpacity={0.7}>
-              <View style={styles.titleContainer}>
-                <Text style={styles.gameTitle}>{activeGame.name}</Text>
-                <Text style={styles.editIcon}>✎</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          <Text style={styles.gameInfo}>
-            {new Date(activeGame.date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric'
-            })}
-          </Text>
-        </View>
-
-        {/* Settlement / Settings */}
-        <View style={styles.section}>
-          <HudSectionHeader
-            label="Settings"
-            onAction={toggleSettings}
-            actionIcon={settingsExpanded ? 'chevron-up' : 'chevron-down'}
-            accessibilityLabel={settingsExpanded ? 'Collapse settings' : 'Expand settings'}
-            accessibilityHint={
-              settingsExpanded
-                ? 'Collapses the game settings section'
-                : 'Expands the game settings section'
-            }
-          />
-
-          {settingsExpanded ? (
-            <View style={styles.settlementCard}>
-              <View style={styles.segment}>
-                <TouchableOpacity
-                  style={[styles.segmentBtn, activeGame.settlementMode !== 'banker' && styles.segmentBtnActive]}
-                  onPress={handleTapDirect}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.segmentText, activeGame.settlementMode !== 'banker' && styles.segmentTextActive]}>
-                    Direct
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.segmentBtn, activeGame.settlementMode === 'banker' && styles.segmentBtnActive]}
-                  onPress={handleTapBanker}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.segmentText, activeGame.settlementMode === 'banker' && styles.segmentTextActive]}>
-                    Banker
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {activeGame.settlementMode === 'banker' && (
-                <>
-                  <View style={styles.menuDivider} />
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={() => setShowSettlementModePicker(true)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.menuItemLeft}>
-                      <Ionicons name="person-outline" size={18} color="rgba(255,255,255,0.5)" />
-                      <Text style={styles.menuItemLabel}>Banker</Text>
-                    </View>
-                    <View style={styles.menuItemRight}>
-                      <Text style={styles.menuItemValue}>
-                        {bankerName ? bankerName : 'Choose banker'}
-                      </Text>
-                      <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-                    </View>
-                  </TouchableOpacity>
-                </>
-              )}
-
-              <View style={styles.menuDivider} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setDefaultBuyInInput(gameDefaultBuyIn > 0 ? String(gameDefaultBuyIn) : '');
-                  setShowDefaultBuyInModal(true);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Ionicons name="cash-outline" size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.menuItemLabel}>Default buy-in</Text>
-                </View>
-                <View style={styles.menuItemRight}>
-                  <Text style={styles.menuItemValue}>{defaultBuyInLabel}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.menuDivider} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => setShowCashUnitPicker(true)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Ionicons name="options-outline" size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.menuItemLabel}>Rounding</Text>
-                </View>
-                <View style={styles.menuItemRight}>
-                  <Text style={styles.menuItemValue}>{roundingLabel}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.menuDivider} />
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => setShowTolerancePicker(true)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.menuItemLeft}>
-                  <Ionicons name="git-compare-outline" size={18} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.menuItemLabel}>Imbalance tolerance</Text>
-                </View>
-                <View style={styles.menuItemRight}>
-                  <Text style={styles.menuItemValue}>{toleranceValueLabel}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.4)" />
-                </View>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              onPress={toggleSettings}
-              activeOpacity={0.7}
-              style={styles.settingsSummaryRow}
-              accessibilityRole="button"
-              accessibilityLabel={`Settings: ${settingsSummary}`}
-              accessibilityHint="Expands the game settings section"
-            >
-              {/* Mode group (shrinks + ellipsizes for long banker names) */}
-              <View style={[styles.settingsSummaryGroup, styles.settingsSummaryModeGroup]}>
-                <Ionicons
-                  name={activeGame.settlementMode === 'banker' ? 'person-outline' : 'swap-horizontal'}
-                  size={15}
-                  color="rgba(255,255,255,0.5)"
-                />
-                {activeGame.settlementMode === 'banker' ? (
-                  <Text style={styles.settingsSummaryLabel} numberOfLines={1}>
-                    Banker
-                    <Text style={styles.settingsSummaryValue}>
-                      {bankerName ? ` · ${bankerName}` : ' · Choose banker'}
-                    </Text>
-                  </Text>
-                ) : (
-                  <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                    Direct
-                  </Text>
-                )}
-              </View>
-
-              {/* Default buy-in — omitted entirely when off (0), since that means the
-                  feature is disabled rather than sitting at a default value. Same
-                  banker-unchosen suppression as the rounding and tolerance segments. */}
-              {gameDefaultBuyIn > 0 && showTrailingSegments && (
-                <>
-                  <Text style={styles.settingsSummaryDot}>·</Text>
-                  <View style={styles.settingsSummaryGroup}>
-                    <Ionicons name="cash-outline" size={15} color="rgba(255,255,255,0.5)" />
-                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                      {buyInValueLabel}
-                    </Text>
-                  </View>
-                </>
-              )}
-
-              {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
-              {showTrailingSegments && (
-                <>
-                  <Text style={styles.settingsSummaryDot}>·</Text>
-                  <View style={styles.settingsSummaryGroup}>
-                    <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
-                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                      {roundingLabel}
-                    </Text>
-                  </View>
-                </>
-              )}
-
-              {/* Tolerance — always shown, same banker-unchosen suppression as rounding */}
-              {showTrailingSegments && (
-                  <>
-                    <Text style={styles.settingsSummaryDot}>·</Text>
-                    <View style={styles.settingsSummaryGroup}>
-                      <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
-                      <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                        {toleranceLabel}
-                      </Text>
-                    </View>
-                  </>
-                )}
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Active Players List */}
-        <View style={styles.section}>
-          <HudSectionHeader
-            label="Players"
-            onAction={() => {
-              if (!canAddMorePlayers(activeGame.players.length, isPro)) {
-                if (isPro) {
-                  Alert.alert('Player Limit', playerCapHint(activeGame.players.length, true));
-                } else {
-                  setPaywallMessage(PLAYERS_PAYWALL_MESSAGE);
-                  setShowPaywall(true);
-                }
-              } else {
-                refreshSavedNames();
-                setSavePlayerToggle(true); // toggle defaults ON each time the modal opens
-                setAddedCount(0);
-                setLastAddedName(null);
-                setShowAddPlayer(true);
-              }
-            }}
-            actionIcon="add-circle-outline"
-          />
-
-          {activePlayers.length === 0 ? (
-            <EmptyState label="No players yet" icon="person-outline" />
-          ) : (
-            activePlayers.map(player => {
-              const balance = getPlayerBalance(player.id);
-              return (
-                <View key={player.id} style={{ marginBottom: 8, backgroundColor: 'transparent' }}>
-                  <PlayerCardActive
-                    player={player}
-                    balance={balance}
-                    onBuyIn={handleBuyIn}
-                    onCashOut={handleCashOut}
-                    onComplete={handleCompletePlayer}
-                    onDelete={confirmDeletePlayer}
-                    onRename={openRenameModal}
-                    onEditPayment={openPaymentEditor}
-                    reduceMotion={reduceMotionEnabled}
-                    isBanker={activeGame.settlementMode === 'banker' && activeGame.bankerPlayerId === player.id}
-                  />
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        {/* Completed Players List */}
-        {completedPlayers.length > 0 && (
-          <View style={styles.section}>
-            <HudSectionHeader label="Completed" />
-
-            {completedPlayers.map(player => {
-              const balance = getPlayerBalance(player.id);
-              return (
-                <View key={player.id} style={{ marginBottom: 8, backgroundColor: 'transparent' }}>
-                  <PlayerCardCompleted
-                    player={player}
-                    balance={balance}
-                    onReactivate={handleReactivatePlayer}
-                    onDelete={confirmDeletePlayer}
-                    reduceMotion={reduceMotionEnabled}
-                  />
-                </View>
-              );
-            })}
-          </View>
-        )}
-      </ScrollView>
+      <FlatList
+        data={listData}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={listHeader}
+        style={styles.scrollView}
+        contentContainerStyle={styles.listContent}
+        initialNumToRender={8}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        /* PlayerCardActive/Completed wrap a Reanimated Swipeable, which misbehaves under
+           Android's default removeClippedSubviews={true}. index.tsx:211 does the same. */
+        removeClippedSubviews={false}
+      />
 
       {/* Actions */}
       {activeGame.players.length > 1 && activeGame.transactions.length > 0 && (
@@ -1966,9 +2012,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
+  // padding moved to listContent: RN documents contentContainerStyle as the place for a
+  // list's inner padding; padding on a FlatList's `style` insets the scroll frame itself.
   scrollView: {
     flex: 1,
+  },
+  listContent: {
     padding: 20,
+    // 8 (the last card wrapper's marginBottom) + 28 (the last section's marginBottom,
+    // destroyed by flattening) + 20 (the ScrollView's old bottom padding).
+    paddingBottom: 56,
+  },
+  // Replaces the inline <View style={{ marginBottom: 8, backgroundColor: 'transparent' }}>
+  // each card used to sit in. Kept on the item rather than an ItemSeparatorComponent,
+  // because a separator does not reproduce the trailing 8pt the last card gets.
+  playerCardWrap: {
+    marginBottom: 8,
+    backgroundColor: 'transparent',
+  },
+  // Re-creates the players section's marginBottom: 28, which used to sit between the last
+  // active card and the Completed header.
+  completedSectionHeader: {
+    marginTop: 28,
+    backgroundColor: 'transparent',
   },
   header: {
     marginBottom: 24,
@@ -2335,15 +2401,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     alignSelf: 'flex-start',
     marginBottom: 8,
-  },
-  pickerList: {
-    width: '100%',
-    backgroundColor: '#0A0A0A',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    marginBottom: 16,
-    overflow: 'hidden',
   },
   // The card is maxHeight-bounded (addPlayerCardStyle). RN defaults flexShrink to 0, so
   // without this the list keeps its full content height, pushes the pinned Add/Done footer
