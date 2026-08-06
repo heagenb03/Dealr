@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cash Cage",
     "slug": "my-app",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cashcage",
