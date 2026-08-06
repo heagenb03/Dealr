@@ -1004,7 +1004,7 @@ setSettlementResult(cachedResult);
             </View>
             <View style={styles.actionRowItem}>
               <Button
-                onPress={() => router.push('/')}
+                onPress={() => router.dismissAll()}
                 title="Done"
                 variant="primary"
                 accessibilityHint="Returns to the home screen"
@@ -1013,7 +1013,7 @@ setSettlementResult(cachedResult);
           </View>
         ) : (
           <Button
-            onPress={() => router.push('/')}
+            onPress={() => router.dismissAll()}
             title="Done"
             variant="primary"
             fullWidth
