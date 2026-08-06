@@ -1,9 +1,10 @@
-import React from 'react';
-import { Modal, TouchableOpacity, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { Modal, TouchableOpacity, StyleSheet, Pressable, FlatList, ListRenderItemInfo } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Text, View } from '@/components/Themed';
 import { Player } from '@/types/game';
+import { buildBankerPickerListData, BankerPickerItem } from '@/utils/bankerPickerListData';
 
 interface Props {
   visible: boolean;
@@ -22,6 +23,27 @@ export default function SettlementModePicker({
   onAddSomeone,
   onClose,
 }: Props) {
+  const listData = useMemo(
+    () => buildBankerPickerListData(players, bankerPlayerId),
+    [players, bankerPlayerId],
+  );
+
+  const keyExtractor = useCallback((item: BankerPickerItem) => item.key, []);
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<BankerPickerItem>) => (
+      <TouchableOpacity
+        style={styles.row}
+        onPress={() => { onSelectBanker(item.id); onClose(); }}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.label}>{item.name}</Text>
+        {item.isSelected && <Ionicons name="checkmark" size={20} color="#B072BB" />}
+      </TouchableOpacity>
+    ),
+    [onSelectBanker, onClose],
+  );
+
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -36,22 +58,15 @@ export default function SettlementModePicker({
               </TouchableOpacity>
             ) : (
               <>
-                <ScrollView>
-                  {players.map(p => {
-                    const active = bankerPlayerId === p.id;
-                    return (
-                      <TouchableOpacity
-                        key={p.id}
-                        style={styles.row}
-                        onPress={() => { onSelectBanker(p.id); onClose(); }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.label}>{p.name}</Text>
-                        {active && <Ionicons name="checkmark" size={20} color="#B072BB" />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+                <FlatList
+                  data={listData}
+                  renderItem={renderItem}
+                  keyExtractor={keyExtractor}
+                  style={styles.list}
+                  initialNumToRender={10}
+                  maxToRenderPerBatch={10}
+                  windowSize={5}
+                />
 
                 <View style={styles.divider} />
 
@@ -82,6 +97,11 @@ const styles = StyleSheet.create({
     fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.5)', textAlign: 'center',
     marginBottom: 4, letterSpacing: 1, textTransform: 'uppercase',
   },
+  // The sheet is maxHeight-bounded; RN defaults flexShrink to 0, so without this the
+  // list keeps its full content height and a long roster is clipped instead of
+  // scrolling. A VirtualizedList also needs a bounded height or it renders every row
+  // and virtualizes nothing.
+  list: { flexShrink: 1 },
   hint: {
     fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center',
     marginBottom: 12, paddingHorizontal: 20,
