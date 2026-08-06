@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
+import { StyleSheet, ScrollView, FlatList, ListRenderItemInfo, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +41,7 @@ import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAdd
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 import { keyboardSafeCardMaxHeight } from '@/utils/modalCardHeight';
 import { canAddMorePlayers } from '@/utils/tierLimits';
+import { buildAddPlayerPickerListData, AddPlayerPickerItem } from '@/utils/addPlayerPickerListData';
 import {
   PLAYERS_PAYWALL_MESSAGE,
   playerCapHint,
@@ -51,6 +52,16 @@ import {
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+// Module scope, not component scope: a component-local arrow gets a fresh identity every
+// render, which would put an unstable value in the picker useMemo's dep array and rebuild
+// the list data on every keystroke. The body closes over nothing but imports.
+const savedBadge = (p: SavedPlayer): string | null => {
+  if (!p.preferredPayment) return null;
+  const { method, handle } = p.preferredPayment;
+  const label = getPaymentMethodMeta(method).label;
+  return handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
+};
 
 function HudSectionHeader({ label, onAction, actionIcon, accessibilityLabel = 'Add player', accessibilityHint = 'Opens the add player dialog' }: { label: string; onAction?: () => void; actionIcon?: string; accessibilityLabel?: string; accessibilityHint?: string }) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -345,13 +356,6 @@ export default function ActiveGameScreen() {
   const [showPaymentEditor, setShowPaymentEditor] = useState(false);
   const [paymentPlayer, setPaymentPlayer] = useState<Player | null>(null);
 
-  const savedBadge = (p: SavedPlayer): string | null => {
-    if (!p.preferredPayment) return null;
-    const { method, handle } = p.preferredPayment;
-    const label = getPaymentMethodMeta(method).label;
-    return handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
-  };
-
   const samePayment = (a: PreferredPayment, b: PreferredPayment): boolean =>
     a.method === b.method && (a.handle ?? '') === (b.handle ?? '');
 
@@ -415,6 +419,43 @@ export default function ActiveGameScreen() {
   // because handlers are never read during render.
   const selectSavedRef = useRef<(id: string) => void>(() => {});
   const onSelectSaved = useCallback((id: string) => selectSavedRef.current(id), []);
+
+  // Hoisted above the early return below (Rules of Hooks) — the picker's FlatList data
+  // is a useMemo and must not sit under the guard.
+  const filteredSaved = useMemo(
+    () => filterSavedByQuery(sortedSaved, newPlayerName),
+    [sortedSaved, newPlayerName],
+  );
+
+  // Dep is `activeGame`, NOT `activeGame.players`: GameContext.updateGame shallow-clones
+  // the Game, so the players array reference never changes and a dep on it would freeze
+  // this for the lifetime of the mount.
+  const savedPickerListData = useMemo(
+    () =>
+      buildAddPlayerPickerListData(
+        filteredSaved.map(p => ({ id: p.id, name: p.name, badge: savedBadge(p) })),
+        name => isNameTakenInGame(activeGame?.players ?? [], name),
+        !canAddMorePlayers(activeGame?.players.length ?? 0, isPro),
+      ),
+    [filteredSaved, activeGame, isPro],
+  );
+
+  const savedPickerKeyExtractor = useCallback((item: AddPlayerPickerItem) => item.key, []);
+
+  const renderSavedPickerItem = useCallback(
+    ({ item }: ListRenderItemInfo<AddPlayerPickerItem>) => (
+      <SavedPickerRow
+        id={item.id}
+        name={item.name}
+        badge={item.badge}
+        inGame={item.inGame}
+        disabled={item.disabled}
+        isLast={item.isLast}
+        onSelect={onSelectSaved}
+      />
+    ),
+    [onSelectSaved],
+  );
 
   const getPlayerBalance = (playerId: string): PlayerBalance | undefined => {
     return balances.find(b => b.playerId === playerId);
@@ -480,9 +521,8 @@ export default function ActiveGameScreen() {
   // Save-toggle state for the Add Player modal (spec: the cap is never silent).
   const savedListFull = !canAddMoreSavedPlayers(savedPlayers.length, isPro);
   const trimmedName = newPlayerName.trim();
-  const filteredSaved = filterSavedByQuery(sortedSaved, newPlayerName);
-  // No window — the whole roster must be tappable. Kept as a named binding because it is
-  // the argument to shouldShowAddedConfirmation below and that helper's parameter name.
+  // Alias kept because it is the argument to shouldShowAddedConfirmation below and that
+  // helper's parameter name. No window — the whole roster must be tappable.
   const visibleSaved = filteredSaved;
   const isTypedNew =
     trimmedName.length > 0 &&
@@ -1094,6 +1134,113 @@ export default function ActiveGameScreen() {
     setRenameSuggestions([]);
   };
 
+  // Pick-first saved list — Browse + typing only; hidden on decisive pick, and when a typed
+  // query matches no saved player.
+  const showSavedPicker = !committingTapped && savedPlayers.length > 0 && filteredSaved.length > 0;
+
+  // Header/footer are ELEMENTS, never inline arrows. `ListHeaderComponent={() => <X/>}`
+  // creates a new component TYPE every render, so React unmounts and remounts the subtree;
+  // this header sits beside a focused text input, which makes a remount user-visible.
+  // A new element of a stable type only re-renders, which is what we want.
+  //
+  // Everything the modal body used to hold now lives in the list's content container so
+  // there is exactly ONE scroll container covering the whole body. That is mandatory here,
+  // not a preference: on a 667pt window the card is 334pt and the fixed chrome alone
+  // (padding 48 + title 47 + search 74 + buy-in 74 + toggle 46 + footer 48) is 337pt, so
+  // any child pinned outside a scroller is unreachable.
+  const savedPickerHeader = (
+    <View style={styles.pickerBlock}>
+      {pendingBankerDesignation && (
+        <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
+      )}
+
+      {shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
+        <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
+      )}
+
+      {showSavedPicker && (
+        <Text style={styles.pickerLabel}>SAVED · {savedPlayers.length}</Text>
+      )}
+    </View>
+  );
+
+  const savedPickerFooter = (
+    /* pickerFooterGap replaces the 16pt the dropped styles.pickerList marginBottom used to
+       put between the last row and the buy-in field. Only applied when rows are present. */
+    <View style={[styles.pickerBlock, showSavedPicker && styles.pickerFooterGap]}>
+      {/* Buy-in — only once a subject exists (Commit). */}
+      {hasSubject && gameDefaultBuyIn === 0 && (
+        <TextInput
+          ref={buyInInputRef}
+          style={styles.input}
+          value={newPlayerBuyIn}
+          onChangeText={setNewPlayerBuyIn}
+          placeholder="Buy-In"
+          placeholderTextColor="#666"
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          onSubmitEditing={() => commitAddPlayer()}
+        />
+      )}
+
+      {/* Save-player opt-in — typing-a-new-name only, in a fixed-height slot so
+          crossing an exact saved-name match doesn't shift the Add button. */}
+      {committingTyped && (
+        <View style={styles.saveToggleSlot}>
+          {isTypedNew ? (
+            savedListFull ? (
+              <TouchableOpacity
+                style={styles.saveToggleRow}
+                disabled={isPro}
+                onPress={() => {
+                  setShowAddPlayer(false);
+                  setPendingBankerDesignation(false);
+                  setPaywallMessage(savedCapPaywallMessage(savedPlayers.length, isPro));
+                  setShowPaywall(true);
+                }}
+              >
+                <Ionicons name="lock-closed" size={14} color="#B072BB" />
+                <Text style={styles.saveToggleFullText}>
+                  {savedCapModalNotice(savedPlayers.length, isPro)}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.saveToggleRow} onPress={() => setSavePlayerToggle(v => !v)}>
+                <Ionicons
+                  name={savePlayerToggle ? 'checkbox' : 'square-outline'}
+                  size={18}
+                  color={savePlayerToggle ? '#B072BB' : '#666'}
+                />
+                <Text style={styles.saveToggleText}>Save player</Text>
+              </TouchableOpacity>
+            )
+          ) : typedExactMatch ? (
+            forceUnlinked ? (
+              <TouchableOpacity style={styles.identityRow} onPress={() => setForceUnlinked(false)}>
+                <Ionicons name="close-circle-outline" size={16} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.identityUnlinkedText} numberOfLines={1}>Adding as new · not linked</Text>
+                <Text style={styles.identityAction}>Undo</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.identityRow} onPress={() => setForceUnlinked(true)}>
+                <Ionicons name="arrow-forward" size={14} color="#B072BB" />
+                <Text style={styles.identityUsingText} numberOfLines={1}>
+                  Using saved {typedExactMatch.name}
+                  {savedBadge(typedExactMatch) ? ` · ${savedBadge(typedExactMatch)}` : ''}
+                </Text>
+                <Text style={styles.identityAction}>Add as new</Text>
+              </TouchableOpacity>
+            )
+          ) : null}
+        </View>
+      )}
+
+      {atPlayerCap && (
+        <Text style={styles.pickHint}>{playerCapHint(activeGame.players.length, isPro)}</Text>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <HelpHint visible={hintVisible} onDismiss={dismissHint} />
@@ -1408,6 +1555,7 @@ export default function ActiveGameScreen() {
         onClose={closeAddModal}
         contentStyle={appModalStyles.centeredContent}
         cardStyle={addPlayerCardStyle}
+        scrollBody={false}
         header={
           /* Subject header (decisive pick) OR search field (Browse / typing).
              Pinned: typing filters the list below, so it must stay visible. */
@@ -1449,109 +1597,29 @@ export default function ActiveGameScreen() {
           </View>
         }
       >
-        {pendingBankerDesignation && (
-          <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
-        )}
-
-        {shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
-          <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
-        )}
-
-        {/* Pick-first saved list — Browse + typing only; hidden on decisive pick.
-            Collapses to nothing when a typed query matches no saved player. */}
-        {!committingTapped && savedPlayers.length > 0 && filteredSaved.length > 0 && (
-          <>
-            <Text style={styles.pickerLabel}>SAVED · {savedPlayers.length}</Text>
-            <View style={styles.pickerList}>
-              {visibleSaved.map((p, index) => {
-                const inGame = isNameTakenInGame(activeGame.players, p.name);
-                return (
-                  <SavedPickerRow
-                    key={p.id}
-                    id={p.id}
-                    name={p.name}
-                    badge={savedBadge(p)}
-                    inGame={inGame}
-                    disabled={inGame || atPlayerCap}
-                    isLast={index === visibleSaved.length - 1}
-                    onSelect={onSelectSaved}
-                  />
-                );
-              })}
-            </View>
-          </>
-        )}
-
-        {/* Buy-in — only once a subject exists (Commit). */}
-        {hasSubject && gameDefaultBuyIn === 0 && (
-          <TextInput
-            ref={buyInInputRef}
-            style={styles.input}
-            value={newPlayerBuyIn}
-            onChangeText={setNewPlayerBuyIn}
-            placeholder="Buy-In"
-            placeholderTextColor="#666"
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-            onSubmitEditing={() => commitAddPlayer()}
-          />
-        )}
-
-        {/* Save-player opt-in — typing-a-new-name only, in a fixed-height slot so
-            crossing an exact saved-name match doesn't shift the Add button. */}
-        {committingTyped && (
-          <View style={styles.saveToggleSlot}>
-            {isTypedNew ? (
-              savedListFull ? (
-                <TouchableOpacity
-                  style={styles.saveToggleRow}
-                  disabled={isPro}
-                  onPress={() => {
-                    setShowAddPlayer(false);
-                    setPendingBankerDesignation(false);
-                    setPaywallMessage(savedCapPaywallMessage(savedPlayers.length, isPro));
-                    setShowPaywall(true);
-                  }}
-                >
-                  <Ionicons name="lock-closed" size={14} color="#B072BB" />
-                  <Text style={styles.saveToggleFullText}>
-                    {savedCapModalNotice(savedPlayers.length, isPro)}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.saveToggleRow} onPress={() => setSavePlayerToggle(v => !v)}>
-                  <Ionicons
-                    name={savePlayerToggle ? 'checkbox' : 'square-outline'}
-                    size={18}
-                    color={savePlayerToggle ? '#B072BB' : '#666'}
-                  />
-                  <Text style={styles.saveToggleText}>Save player</Text>
-                </TouchableOpacity>
-              )
-            ) : typedExactMatch ? (
-              forceUnlinked ? (
-                <TouchableOpacity style={styles.identityRow} onPress={() => setForceUnlinked(false)}>
-                  <Ionicons name="close-circle-outline" size={16} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.identityUnlinkedText} numberOfLines={1}>Adding as new · not linked</Text>
-                  <Text style={styles.identityAction}>Undo</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.identityRow} onPress={() => setForceUnlinked(true)}>
-                  <Ionicons name="arrow-forward" size={14} color="#B072BB" />
-                  <Text style={styles.identityUsingText} numberOfLines={1}>
-                    Using saved {typedExactMatch.name}
-                    {savedBadge(typedExactMatch) ? ` · ${savedBadge(typedExactMatch)}` : ''}
-                  </Text>
-                  <Text style={styles.identityAction}>Add as new</Text>
-                </TouchableOpacity>
-              )
-            ) : null}
-          </View>
-        )}
-
-        {atPlayerCap && (
-          <Text style={styles.pickHint}>{playerCapHint(activeGame.players.length, isPro)}</Text>
-        )}
+        {/* Rendered UNCONDITIONALLY so there is always exactly one scroll container over
+            the whole body — when the picker is hidden the list is simply empty and only
+            the header/footer show. The bordered styles.pickerList box is deliberately
+            gone: once header and footer share the content container it can no longer wrap
+            only the rows. That is an approved design decision, not an oversight. */}
+        <FlatList
+          data={showSavedPicker ? savedPickerListData : []}
+          renderItem={renderSavedPickerItem}
+          keyExtractor={savedPickerKeyExtractor}
+          ListHeaderComponent={savedPickerHeader}
+          ListFooterComponent={savedPickerFooter}
+          style={styles.pickerListFlex}
+          /* No contentContainerStyle: the dropped styles.pickerList carried no padding or
+             gap to move here (width/background/border/radius/marginBottom/overflow only),
+             and every gap in this body comes from the children's own marginBottom. */
+          /* Parity with the body ScrollView this list replaces (AppModal scrollBody={false}). */
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+        />
       </AppModal>
 
       {/* Add Transaction Modal */}
@@ -2277,6 +2345,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     overflow: 'hidden',
   },
+  // The card is maxHeight-bounded (addPlayerCardStyle). RN defaults flexShrink to 0, so
+  // without this the list keeps its full content height, pushes the pinned Add/Done footer
+  // out of the card, and virtualizes nothing.
+  //
+  // width is load-bearing now that styles.pickerList is gone: the modal passes
+  // contentStyle={appModalStyles.centeredContent} (alignItems: 'center'), so without an
+  // explicit width the list collapses to its content width and the rows stop spanning the card.
+  pickerListFlex: { width: '100%', flexShrink: 1 },
+  // Themed View defaults to an opaque themed background, hence transparent (same reason
+  // saveToggleSlot and modalButtons set it).
+  pickerBlock: { width: '100%', backgroundColor: 'transparent' },
+  pickerFooterGap: { marginTop: 16 },
   pickHint: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.55)',
