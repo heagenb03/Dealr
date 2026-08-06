@@ -22,7 +22,7 @@ export function playerCapHint(count: number, isPro: boolean): string {
     return `Maximum ${PRO_PLAYER_CAP} players per game.`;
   }
   if (count > FREE_PLAYER_CAP) {
-    return `${count} players in this game · the free plan adds up to ${FREE_PLAYER_CAP}. Upgrade to Pro for up to ${PRO_PLAYER_CAP}.`;
+    return `${count} players in this game. Upgrade to Pro for up to ${PRO_PLAYER_CAP}.`;
   }
   return `Free limit reached · ${FREE_PLAYER_CAP} players. Upgrade to Pro for up to ${PRO_PLAYER_CAP}.`;
 }
@@ -34,7 +34,7 @@ export function savedCapCounter(count: number, isPro: boolean): string {
     return `${count} saved · ${cap} max`;
   }
   if (!isPro && count > cap) {
-    return `${count} saved · the free plan holds ${cap} · Upgrade for ${PRO_SAVED_CAP}`;
+    return `${count} saved · Upgrade for ${PRO_SAVED_CAP}`;
   }
   if (!isPro && count >= cap) {
     return `${count} / ${cap} · Upgrade for ${PRO_SAVED_CAP}`;
@@ -60,7 +60,7 @@ export function savedCapPaywallMessage(count: number, isPro: boolean): string {
     return `You've reached the ${cap}-player limit. Delete some players to add more.`;
   }
   if (count > cap) {
-    return `You've saved ${count} players. The free plan holds ${cap} — upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
+    return `You've saved ${count} players. The free plan holds ${cap}, but you can upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
   }
-  return `You've saved ${FREE_SAVED_CAP} players — the free limit. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
+  return `You've saved ${FREE_SAVED_CAP} players. Upgrade to Pro to save up to ${PRO_SAVED_CAP}.`;
 }

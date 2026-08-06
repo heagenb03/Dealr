@@ -49,7 +49,7 @@ function badgeText(p: SavedPlayer): string | null {
   return handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
 }
 
-const BULK_PAYWALL_MESSAGE = 'Upgrade to Pro to bulk-manage your saved players.';
+const  BULK_PAYWALL_MESSAGE = 'Upgrade to Pro to bulk-manage your saved players.';
 
 export default function SavedPlayersScreen() {
   const { user, isPro } = useAuth();
