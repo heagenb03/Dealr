@@ -50,12 +50,19 @@ function SavedPickerRow({ id, name, badge, inGame, disabled, isLast, onSelect }:
 }
 
 const styles = StyleSheet.create({
+  // No horizontal inset, deliberately. The bordered styles.pickerList box that used to wrap
+  // these rows is gone (the picker now shares one scroll container with the modal's other
+  // children), so a 16pt inset here would indent the row names 16pt past the SAVED label,
+  // the buy-in field and the Save-player checkbox, which all start at x=0. The right edge
+  // matches too: identityRow — the structurally identical sibling, a left label plus a
+  // right-hand action at marginLeft:'auto' — is full-width with zero inset, so the badge
+  // and "Added ✓" sit flush right exactly where "Add as new" does. Rows are therefore
+  // full-bleed and so are their tap targets and press highlights, which is intended.
   pickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.05)',
