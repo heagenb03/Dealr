@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, Share, ActivityIndicator, Animated, Linking } from 'react-native';
+import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, Share, ActivityIndicator, Animated, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as StoreReview from 'expo-store-review';
 import { Text, View } from '@/components/Themed';
@@ -32,6 +32,7 @@ import { buildShareMessage } from '@/utils/shareMessage';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
+import { buildSummaryListData, SummaryListItem } from '@/utils/summaryListData';
 
 // HUD Section Header Component
 function HudSectionHeader({ label }: { label: string }) {
@@ -799,6 +800,61 @@ setSettlementResult(cachedResult);
     // changes and a dep on it freezes this map for the lifetime of the mount.
   }, [summary]);
 
+  // Above the guard (Rules of Hooks). isBanker is re-derived here rather than reusing the
+  // binding below the guard, which does not exist yet at this point in the file. Dep is
+  // `activeGame`, NOT `activeGame.players` — updateGame shallow-clones the Game, so the
+  // players array reference never changes.
+  const listData = useMemo(
+    () =>
+      buildSummaryListData({
+        grouped: groupedSettlements,
+        balances: summary?.balances ?? [],
+        isBanker: activeGame?.settlementMode === 'banker',
+        bankerPlayerId: activeGame?.bankerPlayerId,
+      }),
+    [groupedSettlements, summary, activeGame],
+  );
+
+  const keyExtractor = useCallback((item: SummaryListItem) => item.key, []);
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<SummaryListItem>) => {
+      switch (item.type) {
+        case 'empty':
+          return <EmptyState label={item.label} icon={item.icon} />;
+        case 'bankerPayout':
+          return (
+            <BankerPayoutRow
+              recipient={item.recipient}
+              amount={item.amount}
+              recipientPayment={paymentByName.get(item.recipient)}
+            />
+          );
+        case 'settlement':
+          return (
+            <SettlementCard
+              groupedSettlement={item.grouped}
+              recipientPayment={paymentByName.get(item.grouped.recipient)}
+              reduceMotion={reduceMotion}
+            />
+          );
+        case 'sectionHeader':
+          return (
+            <View style={styles.listSectionHeader}>
+              <HudSectionHeader label={item.label} />
+            </View>
+          );
+        case 'balance':
+          return (
+            <View style={item.isLast ? undefined : styles.balanceGap}>
+              <BalanceCard balance={item.balance} reduceMotion={reduceMotion} hint={item.hint} />
+            </View>
+          );
+      }
+    },
+    [paymentByName, reduceMotion],
+  );
+
   if (!activeGame || !summary) {
     return (
       <View style={styles.container}>
@@ -833,162 +889,89 @@ setSettlementResult(cachedResult);
 
   const distortion = computeRoundingDistortion(summary.balances, resolveCashUnit(summary.game.cashUnit, currency));
 
+  // An ELEMENT, not an inline arrow component — `ListHeaderComponent={() => …}` is a new
+  // component type every render and remounts the whole header.
+  const listHeader = (
+    <>
+      {/* Game Header */}
+      <View style={styles.header}>
+        <View style={styles.headerTitleRow}>
+          <View style={styles.titleColumn}>
+            <Text style={styles.gameTitle}>{activeGame.name}</Text>
+            <Text style={styles.gameDate}>
+              {new Date(activeGame.date).toLocaleDateString()}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.shareIconButton}
+            onPress={handleShare}
+            activeOpacity={0.6}
+            accessibilityLabel="Share game summary"
+            accessibilityHint="Opens share dialog to send summary via apps"
+            accessibilityRole="button"
+          >
+            <Ionicons name="share-outline" size={20} color="#B072BB" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Total Pot Hero Metric */}
+      <View style={styles.heroPotSection}>
+        <HudSectionHeader label="TOTAL POT" />
+        <View style={styles.heroPotDisplay}>
+          <Text style={styles.heroPotAmount}>
+            {formatAmount(summary.totalPot)}
+          </Text>
+        </View>
+      </View>
+
+      <HudSectionHeader label={isBanker ? 'PAYOUTS' : 'SETTLEMENTS'} />
+
+      {isBanker && (
+        <Text style={styles.bankerSubhead}>
+          {bankerName ?? '—'}, the banker, pays out below
+        </Text>
+      )}
+
+      {/* Fallback notice */}
+      {showFallbackBanner && (
+        <FallbackBanner
+          onDismiss={() => setShowFallbackBanner(false)}
+          onRetry={handleRetry}
+          isRetrying={isLoadingSettlements}
+          errorMessage={lastError}
+          balances={summary.balances}
+          formatAmount={formatAmount}
+          tolerance={resolveTolerance(
+            summary.game.imbalanceTolerance,
+            currency,
+          )}
+        />
+      )}
+
+      {/* Rounding distortion note — net-based, so it does not describe banker
+          cash-out payouts; suppressed in banker mode. */}
+      {!isBanker && distortion.maxDelta > 0 && (
+        <Text style={styles.roundingNote}>
+          Rounded to {formatAmount(resolveCashUnit(summary.game.cashUnit, currency))} — largest change {formatAmount(distortion.maxDelta)}.
+        </Text>
+      )}
+    </>
+  );
+
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {/* Game Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <View style={styles.titleColumn}>
-              <Text style={styles.gameTitle}>{activeGame.name}</Text>
-              <Text style={styles.gameDate}>
-                {new Date(activeGame.date).toLocaleDateString()}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.shareIconButton}
-              onPress={handleShare}
-              activeOpacity={0.6}
-              accessibilityLabel="Share game summary"
-              accessibilityHint="Opens share dialog to send summary via apps"
-              accessibilityRole="button"
-            >
-              <Ionicons name="share-outline" size={20} color="#B072BB" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Total Pot Hero Metric */}
-        <View style={styles.heroPotSection}>
-          <HudSectionHeader label="TOTAL POT" />
-          <View style={styles.heroPotDisplay}>
-            <Text style={styles.heroPotAmount}>
-              {formatAmount(summary.totalPot)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Debug - Server/Client Status Card */}
-        {/*
-        <View style={styles.statusCard}>
-          <View style={styles.statusRow}>
-            <View
-              style={[
-                styles.statusDot,
-                activeSettlementResult.source === 'server'
-                  ? styles.statusDotServer
-                  : styles.statusDotLocal,
-              ]}
-            />
-            <View style={styles.statusTextGroup}>
-              <Text style={styles.statusTitle}>
-                {activeSettlementResult.source === 'server'
-                  ? 'Optimized via server solver'
-                  : 'Calculated on device'}
-              </Text>
-              <Text style={styles.statusSubtitle}>
-                {activeSettlementResult.source === 'server'
-                  ? `Algorithm: ${activeSettlementResult.algorithm}`
-                  : lastError
-                  ? `Fallback reason: ${lastError}`
-                  : 'Using greedy fallback while offline'}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.statusActions}>
-            {isLoadingSettlements && (
-              <ActivityIndicator size="small" color="#D4AF37" />
-            )}
-            {!isLoadingSettlements && activeSettlementResult.source !== 'server' && (
-              <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-                <Text style={styles.retryButtonText}>Retry Online</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-        */}
-        {/* Settlements */}
-        <View style={styles.section}>
-          <HudSectionHeader label={isBanker ? 'PAYOUTS' : 'SETTLEMENTS'} />
-
-          {isBanker && (
-            <Text style={styles.bankerSubhead}>
-              {bankerName ?? '—'}, the banker, pays out below
-            </Text>
-          )}
-
-          {/* Fallback notice */}
-          {showFallbackBanner && (
-            <FallbackBanner
-              onDismiss={() => setShowFallbackBanner(false)}
-              onRetry={handleRetry}
-              isRetrying={isLoadingSettlements}
-              errorMessage={lastError}
-              balances={summary.balances}
-              formatAmount={formatAmount}
-              tolerance={resolveTolerance(
-                summary.game.imbalanceTolerance,
-                currency,
-              )}
-            />
-          )}
-
-          {/* Rounding distortion note — net-based, so it does not describe banker
-              cash-out payouts; suppressed in banker mode. */}
-          {!isBanker && distortion.maxDelta > 0 && (
-            <Text style={styles.roundingNote}>
-              Rounded to {formatAmount(resolveCashUnit(summary.game.cashUnit, currency))} — largest change {formatAmount(distortion.maxDelta)}.
-            </Text>
-          )}
-
-          {groupedSettlements.length === 0 ? (
-            <EmptyState
-              label={isBanker ? 'Nothing to pay out' : 'All balanced'}
-              icon="checkmark-circle-outline"
-            />
-          ) : isBanker ? (
-            groupedSettlements.map((groupedSettlement, index) => (
-              <BankerPayoutRow
-                key={index}
-                recipient={groupedSettlement.recipient}
-                amount={groupedSettlement.totalAmount}
-                recipientPayment={paymentByName.get(groupedSettlement.recipient)}
-              />
-            ))
-          ) : (
-            groupedSettlements.map((groupedSettlement, index) => (
-              <SettlementCard
-                key={index}
-                groupedSettlement={groupedSettlement}
-                recipientPayment={paymentByName.get(groupedSettlement.recipient)}
-                reduceMotion={reduceMotion}
-              />
-            ))
-          )}
-        </View>
-
-        {/* Player Balances */}
-        <View style={styles.section}>
-          <HudSectionHeader label="FINAL BALANCES" />
-          <View style={styles.balancesContainer}>
-            {summary.balances.map(balance => {
-              const isNonPlayingBanker =
-                activeGame.settlementMode === 'banker' &&
-                activeGame.bankerPlayerId === balance.playerId &&
-                balance.totalBuyins === 0 &&
-                balance.totalCashouts === 0;
-              return (
-                <BalanceCard
-                  key={balance.playerId}
-                  balance={balance}
-                  reduceMotion={reduceMotion}
-                  hint={isNonPlayingBanker ? 'banker · not playing' : undefined}
-                />
-              );
-            })}
-          </View>
-        </View>
-      </ScrollView>
+      <FlatList
+        data={listData}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={listHeader}
+        style={styles.scrollView}
+        contentContainerStyle={styles.listContent}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+      />
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -1055,9 +1038,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
+  // padding moved to listContent: RN documents contentContainerStyle as the place for a
+  // list's inner padding; padding on a FlatList's `style` insets the scroll frame itself.
   scrollView: {
     flex: 1,
+  },
+  listContent: {
     padding: 20,
+    // 20 (the ScrollView's old bottom padding) + 32 (the balances section's old
+    // marginBottom, destroyed by flattening).
+    paddingBottom: 52,
+  },
+  // Re-creates the settlements section's marginBottom: 32, which used to sit between the
+  // last settlement card and the FINAL BALANCES header.
+  listSectionHeader: {
+    marginTop: 32,
+    backgroundColor: 'transparent',
+  },
+  // Re-creates balancesContainer's `gap: 8`. Applied to every balance row but the last,
+  // so there is no trailing gap — matching gap semantics exactly.
+  balanceGap: {
+    marginBottom: 8,
+    backgroundColor: 'transparent',
   },
   header: {
     marginBottom: 24,
