@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback } from 'react';
 import { Modal, TouchableOpacity, StyleSheet, Pressable, FlatList, ListRenderItemInfo } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -23,10 +23,16 @@ export default function SettlementModePicker({
   onAddSomeone,
   onClose,
 }: Props) {
-  const listData = useMemo(
-    () => buildBankerPickerListData(players, bankerPlayerId),
-    [players, bankerPlayerId],
-  );
+  // Deliberately NOT wrapped in useMemo. The `players` prop is the raw
+  // `activeGame.players` array, which is mutated IN PLACE — `gameService.addPlayer`
+  // pushes onto it and `active.tsx`'s rename assigns into it, while GameContext only
+  // ever shallow-clones the game — so its identity never changes on add or rename.
+  // Memoizing on `[players, bankerPlayerId]` therefore freezes the list at whatever
+  // roster existed when this component first rendered: added players go missing and
+  // renames show the old name, and because the hook sits above the <Modal> it survives
+  // open/close cycles. The roster is modal-bounded (≤ the per-game player cap), so
+  // projecting it on every render is cheap. Do not "optimize" this back into a useMemo.
+  const listData = buildBankerPickerListData(players, bankerPlayerId);
 
   const keyExtractor = useCallback((item: BankerPickerItem) => item.key, []);
 

@@ -290,8 +290,12 @@ export default function SavedPlayersScreen() {
   const counterText = savedCapCounter(players.length, isPro);
 
   // selectMode / selected are deliberately NOT in the item objects: putting them there
-  // would rebuild the entire data array on every checkbox tap and defeat FlatList's
-  // diffing. They are read here instead and published to the cells via `extraData`.
+  // would rebuild the entire data array on every checkbox tap. Keeping them out gives the
+  // list a stable `data` identity and stable keys, so a tap never unmounts/remounts cells
+  // or resets the scroll offset. It does NOT buy per-cell render skipping — CellRenderer
+  // is a PureComponent but FlatList's `strictMode` defaults to false, so a fresh
+  // `renderProp` is minted every render and every mounted cell re-renders regardless.
+  // They are read here instead and published to the cells via `extraData`.
   const keyExtractor = useCallback((item: SavedPlayersListItem<SavedPlayer>) => item.key, []);
 
   const selectExtra = useMemo(() => ({ selectMode, selected }), [selectMode, selected]);

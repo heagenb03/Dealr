@@ -970,7 +970,18 @@ setSettlementResult(cachedResult);
         contentContainerStyle={styles.listContent}
         initialNumToRender={10}
         maxToRenderPerBatch={8}
-        windowSize={5}
+        /* RN's default 21, not the 5 the other converted surfaces use: SettlementCard
+           owns `isExpanded` local state that a user expects to persist. At windowSize=5
+           a card scrolled ~2 viewports away unmounts and comes back COLLAPSED, which is
+           reachable around a 12-20 player game. Under the pre-virtualization ScrollView
+           expansion survived any amount of scrolling; this keeps that. */
+        windowSize={21}
+        /* Same reason, second half: these cells CHANGE HEIGHT on expand, and Android's
+           default removeClippedSubviews={true} detaches/reattaches native views around
+           measurements it took at the old height. index.tsx:211 opts out for a different
+           reason (Reanimated Swipeable); this surface is the only one with variable-height
+           cells. */
+        removeClippedSubviews={false}
       />
 
       {/* Actions */}
@@ -1055,8 +1066,8 @@ const styles = StyleSheet.create({
     marginTop: 32,
     backgroundColor: 'transparent',
   },
-  // Re-creates balancesContainer's `gap: 8`. Applied to every balance row but the last,
-  // so there is no trailing gap — matching gap semantics exactly.
+  // Re-creates the `gap: 8` the balances container used to apply. Applied to every
+  // balance row but the last, so there is no trailing gap — matching gap semantics exactly.
   balanceGap: {
     marginBottom: 8,
     backgroundColor: 'transparent',
@@ -1145,9 +1156,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.35)',
     letterSpacing: 0.5,
-  },
-  section: {
-    marginBottom: 32,
   },
   statusCard: {
     backgroundColor: '#111111',
@@ -1306,10 +1314,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.9)',
     fontFamily: 'SpaceMono',
-  },
-  balancesContainer: {
-    gap: 8,
-    backgroundColor: 'transparent',
   },
   // Player Card styles (read-only version)
   playerCard: {

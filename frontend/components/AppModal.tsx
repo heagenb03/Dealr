@@ -58,7 +58,12 @@ export interface AppModalCardProps {
   dismissOnBackdrop?: boolean;
   /** Merged onto the card (e.g. tighter padding). */
   cardStyle?: StyleProp<ViewStyle>;
-  /** Merged onto the ScrollView contentContainerStyle (e.g. appModalStyles.centeredContent). */
+  /**
+   * Merged onto the body container (e.g. appModalStyles.centeredContent). Which
+   * container depends on `scrollBody`: when true (the default) it lands on the body
+   * ScrollView's `contentContainerStyle`; when false there is no ScrollView, so it
+   * lands on the plain wrapping View's `style`.
+   */
   contentStyle?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 }
