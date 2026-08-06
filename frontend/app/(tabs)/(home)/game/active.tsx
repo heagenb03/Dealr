@@ -14,7 +14,6 @@ import { GameService } from '@/services/gameService';
 import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
 import { Player, PlayerBalance, Validation, PreferredPayment } from '@/types/game';
 import { getNetBalanceColor, formatNetBalanceDisplay } from '@/utils/formatUtils';
-import { useScreenProbe } from '@/utils/devProbes';
 import { incrementProfileStats } from '@/services/firebaseService';
 import { isValidNumericInput } from '@/utils/validationUtils';
 import { loadSavedPlayers, SavedPlayer, savedCapFor, canAddMoreSavedPlayers, getSavedPlayersByName, getSavedPlayerById, createSavedPlayer, updateSavedPlayer } from '@/services/savedPlayersService';
@@ -181,9 +180,6 @@ export default function ActiveGameScreen() {
   const { activeGame, updateGame, setActiveGame, createGame } = useGame();
   const { user, isPro } = useAuth();
   const { formatAmount, meta, currency } = useCurrency();
-  // TEMPORARY Phase-0 probe — removed in Task 11. MUST stay above the
-  // `if (!activeGame)` early return further down (Rules of Hooks).
-  useScreenProbe('active', activeGame?.id);
   const { height: windowHeight } = useWindowDimensions();
   // Caps the Add Players card so its PINNED footer still clears the keyboard.
   // computeCardLift cannot raise a tall card far enough, so without this cap the
