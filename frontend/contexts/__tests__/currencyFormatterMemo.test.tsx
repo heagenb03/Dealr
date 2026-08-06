@@ -42,6 +42,20 @@ function installThrowingIntl() {
   };
 }
 
+function installFormatThrowingIntl() {
+  (Intl as any).NumberFormat = function () {
+    // Constructor succeeds and returns an object, but that object's `format`
+    // method throws — this exercises formatAmount's own try/catch around
+    // numberFormat.format(value), distinct from the construction-time catch
+    // in the useMemo above.
+    return {
+      format: () => {
+        throw new Error('format failed at call time');
+      },
+    };
+  };
+}
+
 afterEach(() => {
   (Intl as any).NumberFormat = RealNumberFormat;
 });
@@ -111,6 +125,16 @@ describe('CurrencyContext formatter memoization', () => {
     // Installed BEFORE render: after Fix B the construction happens during the
     // provider's render, so a mock installed after render would never reach it.
     installThrowingIntl();
+    await renderProvider();
+    expect(seen!.formatAmount(1234.56)).toBe('$1234.56');
+  });
+
+  it('falls back to symbol + toFixed when Intl.NumberFormat.format() throws at CALL time', async () => {
+    // Construction succeeds here (numberFormat is non-null), but the returned
+    // object's format() throws — this pins formatAmount's own catch around
+    // numberFormat.format(value), separate from the construction-time catch
+    // covered by the test above.
+    installFormatThrowingIntl();
     await renderProvider();
     expect(seen!.formatAmount(1234.56)).toBe('$1234.56');
   });

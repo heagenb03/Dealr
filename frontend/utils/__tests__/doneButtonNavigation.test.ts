@@ -25,7 +25,11 @@ describe('game summary "Done" navigation', () => {
   const source = fs.readFileSync(SUMMARY, 'utf8');
 
   it('has no router.push("/") — that adds a route instead of unwinding', () => {
-    expect(countOccurrences(source, "router.push('/')")).toBe(0);
+    // A bare substring count only catches the exact quote style used at the
+    // moment this test was written. Match router.push/navigate to a bare "/"
+    // across single, double, and backtick quoting so a revert can't dodge it
+    // by reformatting the call (e.g. router.push("/"), router.navigate('/')).
+    expect(source).not.toMatch(/router\.(push|navigate)\(\s*['"`]\/['"`]/);
   });
 
   it('calls router.dismissAll() from both Done buttons', () => {
