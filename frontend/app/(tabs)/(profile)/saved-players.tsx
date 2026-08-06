@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
-  ScrollView,
+  FlatList,
+  ListRenderItemInfo,
   View,
   Text,
   TouchableOpacity,
@@ -34,6 +35,7 @@ import { PreferredPayment, Player } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
 import { savedCapCounter, savedCapPaywallMessage } from '@/utils/capCopy';
+import { buildSavedPlayersListData, SavedPlayersListItem } from '@/utils/savedPlayersListData';
 
 type PaymentTarget =
   | { kind: 'edit'; player: SavedPlayer }
@@ -69,9 +71,7 @@ export default function SavedPlayersScreen() {
   // backing out and re-entering.)
   useFocusEffect(reload);
 
-  const sorted = [...players].sort((a, b) =>
-    a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-  );
+  const listData = useMemo(() => buildSavedPlayersListData(players), [players]);
 
   const [paymentTarget, setPaymentTarget] = useState<PaymentTarget>(null);
   const [renameTarget, setRenameTarget] = useState<SavedPlayer | null>(null);
@@ -289,45 +289,62 @@ export default function SavedPlayersScreen() {
 
   const counterText = savedCapCounter(players.length, isPro);
 
-  const renderRow = (p: SavedPlayer) => {
-    const badge = badgeText(p);
-    const textBlock = (
-      <View style={styles.rowTextWrap}>
-        <Text style={styles.rowName}>{p.name}</Text>
-        {badge ? (
-          <Text style={styles.rowBadge} numberOfLines={1}>{badge}</Text>
-        ) : (
-          <Text style={styles.rowBadgeMuted}>No payment set</Text>
-        )}
-      </View>
-    );
+  // selectMode / selected are deliberately NOT in the item objects: putting them there
+  // would rebuild the entire data array on every checkbox tap and defeat FlatList's
+  // diffing. They are read here instead and published to the cells via `extraData`.
+  const keyExtractor = useCallback((item: SavedPlayersListItem<SavedPlayer>) => item.key, []);
 
-    if (selectMode) {
-      const isSel = selected.has(p.id);
+  const selectExtra = useMemo(() => ({ selectMode, selected }), [selectMode, selected]);
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<SavedPlayersListItem<SavedPlayer>>) => {
+      if (item.type === 'empty') {
+        return (
+          <View style={styles.empty}>
+            <Ionicons name="people-outline" size={40} color="#3A3A3A" />
+            <Text style={styles.emptyText}>No saved players yet</Text>
+            <Text style={styles.emptySub}>Players you add to games are saved here for quick reuse.</Text>
+          </View>
+        );
+      }
+
+      const p = item.player;
+
+      if (selectMode) {
+        const isSel = selected.has(p.id);
+        const badge = badgeText(p);
+        return (
+          <TouchableOpacity style={styles.row} onPress={() => toggleSelected(p.id)} activeOpacity={0.7}>
+            <Ionicons
+              name={isSel ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={isSel ? '#B072BB' : '#666'}
+              style={styles.checkbox}
+            />
+            <View style={styles.rowTextWrap}>
+              <Text style={styles.rowName}>{p.name}</Text>
+              {badge ? (
+                <Text style={styles.rowBadge} numberOfLines={1}>{badge}</Text>
+              ) : (
+                <Text style={styles.rowBadgeMuted}>No payment set</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        );
+      }
+
       return (
-        <TouchableOpacity key={p.id} style={styles.row} onPress={() => toggleSelected(p.id)} activeOpacity={0.7}>
-          <Ionicons
-            name={isSel ? 'checkbox' : 'square-outline'}
-            size={22}
-            color={isSel ? '#B072BB' : '#666'}
-            style={styles.checkbox}
-          />
-          {textBlock}
-        </TouchableOpacity>
+        <SavedPlayerCard
+          player={p}
+          onRename={openRename}
+          onEditPayment={pl => setPaymentTarget({ kind: 'edit', player: pl })}
+          onDelete={pl => setDeleteTarget(pl)}
+          reduceMotion={reduceMotion}
+        />
       );
-    }
-
-    return (
-      <SavedPlayerCard
-        key={p.id}
-        player={p}
-        onRename={openRename}
-        onEditPayment={pl => setPaymentTarget({ kind: 'edit', player: pl })}
-        onDelete={pl => setDeleteTarget(pl)}
-        reduceMotion={reduceMotion}
-      />
-    );
-  };
+    },
+    [selectMode, selected, toggleSelected, openRename, reduceMotion],
+  );
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -369,17 +386,20 @@ export default function SavedPlayersScreen() {
         <Text style={styles.capCounter}>{counterText}</Text>
       )}
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {sorted.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="people-outline" size={40} color="#3A3A3A" />
-            <Text style={styles.emptyText}>No saved players yet</Text>
-            <Text style={styles.emptySub}>Players you add to games are saved here for quick reuse.</Text>
-          </View>
-        ) : (
-          sorted.map(renderRow)
-        )}
-      </ScrollView>
+      <FlatList
+        data={listData}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        extraData={selectExtra}
+        contentContainerStyle={styles.scrollContent}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        /* SavedPlayerCard wraps a Reanimated Swipeable, which misbehaves under Android's
+           default removeClippedSubviews={true}. index.tsx:211 does the same for GameCard.
+           This forgoes some native-view detach savings and keeps all the JS mount savings. */
+        removeClippedSubviews={false}
+      />
 
       {selectMode && (
         <View style={styles.bulkBar}>
