@@ -2019,9 +2019,15 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 20,
-    // 8 (the last card wrapper's marginBottom) + 28 (the last section's marginBottom,
-    // destroyed by flattening) + 20 (the ScrollView's old bottom padding).
-    paddingBottom: 56,
+    // 28 (the last section's marginBottom, genuinely destroyed by flattening)
+    // + 20 (the old ScrollView's bottom padding) = 48.
+    //
+    // The last card's 8pt is deliberately NOT part of this sum. playerCardWrap below puts
+    // marginBottom: 8 on EVERY card including the last one — that is the whole reason it is
+    // an item style rather than an ItemSeparatorComponent — so the 8pt survives flattening
+    // and is already on screen. Adding it here too would double-count it and leave 64pt
+    // below the last card where the old ScrollView had 56pt. Do not re-derive this as 56.
+    paddingBottom: 48,
   },
   // Replaces the inline <View style={{ marginBottom: 8, backgroundColor: 'transparent' }}>
   // each card used to sit in. Kept on the item rather than an ItemSeparatorComponent,
