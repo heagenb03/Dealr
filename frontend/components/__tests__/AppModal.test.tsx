@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import TestRenderer, { act, ReactTestRenderer } from 'react-test-renderer';
-import { Text as RNText } from 'react-native';
+import { ScrollView, Text as RNText } from 'react-native';
 
 (global as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -72,5 +72,26 @@ describe('AppModalCard regions', () => {
   it('renders a footer without a header', () => {
     const tree = renderCard({ footer: <RNText>FOOTER</RNText> });
     expect(textsInOrder(tree.toJSON())).toEqual(['TITLE', 'BODY', 'FOOTER']);
+  });
+});
+
+describe('AppModalCard scrollBody', () => {
+  it('wraps the body in a ScrollView by default', () => {
+    const tree = renderCard({});
+    expect(tree.root.findAllByType(ScrollView)).toHaveLength(1);
+  });
+
+  it('renders no ScrollView when scrollBody is false', () => {
+    const tree = renderCard({ scrollBody: false });
+    expect(tree.root.findAllByType(ScrollView)).toHaveLength(0);
+  });
+
+  it('keeps the title / header / body / footer order when scrollBody is false', () => {
+    const tree = renderCard({
+      scrollBody: false,
+      header: <RNText>HEADER</RNText>,
+      footer: <RNText>FOOTER</RNText>,
+    });
+    expect(textsInOrder(tree.toJSON())).toEqual(['TITLE', 'HEADER', 'BODY', 'FOOTER']);
   });
 });

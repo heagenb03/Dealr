@@ -41,6 +41,19 @@ export interface AppModalCardProps {
    * an action row that must never scroll out of reach.
    */
   footer?: React.ReactNode;
+  /**
+   * Set false when the caller supplies its own scrolling body — specifically a
+   * FlatList. A same-orientation VirtualizedList nested inside a ScrollView has
+   * its virtualization disabled by React Native and warns at runtime, so the body
+   * ScrollView has to go away rather than wrap it.
+   *
+   * The caller must reproduce what the body ScrollView provided:
+   * keyboardShouldPersistTaps="handled", bounces={false},
+   * showsVerticalScrollIndicator={false}, and style={{ flexShrink: 1 }} on the list.
+   * `contentStyle` still applies — it lands on the wrapping View, not on the list's
+   * contentContainerStyle.
+   */
+  scrollBody?: boolean;
   /** Tap on the dim backdrop closes the modal. Set false on destructive confirms. */
   dismissOnBackdrop?: boolean;
   /** Merged onto the card (e.g. tighter padding). */
@@ -85,22 +98,30 @@ const Backdrop: React.FC<{ dismissOnBackdrop: boolean; onPress: () => void }> = 
   />
 );
 
-/** Optional title + pinned header + scrolling body + pinned footer. */
+/** Optional title + pinned header + body (scrolling by default) + pinned footer. */
 const CardBody: React.FC<
-  Pick<AppModalCardProps, 'title' | 'header' | 'footer' | 'contentStyle' | 'children'>
-> = ({ title, header, footer, contentStyle, children }) => (
+  Pick<AppModalCardProps, 'title' | 'header' | 'footer' | 'contentStyle' | 'scrollBody' | 'children'>
+> = ({ title, header, footer, contentStyle, scrollBody = true, children }) => (
   <>
     {title ? <Text style={appModalStyles.title}>{title}</Text> : null}
     {header}
-    <ScrollView
-      style={[styles.body, header || footer ? styles.bodyShrinkable : null]}
-      contentContainerStyle={[styles.bodyContent, contentStyle]}
-      keyboardShouldPersistTaps="handled"
-      bounces={false}
-      showsVerticalScrollIndicator={false}
-    >
-      {children}
-    </ScrollView>
+    {scrollBody ? (
+      <ScrollView
+        style={[styles.body, header || footer ? styles.bodyShrinkable : null]}
+        contentContainerStyle={[styles.bodyContent, contentStyle]}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+    ) : (
+      // No wrapping ScrollView: the caller's own list scrolls. flexShrink lets this
+      // yield height to the pinned footer exactly as bodyShrinkable does for the
+      // ScrollView path; alignSelf stretch keeps children full card width so a
+      // contentStyle of `alignItems: 'center'` still centres them.
+      <View style={[styles.staticBody, contentStyle]}>{children}</View>
+    )}
     {footer}
   </>
 );
@@ -120,6 +141,7 @@ const IOSKeyboardCard: React.FC<AppModalCardProps> = ({
   dismissOnBackdrop = true,
   cardStyle,
   contentStyle,
+  scrollBody,
   children,
 }) => {
   const keyboard = useAnimatedKeyboard();
@@ -156,7 +178,13 @@ const IOSKeyboardCard: React.FC<AppModalCardProps> = ({
             cardHeight.value = e.nativeEvent.layout.height;
           }}
         >
-          <CardBody title={title} header={header} footer={footer} contentStyle={contentStyle}>
+          <CardBody
+            title={title}
+            header={header}
+            footer={footer}
+            contentStyle={contentStyle}
+            scrollBody={scrollBody}
+          >
             {children}
           </CardBody>
         </Animated.View>
@@ -178,6 +206,7 @@ const AndroidKavCard: React.FC<AppModalCardProps> = ({
   dismissOnBackdrop = true,
   cardStyle,
   contentStyle,
+  scrollBody,
   children,
 }) => (
   <KeyboardAvoidingView behavior="height" style={styles.kav}>
@@ -187,7 +216,13 @@ const AndroidKavCard: React.FC<AppModalCardProps> = ({
         onPress={() => handleBackdropPress(dismissOnBackdrop, onClose)}
       />
       <View style={[styles.card, cardStyle]}>
-        <CardBody title={title} header={header} footer={footer} contentStyle={contentStyle}>
+        <CardBody
+          title={title}
+          header={header}
+          footer={footer}
+          contentStyle={contentStyle}
+          scrollBody={scrollBody}
+        >
           {children}
         </CardBody>
       </View>
@@ -275,6 +310,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   bodyContent: {},
+  staticBody: {
+    flexShrink: 1,
+    alignSelf: 'stretch',
+  },
 });
 
 export default AppModal;

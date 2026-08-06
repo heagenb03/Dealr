@@ -9,10 +9,15 @@
 declare module 'react-test-renderer' {
   import { ReactElement } from 'react';
 
+  export interface TestInstance {
+    findAllByType(type: unknown): TestInstance[];
+  }
+
   export interface ReactTestRenderer {
     update(element: ReactElement): void;
     unmount(): void;
     toJSON(): unknown;
+    root: TestInstance;
   }
 
   export function create(element: ReactElement): ReactTestRenderer;
