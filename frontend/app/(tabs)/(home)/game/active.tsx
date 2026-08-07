@@ -1738,7 +1738,6 @@ export default function ActiveGameScreen() {
       {/* Add Player Modal */}
       <AppModal
         visible={showAddPlayer}
-        title="Add Players"
         onClose={closeAddModal}
         contentStyle={appModalStyles.centeredContent}
         cardStyle={addPlayerCardStyle}
@@ -1766,6 +1765,7 @@ export default function ActiveGameScreen() {
               onChangeText={handleNameChange}
               placeholder="Search saved or type a name"
               placeholderTextColor="#666"
+              accessibilityLabel="Search saved players or type a new name"
               autoCapitalize="words"
               returnKeyType="next"
             />
