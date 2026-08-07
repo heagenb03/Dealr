@@ -889,7 +889,7 @@ setSettlementResult(cachedResult);
         grouped: groupedSettlements,
         paymentByName,
         formatAmount,
-        mode: activeGame.settlementMode,
+        mode: isBanker ? 'banker' : 'optimal',
         bankerName,
       });
       await Share.share({ message });
