@@ -52,6 +52,13 @@ export interface AppModalCardProps {
    * showsVerticalScrollIndicator={false}, and style={{ flexShrink: 1 }} on the list.
    * `contentStyle` still applies — it lands on the wrapping View, not on the list's
    * contentContainerStyle.
+   *
+   * DOCUMENTED EXCEPTION: the Add Players picker in active.tsx sets
+   * showsVerticalScrollIndicator={true}. Its saved-player list can be far taller
+   * than the height-capped card, and with the box that used to wrap the rows gone
+   * there was no cue at all that the list scrolls. That is a deliberate reversal of
+   * the parity rule above, not an oversight. Parity remains the default for every
+   * other scrollBody={false} caller.
    */
   scrollBody?: boolean;
   /** Tap on the dim backdrop closes the modal. Set false on destructive confirms. */

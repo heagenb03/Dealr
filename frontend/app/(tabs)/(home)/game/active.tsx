@@ -1296,7 +1296,7 @@ export default function ActiveGameScreen() {
                 }}
               >
                 <Ionicons name="lock-closed" size={14} color="#B072BB" />
-                <Text style={styles.saveToggleFullText}>
+                <Text style={styles.saveToggleFullText} numberOfLines={1}>
                   {savedCapModalNotice(savedPlayers.length, isPro)}
                 </Text>
               </TouchableOpacity>
@@ -2203,7 +2203,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   saveToggleText: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
-  saveToggleFullText: { fontSize: 13, color: '#B072BB', fontFamily: 'SpaceMono' },
+  // flexShrink + numberOfLines={1} at the call site, matching identityUsingText and
+  // identityUnlinkedText — the other two occupants of the fixed-height saveToggleSlot.
+  // Without it this text overflows the card horizontally on a narrow phone.
+  saveToggleFullText: { fontSize: 13, color: '#B072BB', fontFamily: 'SpaceMono', flexShrink: 1 },
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
