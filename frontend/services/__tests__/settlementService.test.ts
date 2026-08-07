@@ -585,3 +585,52 @@ describe('validateSettlements banker exemption', () => {
     expect(v.errors.join(' ')).toContain('Ghost');
   });
 });
+
+describe('validateSettlements banker-mode gate', () => {
+  // This gate existed before 2026-08-07 but was unreachable: removePlayer used to
+  // reset settlementMode to 'optimal', so "banker mode with no banker" could not
+  // persist. Now that it can, these are the tests that keep completion blocked.
+
+  it('blocks completion in banker mode when no banker is set', () => {
+    const balances = [makeBalance('L1', 50, 0), makeBalance('W1', 0, 50)];
+    const v = validateSettlements(balances, undefined, undefined, 'banker');
+    expect(v.isValid).toBe(false);
+    expect(v.errors).toContain('Choose a banker before completing the game.');
+  });
+
+  it('blocks completion when the banker id no longer resolves to a player', () => {
+    const balances = [makeBalance('L1', 50, 0), makeBalance('W1', 0, 50)];
+    const v = validateSettlements(balances, undefined, 'id_Gone', 'banker');
+    expect(v.isValid).toBe(false);
+    expect(v.errors).toContain('Choose a banker before completing the game.');
+  });
+
+  it('reports ONLY the banker error, suppressing a zero-activity player', () => {
+    // The gate returns early, so it is the single error the host sees. Pinning
+    // this stops a future refactor from burying it under a list of other errors.
+    const balances = [
+      makeBalance('Ghost', 0, 0),
+      makeBalance('L1', 50, 0),
+      makeBalance('W1', 0, 50),
+    ];
+    const v = validateSettlements(balances, undefined, undefined, 'banker');
+    expect(v.errors).toEqual(['Choose a banker before completing the game.']);
+  });
+
+  it('allows completion once the banker resolves to a player', () => {
+    const balances = [
+      makeBalance('Bank', 0, 0),
+      makeBalance('L1', 50, 0),
+      makeBalance('W1', 0, 50),
+    ];
+    const v = validateSettlements(balances, undefined, 'id_Bank', 'banker');
+    expect(v.isValid).toBe(true);
+    expect(v.errors).toHaveLength(0);
+  });
+
+  it('does not gate optimal mode when no banker is set', () => {
+    const balances = [makeBalance('L1', 50, 0), makeBalance('W1', 0, 50)];
+    const v = validateSettlements(balances, undefined, undefined, 'optimal');
+    expect(v.isValid).toBe(true);
+  });
+});

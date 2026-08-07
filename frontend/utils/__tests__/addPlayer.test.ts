@@ -276,7 +276,7 @@ describe('isLosslessUndo', () => {
     expect(isLosslessUndo(gabe, [], 0, undefined)).toBe(true);
   });
 
-  // removePlayer silently resets settlementMode to 'optimal' and clears bankerPlayerId.
+  // removePlayer clears bankerPlayerId; settlementMode stays 'banker'.
   // A re-add does not restore banker designation, so this is lossy by definition.
   it('is false when the player is the designated banker', () => {
     expect(isLosslessUndo(gabe, [], DEFAULT, 'p_Gabe')).toBe(false);

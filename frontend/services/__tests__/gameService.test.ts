@@ -168,7 +168,7 @@ describe('GameService.removePlayer', () => {
     expect(game.cachedSettlements).toBeDefined();
   });
 
-  it('resets banker mode to optimal when the removed player is the designated banker', () => {
+  it('keeps banker mode and clears only the banker id when the banker is removed', () => {
     const game = createTestGame({ status: 'active' });
     const banker = GameService.addPlayer(game, 'Bank');
     game.settlementMode = 'banker';
@@ -178,7 +178,9 @@ describe('GameService.removePlayer', () => {
 
     GameService.removePlayer(game, banker.id);
 
-    expect(game.settlementMode).toBe('optimal');
+    // The MODE is the host's choice and survives; only the dangling id is dropped.
+    // Completion is then blocked by validateSettlements until a new banker is picked.
+    expect(game.settlementMode).toBe('banker');
     expect(game.bankerPlayerId).toBeUndefined();
     expect(game.cachedSettlements).toBeUndefined();
     expect(game.transactionHash).toBeUndefined();

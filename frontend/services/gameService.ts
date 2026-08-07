@@ -136,10 +136,14 @@ export class GameService {
       transaction => transaction.playerId !== playerId
     );
 
-    // If the removed player was the designated banker, fall back to optimal
-    // mode rather than leaving a dangling bankerPlayerId pointing at nobody.
+    // If the removed player was the designated banker, clear the dangling id but
+    // KEEP settlementMode === 'banker'. Silently flipping the game back to Direct
+    // discarded a setting the host chose, with no prompt and nothing on screen to
+    // notice it had happened. The resulting "banker mode, no banker" state is
+    // deliberate and persistent (it survives restart and Firestore sync);
+    // validateSettlements() blocks completion until a banker is chosen, and the
+    // collapsed Settings row shows "Set banker".
     if (game.bankerPlayerId === playerId) {
-      game.settlementMode = 'optimal';
       game.bankerPlayerId = undefined;
       this.clearSettlementCache(game);
     }

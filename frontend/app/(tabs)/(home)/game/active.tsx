@@ -807,14 +807,14 @@ export default function ActiveGameScreen() {
     // actually apply rather than assuming it was the transaction count. A banker holding no
     // buy-in is reachable (Add-someone from the banker picker with an empty buy-in field),
     // and reporting "0 transactions" there is both wrong and hides the real loss:
-    // removePlayer clears bankerPlayerId AND resets settlementMode to 'optimal'.
+    // removePlayer clears bankerPlayerId (the mode itself is deliberately kept).
     const n = activeGame.transactions.filter(t => t.playerId === player.id).length;
     const parts: string[] = [];
     if (player.completedAt) {
       parts.push('They have already been marked complete — removing them undoes that.');
     }
     if (activeGame.bankerPlayerId === player.id) {
-      parts.push("They are this game's banker — removing them clears the banker and switches settlement back to Direct.");
+      parts.push("They are this game's banker — removing them leaves the game without a banker until you pick a new one.");
     }
     if (n > 0) {
       parts.push(n === 1
