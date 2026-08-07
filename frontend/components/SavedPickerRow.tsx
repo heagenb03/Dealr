@@ -64,7 +64,9 @@ const styles = StyleSheet.create({
   // standard grouped-list behaviour.
   //
   // paddingVertical is UNCHANGED at 14 — row height and the number of visible players
-  // must not move, because the card is height-capped at 50% of the window.
+  // must not move, because row height is the divisor for the visible-row count in both
+  // of the card's height states (80% of the window with the keyboard down, 50% with it
+  // up).
   pickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

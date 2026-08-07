@@ -889,9 +889,9 @@ export default function ActiveGameScreen() {
     //
     // Both tap paths are covered: `tapped` is the default-buy-in fast path, and
     // selectedSavedId is set by handleSelectSaved for the row-tap -> buy-in -> Add path.
-    // Nothing clears selectedSavedId between those two points except handleNameChange
-    // (the host editing the search text, which genuinely IS a typed-origin add) and
-    // clearSubject (which abandons the add entirely).
+    // Nothing clears selectedSavedId between those two points except `handleNameChange`
+    // (the host editing the search text, which genuinely IS a typed-origin add),
+    // `clearSubject`, and closing the modal — all of which abandon the add.
     const tapOrigin = tapped != null || selectedSavedId != null;
 
     // Cap gate: free caps at 12, Pro at 20 (see utils/tierLimits). Enforced on EVERY
@@ -1370,7 +1370,11 @@ export default function ActiveGameScreen() {
   //
   // This threshold was 3 while the cap banner ALSO floated, from the top: the two
   // overlays then overlapped each other and buried the only row even at two rows. The
-  // banner is pinned now, so the pill is the only float left and the bound relaxes.
+  // banner is pinned now, but the pill is not the only float left — styles.pickerFade is
+  // also a bottom-anchored absolutely-positioned overlay in the same pickerViewport
+  // parent. The pill (~24-26pt) and the fade (30pt) share that same bottom edge, so they
+  // overlap rather than stack, keeping the combined footprint under one ~47pt row — which
+  // is why the bound still relaxes to 2.
   //
   // Height-independent, so the two-state card does not change it: pickerViewport has
   // flexShrink 1 and no flexGrow, so with short content it collapses to content height
@@ -1383,10 +1387,13 @@ export default function ActiveGameScreen() {
   // A new element of a stable type only re-renders, which is what we want.
   //
   // Everything the modal body used to hold now lives in the list's content container so
-  // there is exactly ONE scroll container covering the whole body. That is mandatory here,
-  // not a preference: on a 667pt window the card is 334pt and the fixed chrome alone
-  // (padding 48 + title 47 + search 74 + buy-in 74 + toggle 46 + footer 48) is 337pt, so
-  // any child pinned outside a scroller is unreachable.
+  // there is exactly ONE scroll container covering the whole body. That is a design
+  // invariant, not a hard arithmetic necessity: the buy-in TextInput and the Save-player
+  // toggle slot only render while committing an add, and committing always raises the
+  // keyboard (the buy-in field is explicitly focused), so those two elements only ever
+  // exist while the card is in its SHORT (keyboard-up, 50%-of-window) state. Keeping one
+  // scroll container is what keeps them reachable in that state — splitting the header
+  // into pinned and scrolling pieces would need per-state layout math instead.
   // Only the in-flow confirmation remains here. The SAVED · N label and the banker hint
   // moved to the modal's PINNED header: the scroll indicator's track spans the FlatList
   // frame, so anything rendered inside that frame above the rows makes the track appear
@@ -1770,12 +1777,6 @@ export default function ActiveGameScreen() {
               />
             )}
 
-            {/* Both of these are PINNED rather than rendered as part of the list's
-                ListHeaderComponent, and the reason is the scroll indicator, not taste:
-                its track spans the FlatList frame, so either one rendered inside that
-                frame makes the track start above the row panel. The banker hint is
-                persistent state while pending, so it hit that every time it showed. */}
-
             {/* Persistent state — shown for as long as the game is at cap — so it is
                 PINNED, not floated over the list. Floating it made it cover the
                 SAVED · N label and read as though it were squeezing the rows.
@@ -1794,6 +1795,12 @@ export default function ActiveGameScreen() {
                 </Text>
               </View>
             )}
+
+            {/* Both of these are PINNED rather than rendered as part of the list's
+                ListHeaderComponent, and the reason is the scroll indicator, not taste:
+                its track spans the FlatList frame, so either one rendered inside that
+                frame makes the track start above the row panel. The banker hint is
+                persistent state while pending, so it hit that every time it showed. */}
 
             {pendingBankerDesignation && (
               <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
