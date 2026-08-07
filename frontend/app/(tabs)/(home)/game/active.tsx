@@ -1202,12 +1202,6 @@ export default function ActiveGameScreen() {
   // summary stays consistent at the currency default instead of dropping it.
   const toleranceLabel = toleranceCaption(resolvedTolerance, formatAmount);
 
-  // Shared visibility gate for the rounding/tolerance/buy-in trailing segments
-  // in the collapsed settings row: suppressed only while banker mode has no
-  // banker chosen yet. One const keeps the three JSX copies from drifting out
-  // of sync with each other (and with the a11y label, which is unaffected).
-  const showTrailingSegments = activeGame.settlementMode !== 'banker' || !!bankerName;
-
   const settingsSummary = formatSettingsSummary(
     activeGame.settlementMode === 'banker',
     bankerName,
@@ -1649,7 +1643,12 @@ export default function ActiveGameScreen() {
             accessibilityLabel={`Settings: ${settingsSummary}`}
             accessibilityHint="Expands the game settings section"
           >
-            {/* Mode group (shrinks + ellipsizes for long banker names) */}
+            {/* Mode group — the only shrinking group, so a long banker name ellipsizes
+                here rather than pushing the row past its width. The "Banker · " prefix
+                is deliberately NOT rendered: the person-outline icon already carries it,
+                and dropping it frees 61pt, which is what makes all four segments fit a
+                353pt iPhone 16 row. The a11y label (formatSettingsSummary) still speaks
+                the prefix in full. */}
             <View style={[styles.settingsSummaryGroup, styles.settingsSummaryModeGroup]}>
               <Ionicons
                 name={activeGame.settlementMode === 'banker' ? 'person-outline' : 'swap-horizontal'}
@@ -1657,23 +1656,30 @@ export default function ActiveGameScreen() {
                 color="rgba(255,255,255,0.5)"
               />
               {activeGame.settlementMode === 'banker' ? (
-                <Text style={styles.settingsSummaryLabel} numberOfLines={1}>
-                  Banker
-                  <Text style={styles.settingsSummaryValue}>
-                    {bankerName ? ` · ${bankerName}` : ' · Choose banker'}
-                  </Text>
+                <Text
+                  style={[
+                    // Muted label colour for the placeholder so it reads as "nothing
+                    // chosen yet" rather than as a player literally named "Set banker".
+                    bankerName ? styles.settingsSummaryValue : styles.settingsSummaryLabel,
+                    styles.settingsSummaryModeText,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {bankerName ?? 'Set banker'}
                 </Text>
               ) : (
-                <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                <Text
+                  style={[styles.settingsSummaryValue, styles.settingsSummaryModeText]}
+                  numberOfLines={1}
+                >
                   Direct
                 </Text>
               )}
             </View>
 
             {/* Default buy-in — omitted entirely when off (0), since that means the
-                feature is disabled rather than sitting at a default value. Same
-                banker-unchosen suppression as the rounding and tolerance segments. */}
-            {gameDefaultBuyIn > 0 && showTrailingSegments && (
+                feature is disabled rather than sitting at a default value. */}
+            {gameDefaultBuyIn > 0 && (
               <>
                 <Text style={styles.settingsSummaryDot}>·</Text>
                 <View style={styles.settingsSummaryGroup}>
@@ -1685,31 +1691,26 @@ export default function ActiveGameScreen() {
               </>
             )}
 
-            {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
-            {showTrailingSegments && (
-              <>
-                <Text style={styles.settingsSummaryDot}>·</Text>
-                <View style={styles.settingsSummaryGroup}>
-                  <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                    {roundingLabel}
-                  </Text>
-                </View>
-              </>
-            )}
+            {/* Separator + rounding — always shown. These three used to be suppressed
+                while banker mode had no banker chosen, which was fine when that state
+                could not persist; since 2026-08-07 it can last a whole game, so hiding
+                the host's rounding and tolerance that long is worse than a longer row. */}
+            <Text style={styles.settingsSummaryDot}>·</Text>
+            <View style={styles.settingsSummaryGroup}>
+              <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                {roundingLabel}
+              </Text>
+            </View>
 
-            {/* Tolerance — always shown, same banker-unchosen suppression as rounding */}
-            {showTrailingSegments && (
-                <>
-                  <Text style={styles.settingsSummaryDot}>·</Text>
-                  <View style={styles.settingsSummaryGroup}>
-                    <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
-                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                      {toleranceLabel}
-                    </Text>
-                  </View>
-                </>
-              )}
+            {/* Tolerance — always shown, like rounding. */}
+            <Text style={styles.settingsSummaryDot}>·</Text>
+            <View style={styles.settingsSummaryGroup}>
+              <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                {toleranceLabel}
+              </Text>
+            </View>
           </TouchableOpacity>
         )}
       </View>
@@ -2806,6 +2807,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   settingsSummaryModeGroup: { flexShrink: 1, minWidth: 0 },
+  // The mode group above shrinks, but its Text did not: Yoga defaults flexShrink to
+  // 0 (unlike CSS), so the text kept full measured width and spilled past the group
+  // edge onto the separator dot instead of ellipsizing. Applied ONLY to the mode
+  // text — the trailing value segments must stay unshrinkable so they take natural
+  // width and the name absorbs exactly the remainder. No maxWidth (it would truncate
+  // when there is room) and no overflow:'hidden' (it would hide the evidence).
+  settingsSummaryModeText: { flexShrink: 1, minWidth: 0 },
   settingsSummaryLabel: { fontSize: 15, color: 'rgba(255,255,255,0.5)' },
   settingsSummaryValue: { fontSize: 15, color: 'rgba(255,255,255,0.75)' },
   settingsSummaryDot: { fontSize: 15, color: 'rgba(255,255,255,0.3)', marginHorizontal: 8 },
