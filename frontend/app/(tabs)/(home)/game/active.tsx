@@ -2174,7 +2174,7 @@ export default function ActiveGameScreen() {
                       onPress={() => {
                         // Close this modal and open the picker in ONE state batch — iOS
                         // renders a single native Modal at a time. Same constraint that
-                        // handleAddBanker (:1252-1259) already works around.
+                        // handleAddBanker (:1313-1320) already works around.
                         setShowCompletionModal(false);
                         setShowSettlementModePicker(true);
                       }}
