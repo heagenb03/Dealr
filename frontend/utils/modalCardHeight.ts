@@ -27,3 +27,39 @@ export function keyboardSafeCardMaxHeight(
 ): number {
   return Math.round(windowHeight * fraction);
 }
+
+/**
+ * Fraction of the window height the Add Players card may occupy when NO keyboard is up.
+ *
+ * Bounded by the notch, not by taste. A vertically-centered card leaves
+ * `(window - card) / 2` above it, so at 0.80 the top gap is 10% of the window. The top
+ * safe-area inset must fit inside that gap or the card's first row renders under the
+ * notch. The largest current iPhone top inset is ~59pt on an 852pt window — 6.9% — so
+ * 10% clears every device with margin.
+ *
+ * 0.85 was rejected: it leaves a 7.5% gap, 64pt against that 59pt inset — 5pt of slack,
+ * thinner than the ~49pt KEYBOARD_SAFE_CARD_FRACTION was deliberately chosen for.
+ */
+export const BROWSE_CARD_FRACTION = 0.8;
+
+/**
+ * Largest card height for the Add Players modal in either of its two discrete states.
+ *
+ * With a keyboard up the card must stay small enough for computeCardLift to raise its
+ * PINNED footer clear of the keyboard, which is exactly what keyboardSafeCardMaxHeight
+ * encodes. With no keyboard that constraint does not exist, so the card grows to
+ * BROWSE_CARD_FRACTION — taking the saved-player list from 2 visible rows to 7 on a
+ * 667pt device.
+ *
+ * Pure: no imports, no platform access. Both fractions injectable for tests.
+ */
+export function addPlayerCardMaxHeight(
+  windowHeight: number,
+  keyboardVisible: boolean,
+  keyboardFraction: number = KEYBOARD_SAFE_CARD_FRACTION,
+  browseFraction: number = BROWSE_CARD_FRACTION,
+): number {
+  return keyboardVisible
+    ? keyboardSafeCardMaxHeight(windowHeight, keyboardFraction)
+    : Math.round(windowHeight * browseFraction);
+}
