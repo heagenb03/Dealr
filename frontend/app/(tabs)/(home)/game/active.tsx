@@ -7,6 +7,7 @@ import Reanimated, {
   runOnJS,
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedScrollHandler,
   withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -368,6 +369,29 @@ export default function ActiveGameScreen() {
   useEffect(() => () => {
     if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
   }, []);
+
+  // Bottom-fade scroll cue. Three shared values, not one boolean: the scroll handler has
+  // both heights in a frame, but onLayout and onContentSizeChange each have only one.
+  // All start at 0, which evaluates to at-end → fade hidden, the correct initial state.
+  // Everything below runs on the UI thread: ZERO JS re-renders per scroll frame, which is
+  // load-bearing — the four commits before this work were spent virtualizing these lists.
+  const pickerScrollY = useSharedValue(0);
+  const pickerViewportH = useSharedValue(0);
+  const pickerContentH = useSharedValue(0);
+
+  const pickerScrollHandler = useAnimatedScrollHandler(e => {
+    pickerScrollY.value = e.contentOffset.y;
+    pickerViewportH.value = e.layoutMeasurement.height;
+    pickerContentH.value = e.contentSize.height;
+  });
+
+  const pickerFadeStyle = useAnimatedStyle(() => {
+    const atEnd =
+      pickerScrollY.value + pickerViewportH.value >= pickerContentH.value - 4;
+    return {
+      opacity: withTiming(atEnd ? 0 : 1, { duration: reduceMotionEnabled ? 0 : 150 }),
+    };
+  }, [reduceMotionEnabled]);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renamedPlayerName, setRenamedPlayerName] = useState('');
   const [showPaywall, setShowPaywall] = useState(false);
@@ -1719,24 +1743,48 @@ export default function ActiveGameScreen() {
             gone: once header and footer share the content container it can no longer wrap
             only the rows. That is an approved design decision, not an oversight. */}
         <View style={styles.pickerViewport}>
-          <FlatList
+          <Reanimated.FlatList
             data={showSavedPicker ? savedPickerListData : []}
             renderItem={renderSavedPickerItem}
             keyExtractor={savedPickerKeyExtractor}
             ListHeaderComponent={savedPickerHeader}
             ListFooterComponent={savedPickerFooter}
             style={styles.pickerListFlex}
+            onScroll={pickerScrollHandler}
+            scrollEventThrottle={16}
+            /* The scroll handler only fires while scrolling, so content shorter than the
+               viewport would never set the values. These two are infrequent and JS-side,
+               and cover that case. */
+            onLayout={e => { pickerViewportH.value = e.nativeEvent.layout.height; }}
+            onContentSizeChange={(_w, h) => { pickerContentH.value = h; }}
             /* No contentContainerStyle: the dropped styles.pickerList carried no padding or
                gap to move here (width/background/border/radius/marginBottom/overflow only),
                and every gap in this body comes from the children's own marginBottom. */
-            /* Parity with the body ScrollView this list replaces (AppModal scrollBody={false}). */
             keyboardShouldPersistTaps="handled"
             bounces={false}
-            showsVerticalScrollIndicator={false}
+            /* DELIBERATE reversal of the ScrollView-parity contract documented on AppModal's
+               scrollBody prop (that comment records this exception). The indicator alone is
+               not sufficient — on both platforms it appears only during a drag, so it
+               confirms scrolling rather than advertising it. The fade is what answers the
+               actual complaint; the indicator is the confirmation once a drag starts. */
+            showsVerticalScrollIndicator={true}
             initialNumToRender={12}
             maxToRenderPerBatch={10}
             windowSize={5}
           />
+
+          {/* 5 stacked 6pt bands in the card colour at stepped opacity, most opaque at the
+              bottom. NOT expo-linear-gradient: that is not a dependency and there is no
+              gradient anywhere in the app, so adding it means a new native module and a
+              fresh EAS build immediately after the 2.0.2 bump. At 30pt the stack is
+              visually indistinguishable from a gradient. */}
+          <Reanimated.View style={[styles.pickerFade, pickerFadeStyle]} pointerEvents="none">
+            <View style={[styles.pickerFadeBand, { opacity: 0.2 }]} />
+            <View style={[styles.pickerFadeBand, { opacity: 0.4 }]} />
+            <View style={[styles.pickerFadeBand, { opacity: 0.6 }]} />
+            <View style={[styles.pickerFadeBand, { opacity: 0.8 }]} />
+            <View style={[styles.pickerFadeBand, { opacity: 1 }]} />
+          </Reanimated.View>
 
           {/* Limit banner — pinned to the TOP of the list viewport, persistent while at cap.
               pointerEvents="none" is a correctness requirement, not polish: at the cap
@@ -2537,6 +2585,14 @@ const styles = StyleSheet.create({
     minHeight: 0,
     backgroundColor: 'transparent',
   },
+  pickerFade: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 30,
+  },
+  pickerFadeBand: { height: 6, backgroundColor: '#1A1A1A' },
   pickerCapBanner: {
     position: 'absolute',
     top: 0,
