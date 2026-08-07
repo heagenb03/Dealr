@@ -1420,8 +1420,9 @@ export default function ActiveGameScreen() {
   const showSavedPicker = !committingTapped && savedPlayers.length > 0 && filteredSaved.length > 0;
 
   // Where the post-add ✓ goes. Browse view only — while a name is being entered the card
-  // shows just the name control, the buy-in box, the save-player slot, and the Add button,
-  // because anything else lands between the name box and the buy-in box.
+  // shows no status messages between the name box and the buy-in box: only the name control,
+  // the (filtered) saved list, the buy-in box, the save-player slot, and the Add button. This
+  // confirmation would land between the name box and the buy-in box, which is the reported defect.
   //
   // savedPlayers.length, NOT filteredSaved.length, and the two are not interchangeable in
   // general — they are only equal in the browse view, which is the only place this can
@@ -1452,12 +1453,12 @@ export default function ActiveGameScreen() {
   // scroll container is what keeps them reachable in that state — splitting the header
   // into pinned and scrolling pieces would need per-state layout math instead.
   // Only the in-flow confirmation remains here, and only in the browse view with fewer than
-  // two saved players (see confirmationPlacement above) — everywhere else it is the pill.
-  // The SAVED · N label and the banker hint
-  // moved to the modal's PINNED header: the scroll indicator's track spans the FlatList
-  // frame, so anything rendered inside that frame above the rows makes the track appear
-  // to start above the row panel — which is exactly what it looked like. With them out,
-  // the track's top edge coincides with the panel's.
+  // two saved players (see confirmationPlacement above) — elsewhere in the browse view it is
+  // the pill, and while a name is being entered there is no confirmation at all. The SAVED · N
+  // label and the banker hint moved to the modal's PINNED header: the scroll indicator's track
+  // spans the FlatList frame, so anything rendered inside that frame above the rows makes the
+  // track appear to start above the row panel — which is exactly what it looked like. With
+  // them out, the track's top edge coincides with the panel's.
   //
   // When the confirmation is inactive this renders a zero-height View, which has no
   // effect on the frame.
@@ -1841,13 +1842,18 @@ export default function ActiveGameScreen() {
                 squeezing the rows.
 
                 Hidden while a name is being entered: pinned directly under the name control,
-                it otherwise lands between the name box and the buy-in box. The gate used to be
-                !committingTapped, which hid it for a row tap but left it wedged for a typed
-                name; !hasSubject is the same rule for both. Accepted cost: the host no longer
-                sees "you are blocked" while composing a name that will be rejected. They still
-                get the paywall on Add, and at cap every row is marked disabled by
-                buildAddPlayerPickerListData, so the browse view — where this still shows — is
-                where the information actually changes what they do. */}
+                it otherwise lands between the name box and the buy-in box, and while typing
+                the card shows no status messages there — only the name control, the (filtered)
+                saved list, the buy-in box, the save-player slot, and the Add button; this
+                banner is one of the status messages that stays hidden. The gate used to be
+                !committingTapped, which addressed the row-tap case (at cap that was a guard
+                rather than an observable behaviour, since every row is already disabled there)
+                but left it wedged for a typed name; !hasSubject is the same rule for both.
+                Accepted cost: the host no longer sees "you are blocked" while composing a
+                name that will be rejected. They still get the paywall on Add, and at cap
+                every row is marked disabled by buildAddPlayerPickerListData, so the browse
+                view — where this still shows — is where the information actually changes
+                what they do. */}
             {atPlayerCap && !hasSubject && (
               <View style={styles.pickerCapBanner}>
                 <Text style={styles.pickerCapBannerText}>
@@ -1861,10 +1867,13 @@ export default function ActiveGameScreen() {
                 its track spans the FlatList frame, so either one rendered inside that
                 frame makes the track start above the row panel. */}
 
-            {/* !hasSubject for the same reason as the cap banner above: pinned under the name
-                control, it wedges between the name box and the buy-in box while a name is
-                being entered. This one is a deliberate trade — the hint describes the add in
-                progress, so hiding it during the pick loses a genuinely relevant reassurance.
+            {/* !hasSubject for the same reason as the cap banner above: while a name is being
+                entered the card shows no status messages between the name box and the buy-in
+                box — only the name control, the (filtered) saved list, the buy-in box, the
+                save-player slot, and the Add button — and this hint is one of those status
+                messages, so it hides too. This one is a deliberate trade — the hint describes
+                the add in progress, so hiding it during the pick loses a genuinely relevant
+                reassurance.
                 A single exception-free rule was chosen over a locally-better one, because an
                 invariant with one exception is two rules to hold and two things to QA.
                 Expect on device: with a default buy-in the hint stays up until the tap that
@@ -1944,8 +1953,9 @@ export default function ActiveGameScreen() {
               button bar would shove Done downward as it appeared (the button jumping under a
               thumb mid-tap, exactly what saveToggleSlot's fixed 30pt height exists to
               prevent) or require a permanently reserved strip in a modal already over budget.
-              The shouldShowAddedConfirmation gate is UNCHANGED — this is placement work only,
-              no new suppression logic. */}
+              The shouldShowAddedConfirmation gate itself is UNCHANGED, but two suppressions
+              now sit on top of it: confirmationPlacement returns 'none' while a name is being
+              entered, and showAddedPill nulls lastAddedName once the fade completes. */}
           {confirmationPlacement === 'pill' && (
             <Reanimated.View style={[styles.pickerConfirmPill, pillStyle]} pointerEvents="none">
               <Text style={styles.pickerConfirmPillText} numberOfLines={1}>✓ {addedConfirmLabel}</Text>

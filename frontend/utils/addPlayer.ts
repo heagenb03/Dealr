@@ -159,7 +159,8 @@ export function isLosslessUndo(
  * concerns from drifting into one condition that no longer states its own reason.
  *
  * `hasSubject` closes it entirely. While a name is being entered, the Add Players card shows
- * only the name control, the buy-in box, the save-player slot, and the Add button — a status
+ * no status messages between the name box and the buy-in box — only the name control, the
+ * (filtered) saved list, the buy-in box, the save-player slot, and the Add button; a status
  * message there lands between the name box and the buy-in box, which is the reported defect.
  * That in-flow render also had no fade timer (only the floating pill's opacity is animated),
  * so it persisted, and it could resurrect: with a 0 default buy-in the whether-gate falls

@@ -305,8 +305,9 @@ describe('addedConfirmationPlacement', () => {
     expect(addedConfirmationPlacement(false, false, 5)).toBe('none');
   });
 
-  // The invariant: while a name is being entered, the card shows only the name control,
-  // the buy-in box, the save-player slot, and the Add button.
+  // The invariant: while a name is being entered, the card shows no status messages
+  // between the name box and the buy-in box — only the name control, the (filtered)
+  // saved list, the buy-in box, the save-player slot, and the Add button.
   it('renders nothing while a name is being entered, however many saved players', () => {
     expect(addedConfirmationPlacement(true, true, 5)).toBe('none');
     expect(addedConfirmationPlacement(true, true, 1)).toBe('none');
