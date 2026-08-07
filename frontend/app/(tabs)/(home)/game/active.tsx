@@ -47,7 +47,8 @@ import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
-import { keyboardSafeCardMaxHeight } from '@/utils/modalCardHeight';
+import { addPlayerCardMaxHeight } from '@/utils/modalCardHeight';
+import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
 import { canAddMorePlayers } from '@/utils/tierLimits';
 import { buildAddPlayerPickerListData, AddPlayerPickerItem } from '@/utils/addPlayerPickerListData';
 import { buildActiveGameListData, ActiveGameListItem } from '@/utils/activeGameListData';
@@ -202,14 +203,27 @@ export default function ActiveGameScreen() {
   const { user, isPro } = useAuth();
   const { formatAmount, meta, currency } = useCurrency();
   const { height: windowHeight } = useWindowDimensions();
-  // Caps the Add Players card so its PINNED footer still clears the keyboard.
-  // computeCardLift cannot raise a tall card far enough, so without this cap the
-  // Add/Done button would sit behind the keyboard with no way to reach it.
-  // Declared here with the other hooks — it MUST stay above the `if (!activeGame)`
-  // early return further down, or this becomes a Rules-of-Hooks violation.
+  // Caps the Add Players card in TWO discrete states.
+  //
+  // Keyboard UP: the cap must stay small enough for computeCardLift to raise the card's
+  // PINNED footer clear of the keyboard. Without it the Add/Done button sits behind the
+  // keyboard with no way to reach it.
+  //
+  // Keyboard DOWN: that constraint does not apply, so the card grows — taking the saved
+  // list from 2 visible rows to 7 on a 667pt device, which is the whole point.
+  //
+  // The swap is deliberately DISCRETE and un-animated. Interpolating maxHeight per frame
+  // around a virtualized list drives continuous re-layout and row recycling, which is
+  // visible jank. On iOS keyboardWillShow fires as the keyboard's own animation begins,
+  // so the resize lands underneath the incoming keyboard rather than after it.
+  //
+  // Declared here with the other hooks — BOTH useKeyboardVisible and this memo MUST stay
+  // above the `if (!activeGame)` early return further down, or this becomes a
+  // Rules-of-Hooks violation.
+  const keyboardVisible = useKeyboardVisible();
   const addPlayerCardStyle = useMemo(
-    () => ({ maxHeight: keyboardSafeCardMaxHeight(windowHeight) }),
-    [windowHeight],
+    () => ({ maxHeight: addPlayerCardMaxHeight(windowHeight, keyboardVisible) }),
+    [windowHeight, keyboardVisible],
   );
   const router = useRouter();
   const { registerHelp } = useHelp();
@@ -1726,7 +1740,6 @@ export default function ActiveGameScreen() {
               onChangeText={handleNameChange}
               placeholder="Search saved or type a name"
               placeholderTextColor="#666"
-              autoFocus
               autoCapitalize="words"
               returnKeyType="next"
             />
