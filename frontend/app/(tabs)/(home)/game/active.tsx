@@ -1812,18 +1812,19 @@ export default function ActiveGameScreen() {
               />
             )}
 
-            {/* Persistent state — shown for as long as the game is at cap — so it is
-                PINNED, not floated over the list. Floating it made it cover the
-                SAVED · N label and read as though it were squeezing the rows.
+            {/* Shown for as long as the game is at cap, so it is PINNED, not floated over the
+                list. Floating it made it cover the SAVED · N label and read as though it were
+                squeezing the rows.
 
-                Gated on !committingTapped rather than on showSavedPicker: while
-                committingTapped the picker is hidden and there is no list for this to
-                annotate, but showSavedPicker is ALSO false when the host has no saved
-                players at all, where the notice is still correct and wanted. That
-                combination is unreachable in practice — at cap every row is marked
-                disabled by buildAddPlayerPickerListData, so a row tap cannot set
-                selectedSavedId — which makes this term a guard, not a behaviour. */}
-            {atPlayerCap && !committingTapped && (
+                Hidden while a name is being entered: pinned directly under the name control,
+                it otherwise lands between the name box and the buy-in box. The gate used to be
+                !committingTapped, which hid it for a row tap but left it wedged for a typed
+                name; !hasSubject is the same rule for both. Accepted cost: the host no longer
+                sees "you are blocked" while composing a name that will be rejected. They still
+                get the paywall on Add, and at cap every row is marked disabled by
+                buildAddPlayerPickerListData, so the browse view — where this still shows — is
+                where the information actually changes what they do. */}
+            {atPlayerCap && !hasSubject && (
               <View style={styles.pickerCapBanner}>
                 <Text style={styles.pickerCapBannerText}>
                   {playerCapBanner(activeGame.players.length, isPro)}
@@ -1834,10 +1835,17 @@ export default function ActiveGameScreen() {
             {/* Both of these are PINNED rather than rendered as part of the list's
                 ListHeaderComponent, and the reason is the scroll indicator, not taste:
                 its track spans the FlatList frame, so either one rendered inside that
-                frame makes the track start above the row panel. The banker hint is
-                persistent state while pending, so it hit that every time it showed. */}
+                frame makes the track start above the row panel. */}
 
-            {pendingBankerDesignation && (
+            {/* !hasSubject for the same reason as the cap banner above: pinned under the name
+                control, it wedges between the name box and the buy-in box while a name is
+                being entered. This one is a deliberate trade — the hint describes the add in
+                progress, so hiding it during the pick loses a genuinely relevant reassurance.
+                A single exception-free rule was chosen over a locally-better one, because an
+                invariant with one exception is two rules to hold and two things to QA.
+                Expect on device: with a default buy-in the hint stays up until the tap that
+                adds the player; when typing a name it disappears on the first keystroke. */}
+            {pendingBankerDesignation && !hasSubject && (
               <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
             )}
 
