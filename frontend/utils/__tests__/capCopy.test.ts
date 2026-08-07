@@ -11,6 +11,9 @@ jest.mock('@/services/firebaseService', () => ({
 
 import {
   PLAYERS_PAYWALL_MESSAGE,
+  PLAYER_CAP_BANNER_MAX_CHARS,
+  SAVED_CAP_NOTICE_MAX_CHARS,
+  playerCapBanner,
   playerCapHint,
   savedCapCounter,
   savedCapModalNotice,
@@ -128,5 +131,62 @@ describe('savedCapPaywallMessage', () => {
     expect(s).toContain('200');
     expect(s.toLowerCase()).not.toContain('free limit');
     expect(s.toLowerCase()).not.toContain('upgrade to pro');
+  });
+});
+
+describe('playerCapBanner', () => {
+  it('uses Pro wording at the Pro cap, with no upgrade prompt', () => {
+    const s = playerCapBanner(50, true);
+    expect(s).toContain('50');
+    expect(s.toLowerCase()).not.toContain('upgrade');
+    expect(s.toLowerCase()).not.toContain('free');
+  });
+
+  it('states the free limit when exactly at it', () => {
+    const s = playerCapBanner(12, false);
+    expect(s).toContain('12');
+    expect(s).toContain('50');
+    expect(s.toLowerCase()).not.toContain('unlimited');
+  });
+
+  // Grandfathered downgrade: a trial lapsed while 13 players were on the table. The copy
+  // must never state a cap the user's own visible roster contradicts.
+  it('leads with the real count when over the free cap', () => {
+    const s = playerCapBanner(13, false);
+    expect(s).toContain('13');
+    expect(s).toContain('12');
+    expect(s).not.toMatch(/limit reached . 12 players/i);
+    expect(s).not.toMatch(/^12 /);
+  });
+});
+
+// This is the only mechanism that stops a future copy edit from silently reintroducing a
+// 3-line banner or a truncated single-line notice — the defect this work exists to fix
+// would otherwise come back with a green suite. Budgets are checked at the MAXIMUM
+// REACHABLE count, not at the example values in the design doc.
+describe('character budgets', () => {
+  it('keeps every playerCapBanner branch within two lines', () => {
+    const worstCases: [number, boolean][] = [
+      [50, true],    // Pro at cap
+      [12, false],   // free at cap
+      [13, false],   // free just over cap
+      [50, false],   // free at the largest grandfathered roster (was Pro, then lapsed)
+    ];
+    for (const [count, isPro] of worstCases) {
+      expect(playerCapBanner(count, isPro).length).toBeLessThanOrEqual(PLAYER_CAP_BANNER_MAX_CHARS);
+    }
+  });
+
+  it('keeps every savedCapModalNotice branch on one line', () => {
+    const worstCases: [number, boolean][] = [
+      [15, false],   // free at cap
+      [200, true],   // Pro at cap — the tightest string of the five
+      [18, false],   // free over cap
+      [205, true],   // Pro over cap
+      [999, false],  // hardening: a 3-digit count on the free branch
+    ];
+    for (const [count, isPro] of worstCases) {
+      expect(savedCapModalNotice(count, isPro).length).toBeLessThanOrEqual(SAVED_CAP_NOTICE_MAX_CHARS);
+    }
   });
 });
