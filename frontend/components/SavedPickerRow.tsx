@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SavedPickerRowProps, savedPickerRowPropsEqual } from '@/utils/savedPickerRow';
 
-function SavedPickerRow({ id, name, badge, inGame, disabled, isLast, onSelect }: SavedPickerRowProps) {
+function SavedPickerRow({ id, name, badge, inGame, disabled, isFirst, isLast, onSelect }: SavedPickerRowProps) {
   // An added row is deliberately NOT pressable. Under the alphabetical show-all list it keeps
   // its position after being added, so the add tap and a would-be undo tap land on identical
   // pixels — binding undo to the row would make a double-tap silently remove the player, and
@@ -12,7 +12,7 @@ function SavedPickerRow({ id, name, badge, inGame, disabled, isLast, onSelect }:
   // responder gating, which this must not rest on.
   if (inGame) {
     return (
-      <View style={[styles.pickerRow, isLast && styles.pickerRowLast]}>
+      <View style={[styles.pickerRow, isFirst && styles.pickerRowFirst, isLast && styles.pickerRowLast]}>
         <Text style={[styles.pickerRowName, styles.pickerRowNameShrink]} numberOfLines={1}>
           {name}
         </Text>
@@ -37,6 +37,7 @@ function SavedPickerRow({ id, name, badge, inGame, disabled, isLast, onSelect }:
       onPress={() => onSelect(id)}
       style={[
         styles.pickerRow,
+        isFirst && styles.pickerRowFirst,
         isLast && styles.pickerRowLast,
         disabled && styles.pickerRowDisabled,
       ]}
@@ -50,24 +51,49 @@ function SavedPickerRow({ id, name, badge, inGame, disabled, isLast, onSelect }:
 }
 
 const styles = StyleSheet.create({
-  // No horizontal inset, deliberately. The bordered styles.pickerList box that used to wrap
-  // these rows is gone (the picker now shares one scroll container with the modal's other
-  // children), so a 16pt inset here would indent the row names 16pt past the SAVED label,
-  // the buy-in field and the Save-player checkbox, which all start at x=0. The right edge
-  // matches too: identityRow — the structurally identical sibling, a left label plus a
-  // right-hand action at marginLeft:'auto' — is full-width with zero inset, so the badge
-  // and "Added ✓" sit flush right exactly where "Add as new" does. Rows are therefore
-  // full-bleed and so are their tap targets and press highlights, which is intended.
+  // These rows ARE the grouped panel. There is no wrapping box: the FlatList that holds
+  // them shares one scroll container with the modal's other children, and a wrapper that
+  // surrounded only the rows would have to sit inside the list, where it cannot span
+  // virtualized content. So every edge is drawn per row — left/right on all of them,
+  // top on isFirst, bottom on isLast — which composites into a single continuous panel.
+  //
+  // paddingHorizontal: 12 deliberately supersedes the previous zero-inset rationale
+  // (row names aligning with the SAVED label, the buy-in field and the Save-player
+  // checkbox). That was written for a world with no box. The panel itself is still
+  // full-bleed and still aligns with those elements; only the text insets, which is
+  // standard grouped-list behaviour.
+  //
+  // paddingVertical is UNCHANGED at 14 — row height and the number of visible players
+  // must not move, because the card is height-capped at 50% of the window.
   pickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,
     paddingVertical: 14,
+    paddingHorizontal: 12,
+    backgroundColor: '#242424',
+    borderLeftWidth: 1,
+    borderLeftColor: '#333333',
+    borderRightWidth: 1,
+    borderRightColor: '#333333',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  pickerRowLast: { borderBottomWidth: 0 },
+  pickerRowFirst: {
+    borderTopWidth: 1,
+    borderTopColor: '#333333',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  // NOT borderBottomWidth: 0. The final row carries the panel's bottom EDGE, so the
+  // border stays and only its colour changes from the divider tint to the edge colour.
+  // Dropping it would leave the panel open-bottomed.
+  pickerRowLast: {
+    borderBottomColor: '#333333',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
   pickerRowDisabled: { opacity: 0.4 },
   pickerRowName: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   // Added rows carry two right-hand tags, so the name is what must give way.
