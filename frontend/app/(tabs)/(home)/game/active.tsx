@@ -459,6 +459,7 @@ export default function ActiveGameScreen() {
         badge={item.badge}
         inGame={item.inGame}
         disabled={item.disabled}
+        isFirst={item.isFirst}
         isLast={item.isLast}
         onSelect={onSelectSaved}
       />

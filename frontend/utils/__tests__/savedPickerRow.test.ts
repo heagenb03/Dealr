@@ -7,6 +7,7 @@ const base = (over: Partial<SavedPickerRowProps> = {}): SavedPickerRowProps => (
   badge: null,
   inGame: false,
   disabled: false,
+  isFirst: false,
   isLast: false,
   onSelect: noop,
   ...over,
@@ -35,6 +36,13 @@ describe('savedPickerRowPropsEqual', () => {
   });
   it('is false when disabled changes', () => {
     expect(savedPickerRowPropsEqual(base(), base({ disabled: true }))).toBe(false);
+  });
+  // Regression guard for the grouped-panel work: isFirst draws the panel's top edge and
+  // top corner radii. The comparator is hand-written and silently ignores any prop it
+  // does not name, so an omission here leaves a stale top edge on a row that is no
+  // longer first — visible only after a search filters the list.
+  it('is false when isFirst changes', () => {
+    expect(savedPickerRowPropsEqual(base(), base({ isFirst: true }))).toBe(false);
   });
   it('is false when isLast changes', () => {
     expect(savedPickerRowPropsEqual(base(), base({ isLast: true }))).toBe(false);

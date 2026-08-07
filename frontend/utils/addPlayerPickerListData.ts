@@ -26,7 +26,9 @@ export type AddPlayerPickerItem = {
   inGame: boolean;
   /** True when the row must not respond to taps (already in game, or player cap hit). */
   disabled: boolean;
-  /** True for the final row — drops the bottom border. */
+  /** True for the opening row — draws the grouped panel's top edge and top corners. */
+  isFirst: boolean;
+  /** True for the final row — draws the panel's bottom edge and bottom corners. */
   isLast: boolean;
 };
 
@@ -51,6 +53,7 @@ export function buildAddPlayerPickerListData(
       badge: r.badge,
       inGame,
       disabled: inGame || atPlayerCap,
+      isFirst: index === 0,
       isLast: index === rows.length - 1,
     };
   });

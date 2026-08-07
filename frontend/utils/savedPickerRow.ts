@@ -17,7 +17,9 @@ export type SavedPickerRowProps = {
   inGame: boolean;
   /** True when the row must not respond to taps (already in game, or player cap hit). */
   disabled: boolean;
-  /** True for the final row — drops the bottom border. */
+  /** True for the opening row — draws the grouped panel's top edge and top corners. */
+  isFirst: boolean;
+  /** True for the final row — draws the panel's bottom edge and bottom corners. */
   isLast: boolean;
   /** Tap handler. MUST be referentially stable or the memo never short-circuits. */
   onSelect: (id: string) => void;
@@ -42,6 +44,7 @@ export function savedPickerRowPropsEqual(
     prev.badge === next.badge &&
     prev.inGame === next.inGame &&
     prev.disabled === next.disabled &&
+    prev.isFirst === next.isFirst &&
     prev.isLast === next.isLast &&
     prev.onSelect === next.onSelect
   );

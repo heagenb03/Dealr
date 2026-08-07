@@ -8,7 +8,7 @@ describe('buildAddPlayerPickerListData', () => {
     expect(buildAddPlayerPickerListData([], noneInGame, false)).toEqual([]);
   });
 
-  it('marks a single row as last', () => {
+  it('marks a single row as both first and last', () => {
     expect(buildAddPlayerPickerListData([row('s1', 'Ada', 'Venmo · @ada')], noneInGame, false)).toEqual([
       {
         type: 'savedRow',
@@ -18,6 +18,7 @@ describe('buildAddPlayerPickerListData', () => {
         badge: 'Venmo · @ada',
         inGame: false,
         disabled: false,
+        isFirst: true,
         isLast: true,
       },
     ]);
@@ -30,6 +31,15 @@ describe('buildAddPlayerPickerListData', () => {
       false,
     );
     expect(items.map(i => i.isLast)).toEqual([false, false, true]);
+  });
+
+  it('marks only the opening row as first across many rows', () => {
+    const items = buildAddPlayerPickerListData(
+      [row('s1', 'Ada'), row('s2', 'Bob'), row('s3', 'Cyd')],
+      noneInGame,
+      false,
+    );
+    expect(items.map(i => i.isFirst)).toEqual([true, false, false]);
   });
 
   it('disables a row whose name is already in the game and flags it inGame', () => {
