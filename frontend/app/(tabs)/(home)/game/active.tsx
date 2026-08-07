@@ -1171,6 +1171,13 @@ export default function ActiveGameScreen() {
       ? activeGame.players.find(p => p.id === activeGame.bankerPlayerId)?.name
       : undefined;
 
+  // The completion modal's error mode is otherwise a dead end (a lone OK button),
+  // and since removePlayer stopped resetting the mode, "no banker" is the error a
+  // host is most likely to hit. Detected structurally rather than by matching the
+  // error string, so re-wording the message cannot silently disable the button.
+  const completionBlockedOnBanker =
+    activeGame.settlementMode === 'banker' && !GameService.hasRememberedBanker(activeGame);
+
   const roundingLabel =
     resolveCashUnit(activeGame.cashUnit, currency) === EXACT_CASH_UNIT
       ? 'Exact'
@@ -2077,12 +2084,33 @@ export default function ActiveGameScreen() {
 
               {/* Dynamic Buttons */}
               {completionModalMode === 'error' ? (
-                <ModalButton
-                  variant="cancel"
-                  title="OK"
-                  onPress={() => setShowCompletionModal(false)}
-                  fullWidth
-                />
+                completionBlockedOnBanker ? (
+                  <View style={styles.modalButtons}>
+                    <ModalButton
+                      variant="cancel"
+                      title="Cancel"
+                      onPress={() => setShowCompletionModal(false)}
+                    />
+                    <ModalButton
+                      variant="success"
+                      title="Choose Banker"
+                      onPress={() => {
+                        // Close this modal and open the picker in ONE state batch — iOS
+                        // renders a single native Modal at a time. Same constraint that
+                        // handleAddBanker (:1245-1258) already works around.
+                        setShowCompletionModal(false);
+                        setShowSettlementModePicker(true);
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <ModalButton
+                    variant="cancel"
+                    title="OK"
+                    onPress={() => setShowCompletionModal(false)}
+                    fullWidth
+                  />
+                )
               ) : (
                 <View style={styles.modalButtons}>
                   <ModalButton
