@@ -45,7 +45,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo } from '@/utils/addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo, postAddFocusTarget } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 import { addPlayerCardMaxHeight } from '@/utils/modalCardHeight';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
@@ -434,6 +434,17 @@ export default function ActiveGameScreen() {
   const addingPlayerRef = useRef(false);
   const nameInputRef = useRef<TextInput>(null);
   const buyInInputRef = useRef<TextInput>(null);
+  // True when the tapped-row add currently in flight began from a non-empty search box.
+  //
+  // Captured at TAP time, in handleSelectSaved, because that function overwrites
+  // newPlayerName with the tapped player's name — by the time commitAddPlayer runs on the
+  // 0-default-buy-in path, the query is gone and unrecoverable. Reading newPlayerName in
+  // commitAddPlayer would appear to work (the default-buy-in fast path calls it
+  // synchronously, before the overwrite) and silently report browse-origin for every
+  // two-step add.
+  //
+  // A ref, not state: it never affects rendering, and it must survive to the later Add press.
+  const tapFromSearchRef = useRef(false);
 
   // Game completion modal state
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -766,6 +777,7 @@ export default function ActiveGameScreen() {
 
   const closeAddModal = () => {
     clearAddedPill();
+    tapFromSearchRef.current = false;
     setNewPlayerName('');
     setNewPlayerBuyIn('');
     setSelectedSavedId(null);
@@ -785,6 +797,9 @@ export default function ActiveGameScreen() {
       handleUndoAdd(existing);
       return;
     }
+    // MUST be read before the setNewPlayerName below — see tapFromSearchRef's declaration.
+    // Set after the undo early-return: an undo is not an add and must not arm this.
+    tapFromSearchRef.current = newPlayerName.trim().length > 0;
     if (gameDefaultBuyIn > 0) {
       commitAddPlayer(p);
       return;
@@ -868,16 +883,28 @@ export default function ActiveGameScreen() {
 
   // The '‹ Adding {name}' header taps back to Browse (un-picks the saved row).
   //
-  // Deliberately does NOT re-focus the name input. This control means "return to
-  // browsing", and browsing is the keyboard-DOWN state the tall card exists for; focusing
-  // here would raise the keyboard and collapse the card the host is returning to.
+  // Follows the SAME rule as a completed add (postAddFocusTarget): a pick that began from a
+  // search returns the caret to the now-empty search box, because the host was mid-search and
+  // is most likely to resume it; a pick made while browsing leaves the keyboard down so the
+  // tall browse card comes back.
   //
-  // No Keyboard.dismiss() either: the buy-in field unmounts along with the subject, which
-  // drops the keyboard on its own. An explicit dismiss would be a no-op that reads as
-  // load-bearing.
+  // tapOrigin is passed as a literal `true`, and that is not a shortcut: this control renders
+  // only inside the `committingTapped ?` branch of the modal's pinned header, so it is
+  // unreachable unless a row was tapped.
+  //
+  // The dismiss branch is not a no-op even though the buy-in field unmounts along with the
+  // subject: on the 0-buy-in path that field holds focus, and dismissing explicitly makes the
+  // browse-origin outcome independent of unmount timing.
   const clearSubject = () => {
+    const focusTarget = postAddFocusTarget(true, tapFromSearchRef.current);
+    tapFromSearchRef.current = false;
     setNewPlayerName('');
     setSelectedSavedId(null);
+    if (focusTarget === 'search') {
+      requestAnimationFrame(() => nameInputRef.current?.focus());
+    } else {
+      Keyboard.dismiss();
+    }
   };
 
   const commitAddPlayer = async (tapped?: SavedPlayer) => {
@@ -892,6 +919,10 @@ export default function ActiveGameScreen() {
     // Nothing clears selectedSavedId between those two points except `handleNameChange`
     // (the host editing the search text, which genuinely IS a typed-origin add),
     // `clearSubject`, and closing the modal — all of which abandon the add.
+    //
+    // tapFromSearchRef is the same kind of capture one step EARLIER in the flow: this line
+    // survives the reset below, but the search query does not survive handleSelectSaved's
+    // own setNewPlayerName. Both feed postAddFocusTarget at the end of this function.
     const tapOrigin = tapped != null || selectedSavedId != null;
 
     // Cap gate: free caps at 12, Pro at 20 (see utils/tierLimits). Enforced on EVERY
@@ -1002,14 +1033,20 @@ export default function ActiveGameScreen() {
       setSelectedSavedId(null);
       setSavePlayerToggle(true);
       setForceUnlinked(false);
-      // A TYPED add keeps the keyboard up and the caret in the search field so the next
-      // name can be typed straight away. A TAP add must not: re-focusing there would
-      // raise the keyboard and collapse the tall browse card the host just added from,
-      // which would make every single tap-add flicker the modal shut and open.
-      if (tapOrigin) {
-        Keyboard.dismiss();
-      } else {
+      // Where the keyboard goes next is decided by where this add came from — see
+      // postAddFocusTarget. Three cases: typed -> search box; tap from a search -> search
+      // box (the host is most likely about to search again); tap while browsing -> keyboard
+      // stays down, which is the state the tall browse card exists for.
+      //
+      // Not-dismissing would not be enough on the 0-default-buy-in path: the buy-in field
+      // unmounts as part of the reset above and takes the keyboard down with it, so the
+      // search box has to be focused explicitly to keep it up.
+      const focusTarget = postAddFocusTarget(tapOrigin, tapFromSearchRef.current);
+      tapFromSearchRef.current = false;
+      if (focusTarget === 'search') {
         requestAnimationFrame(() => nameInputRef.current?.focus());
+      } else {
+        Keyboard.dismiss();
       }
     } finally {
       addingPlayerRef.current = false;
