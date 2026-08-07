@@ -14,12 +14,18 @@ import { FREE_SAVED_CAP, PRO_SAVED_CAP, savedCapFor } from '@/services/savedPlay
 export const PLAYERS_PAYWALL_MESSAGE = `Upgrade to Pro for up to ${PRO_PLAYER_CAP} players per game.`;
 
 /**
- * Body of the native Alert.alert('Player Limit', …) calls in active.tsx (:561, :788),
- * where the fuller sentence reads better and width is not constrained.
+ * Body of the native Alert.alert('Player Limit', …) calls in active.tsx — openAddPlayer's
+ * cap gate and commitAddPlayer's cap gate — where the fuller sentence reads better and
+ * width is not constrained.
+ *
+ * Both call sites hardcode isPro=true: a free user takes the setShowPaywall(true) branch
+ * instead and never reaches this Alert. That leaves only the Pro-at-cap branch reachable
+ * today. The count > FREE_PLAYER_CAP and free-at-cap branches below are dead code from
+ * those two call sites right now, but are kept — and are covered by passing tests in
+ * utils/__tests__/capCopy.test.ts — for a future free-tier Alert path. Do not delete them.
  *
  * NOT used in the Add Players modal any more — that is playerCapBanner below, which is
- * fitted to the card's ~257pt usable width. Three cases: Pro at cap (newly reachable),
- * free over cap, free at cap.
+ * fitted to the card's ~257pt usable width.
  */
 export function playerCapHint(count: number, isPro: boolean): string {
   if (isPro) {

@@ -346,10 +346,10 @@ export default function ActiveGameScreen() {
   }, [pillOpacity]);
 
   // Called from the ADD path only — never from a change in addedCount. Undo also writes
-  // addedCount (a decrement at :753), so an inequality check would treat a removal as a
-  // reason to re-show the pill. Today that would happen to be harmless, because Undo also
-  // nulls lastAddedName/lastAddedAmount and shouldShowAddedConfirmation then closes the
-  // gate — but that safety rests on a second, unrelated mechanism staying in place.
+  // addedCount (a decrement inside removeAddedPlayer), so an inequality check would treat a
+  // removal as a reason to re-show the pill. Today that would happen to be harmless, because
+  // Undo also nulls lastAddedName/lastAddedAmount and shouldShowAddedConfirmation then closes
+  // the gate — but that safety rests on a second, unrelated mechanism staying in place.
   // Keying to the increment site removes the coincidence.
   //
   // A second add inside the 2500ms window clears and restarts the timer, so the pill
@@ -365,7 +365,14 @@ export default function ActiveGameScreen() {
 
   // active.tsx does NOT unmount when the Add Players modal closes — AppModal is always
   // rendered with visible={showAddPlayer}. This effect only covers leaving the screen.
-  // closeAddModal is what clears the timer on close.
+  // closeAddModal (the Done/backdrop-close path) clears the timer explicitly. Two other
+  // sites close the modal via setShowAddPlayer(false) directly and do NOT clear it —
+  // commitAddPlayer's player-cap gate and the saved-list-full paywall row. That is benign:
+  // the pending timer still fires and returns pillOpacity to 0 on its own, and both reopen
+  // paths (openAddPlayer, handleAddBanker) null lastAddedName before showing the modal
+  // again, which closes the mount gate the pill depends on, so it cannot resurface mid-timer
+  // either. But that safety rests on those unrelated resets staying in place, not on this
+  // effect or on closeAddModal.
   useEffect(() => () => {
     if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
   }, []);
@@ -2561,9 +2568,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: 8,
   },
-  // The card is maxHeight-bounded (addPlayerCardStyle). RN defaults flexShrink to 0, so
-  // without this the list keeps its full content height, pushes the pinned Add/Done footer
-  // out of the card, and virtualizes nothing.
+  // Third link in a three-level flex chain: staticBody (flexShrink:1) → pickerViewport
+  // (flexShrink:1, minHeight:0) → FlatList (this style, flexShrink:1). The card itself is
+  // maxHeight-bounded (addPlayerCardStyle), and RN defaults flexShrink to 0 at every level,
+  // so without flexShrink here the FlatList refuses to yield height to pickerViewport no
+  // matter what pickerViewport itself allows. See pickerViewport's comment below for why
+  // that middle level is also required and what breaks — silently — if it is skipped.
   //
   // width is load-bearing now that styles.pickerList is gone: the modal passes
   // contentStyle={appModalStyles.centeredContent} (alignItems: 'center'), so without an
