@@ -1,4 +1,4 @@
-import { isNameTakenInGame, findPlayerByName, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation, sortSavedByName, isLosslessUndo } from '../addPlayer';
+import { isNameTakenInGame, findPlayerByName, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, isLastAddVisibleInList, shouldShowAddedConfirmation, sortSavedByName, isLosslessUndo, addedConfirmationPlacement, postAddFocusTarget } from '../addPlayer';
 import type { Player, Transaction } from '@/types/game';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 
@@ -297,5 +297,50 @@ describe('isLosslessUndo', () => {
 
   it('is true with no transactions when the array holds only other players rows', () => {
     expect(isLosslessUndo(gabe, [tx('p_Mike', 'buyin', 20)], DEFAULT, undefined)).toBe(true);
+  });
+});
+
+describe('addedConfirmationPlacement', () => {
+  it('renders nothing when the whether-gate is closed', () => {
+    expect(addedConfirmationPlacement(false, false, 5)).toBe('none');
+  });
+
+  // The invariant: while a name is being entered, the card shows only the name control,
+  // the buy-in box, the save-player slot, and the Add button.
+  it('renders nothing while a name is being entered, however many saved players', () => {
+    expect(addedConfirmationPlacement(true, true, 5)).toBe('none');
+    expect(addedConfirmationPlacement(true, true, 1)).toBe('none');
+    expect(addedConfirmationPlacement(true, true, 0)).toBe('none');
+  });
+
+  it('floats the pill in the browse view once there are two rows to float over', () => {
+    expect(addedConfirmationPlacement(true, false, 2)).toBe('pill');
+    expect(addedConfirmationPlacement(true, false, 20)).toBe('pill');
+  });
+
+  // The pill is bottom-anchored, so with a single row it would cover that row's Undo
+  // control; with no rows there is no list to float over at all.
+  it('falls back to in-flow with fewer than two saved players', () => {
+    expect(addedConfirmationPlacement(true, false, 1)).toBe('inline');
+    expect(addedConfirmationPlacement(true, false, 0)).toBe('inline');
+  });
+});
+
+describe('postAddFocusTarget', () => {
+  it('returns the caret to the search box after a typed add', () => {
+    expect(postAddFocusTarget(false, false)).toBe('search');
+    expect(postAddFocusTarget(false, true)).toBe('search');
+  });
+
+  // The complaint this fixes: the host filtered the list, tapped a match, and the keyboard
+  // they were about to reuse disappeared.
+  it('keeps the keyboard up when a tap came from an active search', () => {
+    expect(postAddFocusTarget(true, true)).toBe('search');
+  });
+
+  // Unchanged from today: a browse tap has the keyboard down already, and the tall browse
+  // card is the state it should return to.
+  it('leaves the keyboard down when a tap came from browsing', () => {
+    expect(postAddFocusTarget(true, false)).toBe('dismiss');
   });
 });

@@ -150,3 +150,57 @@ export function isLosslessUndo(
   const only = own[0];
   return only.type === 'buyin' && gameDefaultBuyIn > 0 && only.amount === gameDefaultBuyIn;
 }
+
+/**
+ * Where the post-add ✓ confirmation renders.
+ *
+ * Deliberately separate from shouldShowAddedConfirmation: that one decides WHETHER there is
+ * a message, this one decides WHERE it goes. Keeping them apart is what stopped the two
+ * concerns from drifting into one condition that no longer states its own reason.
+ *
+ * `hasSubject` closes it entirely. While a name is being entered, the Add Players card shows
+ * only the name control, the buy-in box, the save-player slot, and the Add button — a status
+ * message there lands between the name box and the buy-in box, which is the reported defect.
+ * That in-flow render also had no fade timer (only the floating pill's opacity is animated),
+ * so it persisted, and it could resurrect: with a 0 default buy-in the whether-gate falls
+ * through to !isLastAddVisibleInList, and during a commit the visible list is filtered to the
+ * NEW subject and never contains the previously-added player, so the gate re-opened.
+ *
+ * `savedCount < 2` is the exact reduction of the old
+ * `!showSavedPicker || filteredSaved.length < 2` once the message is browse-only: in browse
+ * the query is empty, filterSavedByQuery returns the list unchanged, so filteredSaved IS the
+ * saved roster. Below two rows the bottom-anchored pill has nothing to float over (0 rows) or
+ * would cover the only row and hide its Undo control (1 row) — it is pointerEvents="none", so
+ * the row stays tappable, but hidden is hidden.
+ */
+export type AddedConfirmationPlacement = 'none' | 'pill' | 'inline';
+
+export function addedConfirmationPlacement(
+  shouldShow: boolean,
+  hasSubject: boolean,
+  savedCount: number,
+): AddedConfirmationPlacement {
+  if (!shouldShow || hasSubject) return 'none';
+  return savedCount < 2 ? 'inline' : 'pill';
+}
+
+/**
+ * Where focus goes once an add completes, and where it goes when a tapped pick is abandoned
+ * via the '‹ Adding' header.
+ *
+ * A typed add keeps the caret in the search box so the next name can be typed straight away.
+ * A tap that began from a SEARCH does the same: the host filtered the list to find someone
+ * and is most likely about to search again, so dropping the keyboard costs them a tap. A tap
+ * made while BROWSING keeps the keyboard down — that is the state the tall (80%-of-window)
+ * browse card exists for, and the keyboard was already down, so there is nothing to preserve.
+ *
+ * 'dismiss' is not a no-op even though the buy-in field unmounts on its own: on the
+ * 0-default-buy-in path that field holds focus, and dismissing explicitly makes the outcome
+ * independent of unmount timing.
+ */
+export function postAddFocusTarget(
+  tapOrigin: boolean,
+  cameFromSearch: boolean,
+): 'search' | 'dismiss' {
+  return !tapOrigin || cameFromSearch ? 'search' : 'dismiss';
+}
