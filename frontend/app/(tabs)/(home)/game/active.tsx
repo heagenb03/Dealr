@@ -343,9 +343,16 @@ export default function ActiveGameScreen() {
   }, [reduceMotionEnabled]);
 
   // Floating confirmation pill. Starts at 0 so nothing shows on modal open, before any add.
-  // The in-flow fallback (short viewport) stays persistent as it is today; only the OVERLAY
-  // auto-dismisses, because a pill that never left would permanently cover the last saved
-  // row and the scroll fade.
+  //
+  // The 2500ms timer below drives BOTH render sites, not just this overlay: on completion of
+  // the fade it nulls lastAddedName, which closes shouldShowAddedConfirmation's gate and
+  // unmounts the in-flow fallback too. That fallback used to persist indefinitely (it has no
+  // opacity binding of its own) and could resurrect a stale add much later. The overlay has
+  // its own reason to leave — a pill that never left would permanently cover the last saved
+  // row and the scroll fade — but the lifetime is now one rule for both.
+  //
+  // Known minor: the in-flow fallback unmounts without fading, since it is a plain Text with
+  // no opacity binding. Accepted — it is a disappearance after 2.65s, not an intrusion.
   const pillOpacity = useSharedValue(0);
   const pillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -373,7 +380,20 @@ export default function ActiveGameScreen() {
     pillOpacity.value = withTiming(1, { duration: reduceMotionEnabled ? 0 : 150 });
     pillTimerRef.current = setTimeout(() => {
       pillTimerRef.current = null;
-      pillOpacity.value = withTiming(0, { duration: reduceMotionEnabled ? 0 : 150 });
+      pillOpacity.value = withTiming(
+        0,
+        { duration: reduceMotionEnabled ? 0 : 150 },
+        finished => {
+          // ON COMPLETION, not when the fade starts: nulling lastAddedName closes
+          // shouldShowAddedConfirmation's gate, which UNMOUNTS the pill — doing that at
+          // T=2500 would pop it off screen instead of fading it.
+          //
+          // finished guards the interrupt case: a second add inside the window calls
+          // showAddedPill again, which interrupts this fade and fires this callback with
+          // false. Nulling there would erase the confirmation for the player just added.
+          if (finished) runOnJS(setLastAddedName)(null);
+        },
+      );
     }, 2500);
   }, [pillOpacity, reduceMotionEnabled]);
 
@@ -387,6 +407,10 @@ export default function ActiveGameScreen() {
   // again, which closes the mount gate the pill depends on, so it cannot resurface mid-timer
   // either. But that safety rests on those unrelated resets staying in place, not on this
   // effect or on closeAddModal.
+  //
+  // The timer now also nulls lastAddedName on fade completion. That does not change the
+  // analysis above — nulling it is exactly what those reopen paths already do, so a late fire
+  // converges on the same state rather than fighting it.
   useEffect(() => () => {
     if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
   }, []);
