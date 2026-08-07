@@ -1358,22 +1358,24 @@ export default function ActiveGameScreen() {
   // query matches no saved player.
   const showSavedPicker = !committingTapped && savedPlayers.length > 0 && filteredSaved.length > 0;
 
-  // Both floating messages fall back to in-flow rendering when the list viewport is too
-  // short to float over. Two independent reasons, neither redundant:
+  // The floating confirmation pill falls back to in-flow rendering when the list viewport
+  // is too short to float over. Two independent reasons, neither redundant:
   //
   //  - !showSavedPicker covers the empty case (an unmatched typed name, or no saved
   //    players at all), where the viewport collapses to near-zero height and an overlay
   //    would spill onto the buy-in field.
-  //  - < 3 rows covers a reachable single-row case: a game at the 12-player free cap, a
-  //    search narrowing saved players to one match, then an add. Banner ~50pt (2 lines)
-  //    + pill ~30pt = 80pt of overlay against a ~75pt viewport (48pt row + 27pt SAVED
-  //    label) — the two overlays overlap each other and bury the only row. Two rows
-  //    (~123pt) clears it; 3 is the threshold, to keep margin for Dynamic Type rather
-  //    than sitting exactly on the boundary.
+  //  - < 2 rows covers the single-row case. The pill is anchored to the BOTTOM of the
+  //    viewport, so it can bury at most the LAST row — fatal only when the last row is
+  //    also the only row.
   //
-  // Below the threshold neither reachability problem applies, so in-flow is the correct
-  // rendering there, not a degraded one.
-  const useInFlowMessages = !showSavedPicker || filteredSaved.length < 3;
+  // This threshold was 3 while the cap banner ALSO floated, from the top: the two
+  // overlays then overlapped each other and buried the only row even at two rows. The
+  // banner is pinned now, so the pill is the only float left and the bound relaxes.
+  //
+  // Height-independent, so the two-state card does not change it: pickerViewport has
+  // flexShrink 1 and no flexGrow, so with short content it collapses to content height
+  // and the pill sits over the last row in both the tall and short states.
+  const useInFlowConfirmation = !showSavedPicker || filteredSaved.length < 2;
 
   // Header/footer are ELEMENTS, never inline arrows. `ListHeaderComponent={() => <X/>}`
   // creates a new component TYPE every render, so React unmounts and remounts the subtree;
@@ -1395,7 +1397,7 @@ export default function ActiveGameScreen() {
   // effect on the frame.
   const savedPickerHeader = (
     <View style={styles.pickerBlock}>
-      {useInFlowMessages && shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
+      {useInFlowConfirmation && shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
         <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
       )}
     </View>
@@ -1470,10 +1472,6 @@ export default function ActiveGameScreen() {
             )
           ) : null}
         </View>
-      )}
-
-      {useInFlowMessages && atPlayerCap && (
-        <Text style={styles.pickHint}>{playerCapBanner(activeGame.players.length, isPro)}</Text>
       )}
     </View>
   );
@@ -1777,6 +1775,26 @@ export default function ActiveGameScreen() {
                 its track spans the FlatList frame, so either one rendered inside that
                 frame makes the track start above the row panel. The banker hint is
                 persistent state while pending, so it hit that every time it showed. */}
+
+            {/* Persistent state — shown for as long as the game is at cap — so it is
+                PINNED, not floated over the list. Floating it made it cover the
+                SAVED · N label and read as though it were squeezing the rows.
+
+                Gated on !committingTapped rather than on showSavedPicker: while
+                committingTapped the picker is hidden and there is no list for this to
+                annotate, but showSavedPicker is ALSO false when the host has no saved
+                players at all, where the notice is still correct and wanted. That
+                combination is unreachable in practice — at cap every row is marked
+                disabled by buildAddPlayerPickerListData, so a row tap cannot set
+                selectedSavedId — which makes this term a guard, not a behaviour. */}
+            {atPlayerCap && !committingTapped && (
+              <View style={styles.pickerCapBanner}>
+                <Text style={styles.pickerCapBannerText}>
+                  {playerCapBanner(activeGame.players.length, isPro)}
+                </Text>
+              </View>
+            )}
+
             {pendingBankerDesignation && (
               <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
             )}
@@ -1847,22 +1865,6 @@ export default function ActiveGameScreen() {
             <View style={[styles.pickerFadeBand, { opacity: 1 }]} />
           </Reanimated.View>
 
-          {/* Limit banner — pinned to the TOP of the list viewport, persistent while at cap.
-              pointerEvents="none" is a correctness requirement, not polish: at the cap
-              buildAddPlayerPickerListData marks every row disabled, but an inGame row renders
-              the non-disabled branch and carries a live Undo button. A solid banner would
-              swallow that tap.
-              Accepted trade-off: at scroll position 0 this covers the "SAVED · N" label.
-              Suppressing the label instead would shift all content up ~27pt at the moment the
-              cap is hit; the banner carries the count anyway. */}
-          {!useInFlowMessages && atPlayerCap && (
-            <View style={styles.pickerCapBanner} pointerEvents="none">
-              <Text style={styles.pickerCapBannerText}>
-                {playerCapBanner(activeGame.players.length, isPro)}
-              </Text>
-            </View>
-          )}
-
           {/* Confirmation pill — pinned to the BOTTOM of the list viewport, directly above
               but NOT inside the pinned button bar, so Done never moves. Putting it in the
               button bar would shove Done downward as it appeared (the button jumping under a
@@ -1870,7 +1872,7 @@ export default function ActiveGameScreen() {
               prevent) or require a permanently reserved strip in a modal already over budget.
               The shouldShowAddedConfirmation gate is UNCHANGED — this is placement work only,
               no new suppression logic. */}
-          {!useInFlowMessages &&
+          {!useInFlowConfirmation &&
             shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
             <Reanimated.View style={[styles.pickerConfirmPill, pillStyle]} pointerEvents="none">
               <Text style={styles.pickerConfirmPillText} numberOfLines={1}>✓ {addedConfirmLabel}</Text>
@@ -2657,13 +2659,15 @@ const styles = StyleSheet.create({
     height: 30,
   },
   pickerFadeBand: { height: 6, backgroundColor: '#1A1A1A' },
+  // Pinned in the modal's header, not absolutely positioned over the list viewport.
+  // backgroundColor 'transparent' because this is a Themed View, which otherwise paints
+  // an opaque themed background over the card (same reason pickerBlock, saveToggleSlot
+  // and modalButtons set it). It was '#1A1A1A' only to make the float opaque.
   pickerCapBanner: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#1A1A1A',
+    width: '100%',
     paddingVertical: 6,
+    marginBottom: 8,
+    backgroundColor: 'transparent',
   },
   pickerCapBannerText: {
     fontSize: 13,
