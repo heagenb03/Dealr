@@ -800,8 +800,19 @@ setSettlementResult(cachedResult);
     // changes and a dep on it freezes this map for the lifetime of the mount.
   }, [summary]);
 
-  // Above the guard (Rules of Hooks). isBanker is re-derived here rather than reusing the
-  // binding below the guard, which does not exist yet at this point in the file. Dep is
+  // Banker mode is only really banker mode if the banker still resolves to a player.
+  // The settlement recompute at :603 already requires both; these are the reads that
+  // label the screen. Since 2026-08-07 removePlayer leaves 'banker' mode in place with
+  // no bankerPlayerId, so a mode-only read would caption this screen "Banker" while
+  // :603 fell through to the optimal solver — wrong rows under a confident label.
+  // Plain const, not a hook: safe to sit above the `if (!activeGame)` guard below.
+  const hasResolvedBanker =
+    !!activeGame &&
+    activeGame.settlementMode === 'banker' &&
+    activeGame.players.some(p => p.id === activeGame.bankerPlayerId);
+
+  // Above the guard (Rules of Hooks). Banker-ness comes from the shared hasResolvedBanker
+  // const above, so this read and the header's agree by construction. Dep is
   // `activeGame`, NOT `activeGame.players` — updateGame shallow-clones the Game, so the
   // players array reference never changes.
   const listData = useMemo(
@@ -809,7 +820,7 @@ setSettlementResult(cachedResult);
       buildSummaryListData({
         grouped: groupedSettlements,
         balances: summary?.balances ?? [],
-        isBanker: activeGame?.settlementMode === 'banker',
+        isBanker: hasResolvedBanker,
         bankerPlayerId: activeGame?.bankerPlayerId,
       }),
     [groupedSettlements, summary, activeGame],
@@ -865,7 +876,7 @@ setSettlementResult(cachedResult);
     );
   }
 
-  const isBanker = activeGame.settlementMode === 'banker';
+  const isBanker = hasResolvedBanker;
   const bankerName = isBanker
     ? activeGame.players.find(p => p.id === activeGame.bankerPlayerId)?.name
     : undefined;
