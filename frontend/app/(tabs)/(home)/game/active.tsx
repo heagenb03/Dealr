@@ -1,7 +1,14 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+// Aliased to Reanimated because `Animated` on line 2 is react-native's own Animated API,
+// which this file still uses for the header's spring scale.
+import Reanimated, {
+  runOnJS,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from '@/components/Themed';
 import { useGame } from '@/contexts/GameContext';
@@ -45,6 +52,7 @@ import { buildAddPlayerPickerListData, AddPlayerPickerItem } from '@/utils/addPl
 import { buildActiveGameListData, ActiveGameListItem } from '@/utils/activeGameListData';
 import {
   PLAYERS_PAYWALL_MESSAGE,
+  playerCapBanner,
   playerCapHint,
   savedCapModalNotice,
   savedCapPaywallMessage,
@@ -318,6 +326,48 @@ export default function ActiveGameScreen() {
     if (!reduceMotionEnabled) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSettingsExpanded(v => !v);
   }, [reduceMotionEnabled]);
+
+  // Floating confirmation pill. Starts at 0 so nothing shows on modal open, before any add.
+  // The in-flow fallback (short viewport) stays persistent as it is today; only the OVERLAY
+  // auto-dismisses, because a pill that never left would permanently cover the last saved
+  // row and the scroll fade.
+  const pillOpacity = useSharedValue(0);
+  const pillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pillStyle = useAnimatedStyle(() => ({ opacity: pillOpacity.value }));
+
+  const clearAddedPill = useCallback(() => {
+    if (pillTimerRef.current) {
+      clearTimeout(pillTimerRef.current);
+      pillTimerRef.current = null;
+    }
+    pillOpacity.value = 0;
+  }, [pillOpacity]);
+
+  // Called from the ADD path only — never from a change in addedCount. Undo also writes
+  // addedCount (a decrement at :753), so an inequality check would treat a removal as a
+  // reason to re-show the pill. Today that would happen to be harmless, because Undo also
+  // nulls lastAddedName/lastAddedAmount and shouldShowAddedConfirmation then closes the
+  // gate — but that safety rests on a second, unrelated mechanism staying in place.
+  // Keying to the increment site removes the coincidence.
+  //
+  // A second add inside the 2500ms window clears and restarts the timer, so the pill
+  // always names the most recent player for a full interval.
+  const showAddedPill = useCallback(() => {
+    if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
+    pillOpacity.value = withTiming(1, { duration: reduceMotionEnabled ? 0 : 150 });
+    pillTimerRef.current = setTimeout(() => {
+      pillTimerRef.current = null;
+      pillOpacity.value = withTiming(0, { duration: reduceMotionEnabled ? 0 : 150 });
+    }, 2500);
+  }, [pillOpacity, reduceMotionEnabled]);
+
+  // active.tsx does NOT unmount when the Add Players modal closes — AppModal is always
+  // rendered with visible={showAddPlayer}. This effect only covers leaving the screen.
+  // closeAddModal is what clears the timer on close.
+  useEffect(() => () => {
+    if (pillTimerRef.current) clearTimeout(pillTimerRef.current);
+  }, []);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renamedPlayerName, setRenamedPlayerName] = useState('');
   const [showPaywall, setShowPaywall] = useState(false);
@@ -670,6 +720,7 @@ export default function ActiveGameScreen() {
   const committingTyped = hasSubject && selectedSavedId == null; // still searching / brand-new
 
   const closeAddModal = () => {
+    clearAddedPill();
     setNewPlayerName('');
     setNewPlayerBuyIn('');
     setSelectedSavedId(null);
@@ -882,6 +933,7 @@ export default function ActiveGameScreen() {
       setAddedCount(c => c + 1);
       setLastAddedName(name);
       setLastAddedAmount(gameDefaultBuyIn > 0 ? gameDefaultBuyIn : null);
+      showAddedPill();
       setNewPlayerName('');
       setNewPlayerBuyIn('');
       setSelectedSavedId(null);
@@ -1235,6 +1287,23 @@ export default function ActiveGameScreen() {
   // query matches no saved player.
   const showSavedPicker = !committingTapped && savedPlayers.length > 0 && filteredSaved.length > 0;
 
+  // Both floating messages fall back to in-flow rendering when the list viewport is too
+  // short to float over. Two independent reasons, neither redundant:
+  //
+  //  - !showSavedPicker covers the empty case (an unmatched typed name, or no saved
+  //    players at all), where the viewport collapses to near-zero height and an overlay
+  //    would spill onto the buy-in field.
+  //  - < 3 rows covers a reachable single-row case: a game at the 12-player free cap, a
+  //    search narrowing saved players to one match, then an add. Banner ~50pt (2 lines)
+  //    + pill ~30pt = 80pt of overlay against a ~75pt viewport (48pt row + 27pt SAVED
+  //    label) — the two overlays overlap each other and bury the only row. Two rows
+  //    (~123pt) clears it; 3 is the threshold, to keep margin for Dynamic Type rather
+  //    than sitting exactly on the boundary.
+  //
+  // Below the threshold neither reachability problem applies, so in-flow is the correct
+  // rendering there, not a degraded one.
+  const useInFlowMessages = !showSavedPicker || filteredSaved.length < 3;
+
   // Header/footer are ELEMENTS, never inline arrows. `ListHeaderComponent={() => <X/>}`
   // creates a new component TYPE every render, so React unmounts and remounts the subtree;
   // this header sits beside a focused text input, which makes a remount user-visible.
@@ -1251,7 +1320,7 @@ export default function ActiveGameScreen() {
         <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
       )}
 
-      {shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
+      {useInFlowMessages && shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
         <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
       )}
 
@@ -1332,8 +1401,8 @@ export default function ActiveGameScreen() {
         </View>
       )}
 
-      {atPlayerCap && (
-        <Text style={styles.pickHint}>{playerCapHint(activeGame.players.length, isPro)}</Text>
+      {useInFlowMessages && atPlayerCap && (
+        <Text style={styles.pickHint}>{playerCapBanner(activeGame.players.length, isPro)}</Text>
       )}
     </View>
   );
@@ -1649,24 +1718,56 @@ export default function ActiveGameScreen() {
             the header/footer show. The bordered styles.pickerList box is deliberately
             gone: once header and footer share the content container it can no longer wrap
             only the rows. That is an approved design decision, not an oversight. */}
-        <FlatList
-          data={showSavedPicker ? savedPickerListData : []}
-          renderItem={renderSavedPickerItem}
-          keyExtractor={savedPickerKeyExtractor}
-          ListHeaderComponent={savedPickerHeader}
-          ListFooterComponent={savedPickerFooter}
-          style={styles.pickerListFlex}
-          /* No contentContainerStyle: the dropped styles.pickerList carried no padding or
-             gap to move here (width/background/border/radius/marginBottom/overflow only),
-             and every gap in this body comes from the children's own marginBottom. */
-          /* Parity with the body ScrollView this list replaces (AppModal scrollBody={false}). */
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
-          showsVerticalScrollIndicator={false}
-          initialNumToRender={12}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-        />
+        <View style={styles.pickerViewport}>
+          <FlatList
+            data={showSavedPicker ? savedPickerListData : []}
+            renderItem={renderSavedPickerItem}
+            keyExtractor={savedPickerKeyExtractor}
+            ListHeaderComponent={savedPickerHeader}
+            ListFooterComponent={savedPickerFooter}
+            style={styles.pickerListFlex}
+            /* No contentContainerStyle: the dropped styles.pickerList carried no padding or
+               gap to move here (width/background/border/radius/marginBottom/overflow only),
+               and every gap in this body comes from the children's own marginBottom. */
+            /* Parity with the body ScrollView this list replaces (AppModal scrollBody={false}). */
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+            initialNumToRender={12}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+          />
+
+          {/* Limit banner — pinned to the TOP of the list viewport, persistent while at cap.
+              pointerEvents="none" is a correctness requirement, not polish: at the cap
+              buildAddPlayerPickerListData marks every row disabled, but an inGame row renders
+              the non-disabled branch and carries a live Undo button. A solid banner would
+              swallow that tap.
+              Accepted trade-off: at scroll position 0 this covers the "SAVED · N" label.
+              Suppressing the label instead would shift all content up ~27pt at the moment the
+              cap is hit; the banner carries the count anyway. */}
+          {!useInFlowMessages && atPlayerCap && (
+            <View style={styles.pickerCapBanner} pointerEvents="none">
+              <Text style={styles.pickerCapBannerText}>
+                {playerCapBanner(activeGame.players.length, isPro)}
+              </Text>
+            </View>
+          )}
+
+          {/* Confirmation pill — pinned to the BOTTOM of the list viewport, directly above
+              but NOT inside the pinned button bar, so Done never moves. Putting it in the
+              button bar would shove Done downward as it appeared (the button jumping under a
+              thumb mid-tap, exactly what saveToggleSlot's fixed 30pt height exists to
+              prevent) or require a permanently reserved strip in a modal already over budget.
+              The shouldShowAddedConfirmation gate is UNCHANGED — this is placement work only,
+              no new suppression logic. */}
+          {!useInFlowMessages &&
+            shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
+            <Reanimated.View style={[styles.pickerConfirmPill, pillStyle]} pointerEvents="none">
+              <Text style={styles.pickerConfirmPillText} numberOfLines={1}>✓ {addedConfirmLabel}</Text>
+            </Reanimated.View>
+          )}
+        </View>
       </AppModal>
 
       {/* Add Transaction Modal */}
@@ -2420,6 +2521,55 @@ const styles = StyleSheet.create({
   // contentStyle={appModalStyles.centeredContent} (alignItems: 'center'), so without an
   // explicit width the list collapses to its content width and the rows stop spanning the card.
   pickerListFlex: { width: '100%', flexShrink: 1 },
+  // A THIRD level in the flex chain: staticBody (flexShrink:1) → pickerViewport →
+  // FlatList (pickerListFlex, flexShrink:1). RN defaults flexShrink to 0, so without
+  // flexShrink + minHeight this level refuses to yield height — the list keeps its full
+  // content height and pushes the pinned Add/Done footer out of the height-capped card
+  // instead of scrolling. That failure is SILENT: no warning, no test failure in this
+  // environment, the button is simply gone. Device QA is the only thing that sees it.
+  //
+  // backgroundColor: 'transparent' because this is a Themed View, which otherwise paints
+  // an opaque themed background over the card (same reason pickerBlock, saveToggleSlot
+  // and modalButtons set it).
+  pickerViewport: {
+    width: '100%',
+    flexShrink: 1,
+    minHeight: 0,
+    backgroundColor: 'transparent',
+  },
+  pickerCapBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#1A1A1A',
+    paddingVertical: 6,
+  },
+  pickerCapBannerText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'transparent',
+  },
+  // Sits at the viewport's bottom edge, above the fade added in the fade task (later in
+  // the tree = higher z). Centred so it reads as a floating confirmation, not a row.
+  pickerConfirmPill: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  pickerConfirmPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#00D66F',
+    backgroundColor: '#1A1A1A',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   // Themed View defaults to an opaque themed background, hence transparent (same reason
   // saveToggleSlot and modalButtons set it).
   pickerBlock: { width: '100%', backgroundColor: 'transparent' },
