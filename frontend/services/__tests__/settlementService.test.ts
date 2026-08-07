@@ -587,9 +587,14 @@ describe('validateSettlements banker exemption', () => {
 });
 
 describe('validateSettlements banker-mode gate', () => {
-  // This gate existed before 2026-08-07 but was unreachable: removePlayer used to
-  // reset settlementMode to 'optimal', so "banker mode with no banker" could not
-  // persist. Now that it can, these are the tests that keep completion blocked.
+  // This gate predates 2026-08-07 and was already reachable: GameContext seeds
+  // settlementMode from the Banker creation default with no bankerPlayerId, so
+  // "banker mode, no banker" has always been possible from a fresh game. What
+  // 2026-08-07 added is a second route into the same state — removing the
+  // banker player mid-game (removePlayer used to reset settlementMode back to
+  // 'optimal' instead). These tests pin the gate directly at
+  // validateSettlements(), complementing the existing coverage that reaches it
+  // through validateGame() in gameService.test.ts.
 
   it('blocks completion in banker mode when no banker is set', () => {
     const balances = [makeBalance('L1', 50, 0), makeBalance('W1', 0, 50)];

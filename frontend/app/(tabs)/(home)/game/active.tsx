@@ -1248,7 +1248,7 @@ export default function ActiveGameScreen() {
   // picker (a native Modal) in the same batch that opens the Add Player AppModal
   // — iOS shows one native Modal at a time. Designation is applied atomically on
   // save via the existing pendingBankerDesignation path; cancelling Add Player
-  // leaves settlementMode untouched, so we never enter a banker-without-banker state.
+  // leaves settlementMode untouched, so this path never creates a banker-without-banker state.
   const handleAddBanker = () => {
     setShowSettlementModePicker(false);
     setPendingBankerDesignation(true);
@@ -2098,7 +2098,7 @@ export default function ActiveGameScreen() {
                       onPress={() => {
                         // Close this modal and open the picker in ONE state batch — iOS
                         // renders a single native Modal at a time. Same constraint that
-                        // handleAddBanker (:1245-1258) already works around.
+                        // handleAddBanker (:1252-1259) already works around.
                         setShowCompletionModal(false);
                         setShowSettlementModePicker(true);
                       }}

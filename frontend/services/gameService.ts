@@ -140,9 +140,15 @@ export class GameService {
     // KEEP settlementMode === 'banker'. Silently flipping the game back to Direct
     // discarded a setting the host chose, with no prompt and nothing on screen to
     // notice it had happened. The resulting "banker mode, no banker" state is
-    // deliberate and persistent (it survives restart and Firestore sync);
-    // validateSettlements() blocks completion until a banker is chosen, and the
-    // collapsed Settings row shows "Set banker".
+    // deliberate. Locally, clearing the id is durable (survives restart). Over a
+    // Firestore round-trip it isn't: saveGameToFirestore strips undefined fields
+    // before a merge write, so the cleared id never overwrites the remote copy,
+    // and a synced client can come back with banker mode plus the OLD, now-dangling
+    // id instead of no id at all. That's tolerated, not fixed — every consumer
+    // resolves bankerPlayerId against the current roster before using it, so a
+    // dangling id behaves identically to an absent one. validateSettlements()
+    // blocks completion either way until a banker is chosen, and the collapsed
+    // Settings row shows "Set banker".
     if (game.bankerPlayerId === playerId) {
       game.bankerPlayerId = undefined;
       this.clearSettlementCache(game);
