@@ -129,8 +129,8 @@ export function sortSavedByName(saved: SavedPlayer[]): SavedPlayer[] {
  *
  * The three clauses each pin something a re-add cannot restore:
  *  - completedAt: a cashed-out player has been reconciled; that is bookkeeping, not a mis-tap.
- *  - bankerPlayerId: removePlayer silently resets settlementMode to 'optimal' and clears the
- *    banker; re-adding does not re-designate them.
+ *  - bankerPlayerId: removePlayer clears the banker (the mode stays 'banker', so the game is
+ *    left un-completable until one is re-picked); re-adding does not re-designate them.
  *  - transactions: only "none" or "exactly the default buy-in" are reproducible. A hand-typed
  *    amount, a rebuy, or a cashout is real data.
  */

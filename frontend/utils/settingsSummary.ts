@@ -13,22 +13,27 @@ export function toleranceCaption(
 }
 
 /**
- * One-line summary of the active game's settlement settings, shown on the
- * collapsed Settings row. Segments are ordered most-changed to least-changed:
- * mode, buy-in, rounding, tolerance. Rounding, tolerance and the default
- * buy-in are intentionally dropped while in banker mode before a banker is
- * chosen, to avoid a wordy incomplete state — this mirrors the collapsed row,
- * which suppresses all three segments in that state, so the accessibility
- * label and the visible row stay in step.
+ * One-line summary of the active game's settlement settings, spoken as the
+ * collapsed Settings row's accessibility label. Segments are ordered
+ * most-changed to least-changed: mode, buy-in, rounding, tolerance. Every
+ * segment is always emitted — including while banker mode has no banker
+ * chosen, a state that has been persistent since 2026-08-07 and can last a
+ * whole game, so hiding a host's rounding and tolerance for its duration is
+ * worse than a longer label.
  *
  * The parameter order deliberately does NOT match the emitted order: the
  * optional labels stay last so the required `roundingLabel` keeps its
  * position. There is one production call site.
  *
- * The buy-in label is spoken as "Buy-in $20" while the row renders a bare
- * "$20" beside a cash icon. This asymmetry is deliberate: a screen reader gets
- * no icon, and a bare "$20" preceding the bare "$5" announced for rounding
- * would be indistinguishable.
+ * Two deliberate divergences from the visible row, both because a screen
+ * reader gets no icon to disambiguate a bare value:
+ *  - The row drops the "Banker · " prefix (the person icon carries it) and
+ *    shows the bare name; the label keeps the prefix.
+ *  - The row shows the shorter "Set banker" placeholder, which is the only
+ *    wording that fits an iPhone SE; the label says "Choose banker".
+ * This mirrors the existing buyInValueLabel / buyInSummaryLabel split in
+ * active.tsx, where the row renders a bare "$20" and the label says
+ * "Buy-in $20".
  */
 export function formatSettingsSummary(
   isBanker: boolean,
@@ -40,6 +45,5 @@ export function formatSettingsSummary(
   const tol = toleranceLabel ? ` · ${toleranceLabel}` : '';
   const buyIn = buyInLabel ? ` · ${buyInLabel}` : '';
   if (!isBanker) return `Direct${buyIn} · ${roundingLabel}${tol}`;
-  if (!bankerName) return `Banker · Choose banker`;
-  return `Banker · ${bankerName}${buyIn} · ${roundingLabel}${tol}`;
+  return `Banker · ${bankerName ?? 'Choose banker'}${buyIn} · ${roundingLabel}${tol}`;
 }

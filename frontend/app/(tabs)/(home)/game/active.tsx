@@ -846,14 +846,14 @@ export default function ActiveGameScreen() {
     // actually apply rather than assuming it was the transaction count. A banker holding no
     // buy-in is reachable (Add-someone from the banker picker with an empty buy-in field),
     // and reporting "0 transactions" there is both wrong and hides the real loss:
-    // removePlayer clears bankerPlayerId AND resets settlementMode to 'optimal'.
+    // removePlayer clears bankerPlayerId (the mode itself is deliberately kept).
     const n = activeGame.transactions.filter(t => t.playerId === player.id).length;
     const parts: string[] = [];
     if (player.completedAt) {
       parts.push('They have already been marked complete — removing them undoes that.');
     }
     if (activeGame.bankerPlayerId === player.id) {
-      parts.push("They are this game's banker — removing them clears the banker and switches settlement back to Direct.");
+      parts.push("They are this game's banker — removing them leaves the game without a banker until you pick a new one.");
     }
     if (n > 0) {
       parts.push(n === 1
@@ -1232,6 +1232,13 @@ export default function ActiveGameScreen() {
       ? activeGame.players.find(p => p.id === activeGame.bankerPlayerId)?.name
       : undefined;
 
+  // The completion modal's error mode is otherwise a dead end (a lone OK button),
+  // and since removePlayer stopped resetting the mode, "no banker" is the error a
+  // host is most likely to hit. Detected structurally rather than by matching the
+  // error string, so re-wording the message cannot silently disable the button.
+  const completionBlockedOnBanker =
+    activeGame.settlementMode === 'banker' && !GameService.hasRememberedBanker(activeGame);
+
   const roundingLabel =
     resolveCashUnit(activeGame.cashUnit, currency) === EXACT_CASH_UNIT
       ? 'Exact'
@@ -1255,12 +1262,6 @@ export default function ActiveGameScreen() {
   // Collapsed caption segment + a11y label: always shown (like rounding), so the
   // summary stays consistent at the currency default instead of dropping it.
   const toleranceLabel = toleranceCaption(resolvedTolerance, formatAmount);
-
-  // Shared visibility gate for the rounding/tolerance/buy-in trailing segments
-  // in the collapsed settings row: suppressed only while banker mode has no
-  // banker chosen yet. One const keeps the three JSX copies from drifting out
-  // of sync with each other (and with the a11y label, which is unaffected).
-  const showTrailingSegments = activeGame.settlementMode !== 'banker' || !!bankerName;
 
   const settingsSummary = formatSettingsSummary(
     activeGame.settlementMode === 'banker',
@@ -1308,7 +1309,7 @@ export default function ActiveGameScreen() {
   // picker (a native Modal) in the same batch that opens the Add Player AppModal
   // — iOS shows one native Modal at a time. Designation is applied atomically on
   // save via the existing pendingBankerDesignation path; cancelling Add Player
-  // leaves settlementMode untouched, so we never enter a banker-without-banker state.
+  // leaves settlementMode untouched, so this path never creates a banker-without-banker state.
   const handleAddBanker = () => {
     setShowSettlementModePicker(false);
     setPendingBankerDesignation(true);
@@ -1702,7 +1703,12 @@ export default function ActiveGameScreen() {
             accessibilityLabel={`Settings: ${settingsSummary}`}
             accessibilityHint="Expands the game settings section"
           >
-            {/* Mode group (shrinks + ellipsizes for long banker names) */}
+            {/* Mode group — the only shrinking group, so a long banker name ellipsizes
+                here rather than pushing the row past its width. The "Banker · " prefix
+                is deliberately NOT rendered: the person-outline icon already carries it,
+                and dropping it frees 61pt, which is what makes all four segments fit a
+                353pt iPhone 16 row. The a11y label (formatSettingsSummary) still speaks
+                the prefix in full. */}
             <View style={[styles.settingsSummaryGroup, styles.settingsSummaryModeGroup]}>
               <Ionicons
                 name={activeGame.settlementMode === 'banker' ? 'person-outline' : 'swap-horizontal'}
@@ -1710,23 +1716,30 @@ export default function ActiveGameScreen() {
                 color="rgba(255,255,255,0.5)"
               />
               {activeGame.settlementMode === 'banker' ? (
-                <Text style={styles.settingsSummaryLabel} numberOfLines={1}>
-                  Banker
-                  <Text style={styles.settingsSummaryValue}>
-                    {bankerName ? ` · ${bankerName}` : ' · Choose banker'}
-                  </Text>
+                <Text
+                  style={[
+                    // Muted label colour for the placeholder so it reads as "nothing
+                    // chosen yet" rather than as a player literally named "Set banker".
+                    bankerName ? styles.settingsSummaryValue : styles.settingsSummaryLabel,
+                    styles.settingsSummaryModeText,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {bankerName ?? 'Set banker'}
                 </Text>
               ) : (
-                <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                <Text
+                  style={[styles.settingsSummaryValue, styles.settingsSummaryModeText]}
+                  numberOfLines={1}
+                >
                   Direct
                 </Text>
               )}
             </View>
 
             {/* Default buy-in — omitted entirely when off (0), since that means the
-                feature is disabled rather than sitting at a default value. Same
-                banker-unchosen suppression as the rounding and tolerance segments. */}
-            {gameDefaultBuyIn > 0 && showTrailingSegments && (
+                feature is disabled rather than sitting at a default value. */}
+            {gameDefaultBuyIn > 0 && (
               <>
                 <Text style={styles.settingsSummaryDot}>·</Text>
                 <View style={styles.settingsSummaryGroup}>
@@ -1738,31 +1751,26 @@ export default function ActiveGameScreen() {
               </>
             )}
 
-            {/* Separator + rounding — suppressed while banker mode has no banker chosen */}
-            {showTrailingSegments && (
-              <>
-                <Text style={styles.settingsSummaryDot}>·</Text>
-                <View style={styles.settingsSummaryGroup}>
-                  <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
-                  <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                    {roundingLabel}
-                  </Text>
-                </View>
-              </>
-            )}
+            {/* Separator + rounding — always shown. These three used to be suppressed
+                while banker mode had no banker chosen, which was fine when that state
+                could not persist; since 2026-08-07 it can last a whole game, so hiding
+                the host's rounding and tolerance that long is worse than a longer row. */}
+            <Text style={styles.settingsSummaryDot}>·</Text>
+            <View style={styles.settingsSummaryGroup}>
+              <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                {roundingLabel}
+              </Text>
+            </View>
 
-            {/* Tolerance — always shown, same banker-unchosen suppression as rounding */}
-            {showTrailingSegments && (
-                <>
-                  <Text style={styles.settingsSummaryDot}>·</Text>
-                  <View style={styles.settingsSummaryGroup}>
-                    <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
-                    <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                      {toleranceLabel}
-                    </Text>
-                  </View>
-                </>
-              )}
+            {/* Tolerance — always shown, like rounding. */}
+            <Text style={styles.settingsSummaryDot}>·</Text>
+            <View style={styles.settingsSummaryGroup}>
+              <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.settingsSummaryValue} numberOfLines={1}>
+                {toleranceLabel}
+              </Text>
+            </View>
           </TouchableOpacity>
         )}
       </View>
@@ -2153,12 +2161,33 @@ export default function ActiveGameScreen() {
 
               {/* Dynamic Buttons */}
               {completionModalMode === 'error' ? (
-                <ModalButton
-                  variant="cancel"
-                  title="OK"
-                  onPress={() => setShowCompletionModal(false)}
-                  fullWidth
-                />
+                completionBlockedOnBanker ? (
+                  <View style={styles.modalButtons}>
+                    <ModalButton
+                      variant="cancel"
+                      title="Cancel"
+                      onPress={() => setShowCompletionModal(false)}
+                    />
+                    <ModalButton
+                      variant="success"
+                      title="Choose Banker"
+                      onPress={() => {
+                        // Close this modal and open the picker in ONE state batch — iOS
+                        // renders a single native Modal at a time. Same constraint that
+                        // handleAddBanker (:1252-1259) already works around.
+                        setShowCompletionModal(false);
+                        setShowSettlementModePicker(true);
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <ModalButton
+                    variant="cancel"
+                    title="OK"
+                    onPress={() => setShowCompletionModal(false)}
+                    fullWidth
+                  />
+                )
               ) : (
                 <View style={styles.modalButtons}>
                   <ModalButton
@@ -2854,6 +2883,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   settingsSummaryModeGroup: { flexShrink: 1, minWidth: 0 },
+  // The mode group above shrinks, but its Text did not: Yoga defaults flexShrink to
+  // 0 (unlike CSS), so the text kept full measured width and spilled past the group
+  // edge onto the separator dot instead of ellipsizing. Applied ONLY to the mode
+  // text — the trailing value segments must stay unshrinkable so they take natural
+  // width and the name absorbs exactly the remainder. No maxWidth (it would truncate
+  // when there is room) and no overflow:'hidden' (it would hide the evidence).
+  settingsSummaryModeText: { flexShrink: 1, minWidth: 0 },
   settingsSummaryLabel: { fontSize: 15, color: 'rgba(255,255,255,0.5)' },
   settingsSummaryValue: { fontSize: 15, color: 'rgba(255,255,255,0.75)' },
   settingsSummaryDot: { fontSize: 15, color: 'rgba(255,255,255,0.3)', marginHorizontal: 8 },

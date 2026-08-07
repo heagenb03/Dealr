@@ -47,9 +47,13 @@ export interface Game {
   settlementMode?: 'optimal' | 'banker';
 
   /**
-   * The player acting as banker/hub. Required when settlementMode === 'banker'.
-   * May also persist while settlementMode === 'optimal' as the remembered choice,
-   * so toggling back to banker is one tap. Cleared when that player is removed.
+   * The player acting as banker/hub. Required to COMPLETE a game in
+   * settlementMode === 'banker', but may legitimately be absent while in banker
+   * mode — either a new game seeded from a Banker default, or an existing one
+   * whose banker player was removed. validateSettlements() gates completion
+   * until one is chosen. May also persist while settlementMode === 'optimal' as
+   * the remembered choice, so toggling back to banker is one tap. Cleared when
+   * that player is removed.
    */
   bankerPlayerId?: string;
 
