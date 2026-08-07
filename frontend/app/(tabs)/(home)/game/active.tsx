@@ -1385,18 +1385,18 @@ export default function ActiveGameScreen() {
   // not a preference: on a 667pt window the card is 334pt and the fixed chrome alone
   // (padding 48 + title 47 + search 74 + buy-in 74 + toggle 46 + footer 48) is 337pt, so
   // any child pinned outside a scroller is unreachable.
+  // Only the in-flow confirmation remains here. The SAVED · N label and the banker hint
+  // moved to the modal's PINNED header: the scroll indicator's track spans the FlatList
+  // frame, so anything rendered inside that frame above the rows makes the track appear
+  // to start above the row panel — which is exactly what it looked like. With them out,
+  // the track's top edge coincides with the panel's.
+  //
+  // When the confirmation is inactive this renders a zero-height View, which has no
+  // effect on the frame.
   const savedPickerHeader = (
     <View style={styles.pickerBlock}>
-      {pendingBankerDesignation && (
-        <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
-      )}
-
       {useInFlowMessages && shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
         <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
-      )}
-
-      {showSavedPicker && (
-        <Text style={styles.pickerLabel}>SAVED · {savedPlayers.length}</Text>
       )}
     </View>
   );
@@ -1743,33 +1743,48 @@ export default function ActiveGameScreen() {
         cardStyle={addPlayerCardStyle}
         scrollBody={false}
         header={
-          /* Subject header (decisive pick) OR search field (Browse / typing).
-             Pinned: typing filters the list below, so it must stay visible. */
-          committingTapped ? (
-            <TouchableOpacity
-              style={styles.addingHeader}
-              onPress={clearSubject}
-              accessibilityRole="button"
-              accessibilityLabel="Back to saved players"
-            >
-              <Ionicons name="chevron-back" size={18} color="#B072BB" />
-              <Text style={styles.addingHeaderText}>
-                Adding <Text style={styles.addingHeaderName}>{trimmedName}</Text>
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TextInput
-              ref={nameInputRef}
-              style={styles.input}
-              value={newPlayerName}
-              onChangeText={handleNameChange}
-              placeholder="Search saved or type a name"
-              placeholderTextColor="#666"
-              accessibilityLabel="Search saved players or type a new name"
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
-          )
+          <>
+            {/* Subject header (decisive pick) OR search field (Browse / typing).
+                Pinned: typing filters the list below, so it must stay visible. */}
+            {committingTapped ? (
+              <TouchableOpacity
+                style={styles.addingHeader}
+                onPress={clearSubject}
+                accessibilityRole="button"
+                accessibilityLabel="Back to saved players"
+              >
+                <Ionicons name="chevron-back" size={18} color="#B072BB" />
+                <Text style={styles.addingHeaderText}>
+                  Adding <Text style={styles.addingHeaderName}>{trimmedName}</Text>
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TextInput
+                ref={nameInputRef}
+                style={styles.input}
+                value={newPlayerName}
+                onChangeText={handleNameChange}
+                placeholder="Search saved or type a name"
+                placeholderTextColor="#666"
+                accessibilityLabel="Search saved players or type a new name"
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+            )}
+
+            {/* Both of these are PINNED rather than rendered as part of the list's
+                ListHeaderComponent, and the reason is the scroll indicator, not taste:
+                its track spans the FlatList frame, so either one rendered inside that
+                frame makes the track start above the row panel. The banker hint is
+                persistent state while pending, so it hit that every time it showed. */}
+            {pendingBankerDesignation && (
+              <Text style={styles.bankerPendingHint}>This person will be set as banker</Text>
+            )}
+
+            {showSavedPicker && (
+              <Text style={styles.pickerLabel}>SAVED · {savedPlayers.length}</Text>
+            )}
+          </>
         }
         footer={
           /* Pinned: this is the whole point of the change — the Done/Add button
