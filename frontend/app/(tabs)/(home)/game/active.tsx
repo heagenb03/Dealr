@@ -45,7 +45,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo, postAddFocusTarget } from '@/utils/addPlayer';
+import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo, postAddFocusTarget, addedConfirmationPlacement } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 import { addPlayerCardMaxHeight } from '@/utils/modalCardHeight';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
@@ -1395,28 +1395,24 @@ export default function ActiveGameScreen() {
   // query matches no saved player.
   const showSavedPicker = !committingTapped && savedPlayers.length > 0 && filteredSaved.length > 0;
 
-  // The floating confirmation pill falls back to in-flow rendering when the list viewport
-  // is too short to float over. Two independent reasons, neither redundant:
+  // Where the post-add ✓ goes. Browse view only — while a name is being entered the card
+  // shows just the name control, the buy-in box, the save-player slot, and the Add button,
+  // because anything else lands between the name box and the buy-in box.
   //
-  //  - !showSavedPicker covers the empty case (an unmatched typed name, or no saved
-  //    players at all), where the viewport collapses to near-zero height and an overlay
-  //    would spill onto the buy-in field.
-  //  - < 2 rows covers the single-row case. The pill is anchored to the BOTTOM of the
-  //    viewport, so it can bury at most the LAST row — fatal only when the last row is
-  //    also the only row.
+  // savedPlayers.length, NOT filteredSaved.length, and the two are not interchangeable in
+  // general — they are only equal in the browse view, which is the only place this can
+  // return anything but 'none'. In browse the query is empty and filterSavedByQuery returns
+  // its input unchanged, so filteredSaved IS the saved roster. Passing filteredSaved would
+  // read as though the filter mattered here; it does not.
   //
-  // This threshold was 3 while the cap banner ALSO floated, from the top: the two
-  // overlays then overlapped each other and buried the only row even at two rows. The
-  // banner is pinned now, but the pill is not the only float left — styles.pickerFade is
-  // also a bottom-anchored absolutely-positioned overlay in the same pickerViewport
-  // parent. The pill (~24-26pt) and the fade (30pt) share that same bottom edge, so they
-  // overlap rather than stack, keeping the combined footprint under one ~47pt row — which
-  // is why the bound still relaxes to 2.
-  //
-  // Height-independent, so the two-state card does not change it: pickerViewport has
-  // flexShrink 1 and no flexGrow, so with short content it collapses to content height
-  // and the pill sits over the last row in both the tall and short states.
-  const useInFlowConfirmation = !showSavedPicker || filteredSaved.length < 2;
+  // Height-independent, so the two-state card does not affect it: pickerViewport has
+  // flexShrink 1 and no flexGrow, so with short content it collapses to content height and
+  // the pill sits over the last row in both the tall and short states.
+  const confirmationPlacement = addedConfirmationPlacement(
+    shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players),
+    hasSubject,
+    savedPlayers.length,
+  );
 
   // Header/footer are ELEMENTS, never inline arrows. `ListHeaderComponent={() => <X/>}`
   // creates a new component TYPE every render, so React unmounts and remounts the subtree;
@@ -1431,7 +1427,9 @@ export default function ActiveGameScreen() {
   // exist while the card is in its SHORT (keyboard-up, 50%-of-window) state. Keeping one
   // scroll container is what keeps them reachable in that state — splitting the header
   // into pinned and scrolling pieces would need per-state layout math instead.
-  // Only the in-flow confirmation remains here. The SAVED · N label and the banker hint
+  // Only the in-flow confirmation remains here, and only in the browse view with fewer than
+  // two saved players (see confirmationPlacement above) — everywhere else it is the pill.
+  // The SAVED · N label and the banker hint
   // moved to the modal's PINNED header: the scroll indicator's track spans the FlatList
   // frame, so anything rendered inside that frame above the rows makes the track appear
   // to start above the row panel — which is exactly what it looked like. With them out,
@@ -1441,7 +1439,7 @@ export default function ActiveGameScreen() {
   // effect on the frame.
   const savedPickerHeader = (
     <View style={styles.pickerBlock}>
-      {useInFlowConfirmation && shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
+      {confirmationPlacement === 'inline' && (
         <Text style={styles.addedConfirm}>✓ {addedConfirmLabel}</Text>
       )}
     </View>
@@ -1916,8 +1914,7 @@ export default function ActiveGameScreen() {
               prevent) or require a permanently reserved strip in a modal already over budget.
               The shouldShowAddedConfirmation gate is UNCHANGED — this is placement work only,
               no new suppression logic. */}
-          {!useInFlowConfirmation &&
-            shouldShowAddedConfirmation(addedConfirmLabel, lastAddedAmount, lastAddedName, visibleSaved, activeGame.players) && (
+          {confirmationPlacement === 'pill' && (
             <Reanimated.View style={[styles.pickerConfirmPill, pillStyle]} pointerEvents="none">
               <Text style={styles.pickerConfirmPillText} numberOfLines={1}>✓ {addedConfirmLabel}</Text>
             </Reanimated.View>
