@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, TextInput, Alert, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
+import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, TextInput, Alert, Animated, Keyboard, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 // Aliased to Reanimated because `Animated` on line 2 is react-native's own Animated API,
 // which this file still uses for the header's spring scale.
@@ -867,14 +867,32 @@ export default function ActiveGameScreen() {
   };
 
   // The '‹ Adding {name}' header taps back to Browse (un-picks the saved row).
+  //
+  // Deliberately does NOT re-focus the name input. This control means "return to
+  // browsing", and browsing is the keyboard-DOWN state the tall card exists for; focusing
+  // here would raise the keyboard and collapse the card the host is returning to.
+  //
+  // No Keyboard.dismiss() either: the buy-in field unmounts along with the subject, which
+  // drops the keyboard on its own. An explicit dismiss would be a no-op that reads as
+  // load-bearing.
   const clearSubject = () => {
     setNewPlayerName('');
     setSelectedSavedId(null);
-    requestAnimationFrame(() => nameInputRef.current?.focus());
   };
 
   const commitAddPlayer = async (tapped?: SavedPlayer) => {
     if (addingPlayerRef.current) return;
+
+    // Captured HERE, before the reset block near the end of this function calls
+    // setSelectedSavedId(null) — reading it after the reset would report every add as
+    // typed-origin. Drives where focus goes once the add completes.
+    //
+    // Both tap paths are covered: `tapped` is the default-buy-in fast path, and
+    // selectedSavedId is set by handleSelectSaved for the row-tap -> buy-in -> Add path.
+    // Nothing clears selectedSavedId between those two points except handleNameChange
+    // (the host editing the search text, which genuinely IS a typed-origin add) and
+    // clearSubject (which abandons the add entirely).
+    const tapOrigin = tapped != null || selectedSavedId != null;
 
     // Cap gate: free caps at 12, Pro at 20 (see utils/tierLimits). Enforced on EVERY
     // add because the modal stays open for multiple adds (not just when opening it).
@@ -984,7 +1002,15 @@ export default function ActiveGameScreen() {
       setSelectedSavedId(null);
       setSavePlayerToggle(true);
       setForceUnlinked(false);
-      requestAnimationFrame(() => nameInputRef.current?.focus());
+      // A TYPED add keeps the keyboard up and the caret in the search field so the next
+      // name can be typed straight away. A TAP add must not: re-focusing there would
+      // raise the keyboard and collapse the tall browse card the host just added from,
+      // which would make every single tap-add flicker the modal shut and open.
+      if (tapOrigin) {
+        Keyboard.dismiss();
+      } else {
+        requestAnimationFrame(() => nameInputRef.current?.focus());
+      }
     } finally {
       addingPlayerRef.current = false;
     }
