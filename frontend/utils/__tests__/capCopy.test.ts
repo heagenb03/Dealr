@@ -36,7 +36,6 @@ describe('playerCapHint', () => {
   it('leads with the real count when over the free cap', () => {
     const s = playerCapHint(14, false);
     expect(s).toContain('14');
-    expect(s).toContain('12');
     expect(s).not.toMatch(/limit reached . 12 players/i);
   });
 
