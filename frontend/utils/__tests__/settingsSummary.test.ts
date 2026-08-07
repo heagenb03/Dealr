@@ -6,9 +6,9 @@ describe('formatSettingsSummary', () => {
     expect(formatSettingsSummary(false, undefined, '$5')).toBe('Direct · $5');
   });
 
-  it('banker mode with no banker drops rounding', () => {
-    expect(formatSettingsSummary(true, undefined, 'Exact')).toBe('Banker · Choose banker');
-    expect(formatSettingsSummary(true, undefined, '$5')).toBe('Banker · Choose banker');
+  it('banker mode with no banker still announces rounding', () => {
+    expect(formatSettingsSummary(true, undefined, 'Exact')).toBe('Banker · Choose banker · Exact');
+    expect(formatSettingsSummary(true, undefined, '$5')).toBe('Banker · Choose banker · $5');
   });
 
   it('banker mode with a banker shows name and rounding', () => {
@@ -24,10 +24,13 @@ describe('formatSettingsSummary', () => {
     expect(formatSettingsSummary(false, undefined, '$5')).toBe('Direct · $5');
   });
 
-  it('banker mode with no banker drops tolerance too, matching the visible row', () => {
-    // The collapsed row suppresses BOTH rounding and tolerance in this state,
-    // so the a11y label must not announce a tolerance the user cannot see.
-    expect(formatSettingsSummary(true, undefined, '$5', '±$10')).toBe('Banker · Choose banker');
+  it('banker mode with no banker keeps the tolerance, matching the visible row', () => {
+    // The collapsed row shows all four segments in this state, so the label must
+    // announce them. This inverts the pre-2026-08-07 parity rule: the row used to
+    // suppress them because the state was transient; it can now last a whole game.
+    expect(formatSettingsSummary(true, undefined, '$5', '±$10')).toBe(
+      'Banker · Choose banker · $5 · ±$10',
+    );
   });
 
   it('banker mode with a banker keeps the tolerance', () => {
@@ -50,12 +53,9 @@ describe('formatSettingsSummary', () => {
     expect(formatSettingsSummary(false, undefined, '$5', '±$10')).toBe('Direct · $5 · ±$10');
   });
 
-  it('banker mode with no banker drops the buy-in too, matching the visible row', () => {
-    // Same parity invariant as the tolerance test above: the collapsed row
-    // suppresses rounding, tolerance AND buy-in in this state, so the
-    // accessibility label must not announce a segment the user cannot see.
+  it('banker mode with no banker keeps the buy-in, matching the visible row', () => {
     expect(formatSettingsSummary(true, undefined, '$5', '±$10', 'Buy-in $20')).toBe(
-      'Banker · Choose banker',
+      'Banker · Choose banker · Buy-in $20 · $5 · ±$10',
     );
   });
 
