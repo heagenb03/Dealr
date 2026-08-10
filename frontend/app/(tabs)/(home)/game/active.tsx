@@ -201,7 +201,7 @@ const DEFAULT_GAME_NAME = 'Untitled Game';
 export default function ActiveGameScreen() {
   const { activeGame, updateGame, setActiveGame, createGame } = useGame();
   const { user, isPro } = useAuth();
-  const { formatAmount, meta, currency } = useCurrency();
+  const { formatAmount, formatAmountCompactScaled, meta, currency } = useCurrency();
   const { height: windowHeight } = useWindowDimensions();
   // Caps the Add Players card in TWO discrete states.
   //
@@ -1239,29 +1239,41 @@ export default function ActiveGameScreen() {
   const completionBlockedOnBanker =
     activeGame.settlementMode === 'banker' && !GameService.hasRememberedBanker(activeGame);
 
+  const resolvedCashUnit = resolveCashUnit(activeGame.cashUnit, currency);
+  // Exact value — expanded settings list AND the a11y summary.
   const roundingLabel =
-    resolveCashUnit(activeGame.cashUnit, currency) === EXACT_CASH_UNIT
+    resolvedCashUnit === EXACT_CASH_UNIT ? 'Exact' : formatAmount(resolvedCashUnit);
+  // Collapsed-row value only. Kept separate so the expanded list and the screen
+  // reader keep the precise amount the host picked.
+  const roundingRowLabel =
+    resolvedCashUnit === EXACT_CASH_UNIT
       ? 'Exact'
-      : formatAmount(resolveCashUnit(activeGame.cashUnit, currency));
+      : formatAmountCompactScaled(resolvedCashUnit);
 
   const gameDefaultBuyIn = activeGame.defaultBuyIn ?? 0;
   const defaultBuyInLabel = gameDefaultBuyIn > 0 ? formatAmount(gameDefaultBuyIn) : 'Off';
-  // Bare formatted amount, shared by the collapsed-row segment (renders it as-is)
-  // and buyInSummaryLabel below (prefixes it for the a11y label). null when off,
-  // so both derived values can key off "is there an amount to show" consistently.
-  const buyInValueLabel = gameDefaultBuyIn > 0 ? formatAmount(gameDefaultBuyIn) : null;
-  // Collapsed-row a11y segment. Spoken as "Buy-in $20" while the row shows a
-  // bare "$20" beside a cash icon — a screen reader has no icon to disambiguate
-  // it from the rounding value. Undefined when off, so the segment is omitted.
-  const buyInSummaryLabel = buyInValueLabel ? `Buy-in ${buyInValueLabel}` : undefined;
+  // Bare COMPACT amount, rendered as-is by the collapsed-row segment. null when
+  // off, so the segment is omitted entirely rather than showing a zero.
+  const buyInValueLabel =
+    gameDefaultBuyIn > 0 ? formatAmountCompactScaled(gameDefaultBuyIn) : null;
+  // Collapsed-row a11y segment. Spoken as "Buy-in $1,500.00" while the row shows
+  // a bare "$1.5k" beside a cash icon — a screen reader has no icon to
+  // disambiguate it from the rounding value, and no way to expand the row for
+  // the precise figure. Derived from formatAmount directly, NOT from
+  // buyInValueLabel, or compacting the row would silently compact this too.
+  const buyInSummaryLabel =
+    gameDefaultBuyIn > 0 ? `Buy-in ${formatAmount(gameDefaultBuyIn)}` : undefined;
 
   const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, currency);
   // Expanded-row value (always shown, plain like the Rounding value).
   const toleranceValueLabel =
     resolvedTolerance === 0 ? 'Exact' : formatAmount(resolvedTolerance);
-  // Collapsed caption segment + a11y label: always shown (like rounding), so the
+  // Exact caption — a11y label only. Always emitted (like rounding), so the
   // summary stays consistent at the currency default instead of dropping it.
   const toleranceLabel = toleranceCaption(resolvedTolerance, formatAmount);
+  // Compact caption — collapsed row only. toleranceCaption already takes an
+  // injected formatter, so no change to settingsSummary.ts is needed.
+  const toleranceRowLabel = toleranceCaption(resolvedTolerance, formatAmountCompactScaled);
 
   const settingsSummary = formatSettingsSummary(
     activeGame.settlementMode === 'banker',
@@ -1759,7 +1771,7 @@ export default function ActiveGameScreen() {
             <View style={styles.settingsSummaryGroup}>
               <Ionicons name="options-outline" size={15} color="rgba(255,255,255,0.5)" />
               <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                {roundingLabel}
+                {roundingRowLabel}
               </Text>
             </View>
 
@@ -1768,7 +1780,7 @@ export default function ActiveGameScreen() {
             <View style={styles.settingsSummaryGroup}>
               <Ionicons name="git-compare-outline" size={15} color="rgba(255,255,255,0.5)" />
               <Text style={styles.settingsSummaryValue} numberOfLines={1}>
-                {toleranceLabel}
+                {toleranceRowLabel}
               </Text>
             </View>
           </TouchableOpacity>
