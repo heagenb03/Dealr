@@ -1245,6 +1245,15 @@ export default function ActiveGameScreen() {
     resolvedCashUnit === EXACT_CASH_UNIT ? 'Exact' : formatAmount(resolvedCashUnit);
   // Collapsed-row value only. Kept separate so the expanded list and the screen
   // reader keep the precise amount the host picked.
+  //
+  // Unreachable today: resolvedCashUnit comes from a closed-set picker
+  // (getCashUnitOptions), whose highest preset in every currency sits below
+  // that currency's compactThreshold (e.g. USD max 50 vs. threshold 1,000;
+  // JPY max 10,000 vs. threshold 200,000) — same for toleranceRowLabel below
+  // against getToleranceOptions. So this always renders identically to
+  // roundingLabel today; only the free-form buy-in input can ever compact.
+  // Kept anyway so a future preset that grows past its threshold compacts
+  // automatically instead of silently overflowing the row.
   const roundingRowLabel =
     resolvedCashUnit === EXACT_CASH_UNIT
       ? 'Exact'
@@ -1273,6 +1282,12 @@ export default function ActiveGameScreen() {
   const toleranceLabel = toleranceCaption(resolvedTolerance, formatAmount);
   // Compact caption — collapsed row only. toleranceCaption already takes an
   // injected formatter, so no change to settingsSummary.ts is needed.
+  //
+  // Unreachable today, same reason as roundingRowLabel above: every
+  // getToleranceOptions() maximum sits below this currency's compactThreshold
+  // (e.g. USD max 50 vs. 1,000; JPY max 5,000 vs. 200,000), so this always
+  // matches toleranceLabel today. Kept for the same reason — a larger preset
+  // should compact automatically, not require this to be re-added.
   const toleranceRowLabel = toleranceCaption(resolvedTolerance, formatAmountCompactScaled);
 
   const settingsSummary = formatSettingsSummary(

@@ -95,6 +95,21 @@ describe('CurrencyContext formatter memoization', () => {
     expect(constructions).toBe(2);
   });
 
+  it('constructs exactly two Intl.NumberFormats for 200 formatAmountCompact calls', async () => {
+    // Pins the same "one formatter per currency, not per call" invariant for
+    // the compact path specifically — this is where the real per-render cost
+    // lives (formatAmountCompact/formatAmountCompactScaled are the callers in
+    // summary.tsx, (profile)/index.tsx and the active-screen settings row).
+    installCountingIntl();
+    await renderProvider();
+    for (let i = 0; i < 200; i += 1) {
+      seen!.formatAmountCompact(i);
+    }
+    // 2: one full formatter (numberFormat) + one scaled formatter
+    // (scaledNumberFormat), both built once per currency at render.
+    expect(constructions).toBe(2);
+  });
+
   it('still formats USD amounts exactly as before', async () => {
     await renderProvider();
     expect(seen!.formatAmount(1234.56)).toBe('$1,234.56');
@@ -133,6 +148,18 @@ describe('CurrencyContext formatter memoization', () => {
     installThrowingIntl();
     await renderProvider();
     expect(seen!.formatAmount(1234.56)).toBe('$1234.56');
+  });
+
+  it('compact formatters fall back to rounded-to-one-decimal output, not a raw float, when Intl.NumberFormat throws at CONSTRUCTION time', async () => {
+    // Same no-Intl runtime as the test above, but exercised through the compact
+    // path. formatScaled's fallback interpolates the pre-divided value directly;
+    // without rounding it that value is a raw JS float (1234.56 / 1000 =
+    // 1.2345599999999999), not the one-decimal precision `formatAmount`'s
+    // fallback and the Intl path both produce.
+    installThrowingIntl();
+    await renderProvider();
+    expect(seen!.formatAmountCompact(1234.56)).toBe('$1.2k');
+    expect(seen!.formatAmountCompact(999950)).toBe('$1M');
   });
 
   it('falls back to symbol + toFixed when Intl.NumberFormat.format() throws at CALL time', async () => {

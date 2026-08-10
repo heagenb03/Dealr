@@ -78,7 +78,9 @@ export function spliceSuffix(formatted: string, suffix: string): string {
  *
  * Latent, not reachable today: a currency whose default cash unit exceeded
  * ~5,000 would get a threshold above M_PROMOTE and skip the "k" branch entirely.
- * JPY's 200,000 is the largest today.
+ * JPY's 200,000 is the largest today. If such a currency is ever introduced,
+ * `compactThreshold` is the single place to add a `Math.min(..., M_PROMOTE)`
+ * clamp — this function's threshold parameter would not need to change.
  */
 export function compactAmountFrom(
   value: number,

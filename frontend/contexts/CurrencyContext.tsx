@@ -162,7 +162,16 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   // Renders an already-scaled value (e.g. 1.5 for "1.5k"). Falls back to a bare
   // symbol prefix if Intl is unavailable, so a missing Intl cannot take the
-  // provider down. Not locale-correct in that path — nothing is.
+  // provider down. Not locale-correct in that path — nothing is. The suffix
+  // ("k"/"M") is NOT missing here: spliceSuffix runs in compactAmount.ts's
+  // compactAmountFrom, outside this function, so it's still appended to
+  // whatever this returns.
+  //
+  // `scaled` arrives undivided by anything but the /1000 or /1e6 compactAmount
+  // already did — it is a raw JS float (1234.56 / 1000 = 1.2345599999999999),
+  // so it must be rounded to one decimal here, matching what the Intl path
+  // above and formatAmount's own fallback both produce. parseFloat drops a
+  // trailing ".0" so 1.0 renders "1", not "1.0".
   const formatScaled = useCallback((scaled: number): string => {
     if (scaledNumberFormat) {
       try {
@@ -171,7 +180,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         // fall through
       }
     }
-    return `${meta.symbol}${scaled}`;
+    return `${meta.symbol}${parseFloat(scaled.toFixed(1))}`;
   }, [scaledNumberFormat, meta]);
 
   const formatAmountCompact = useCallback(
@@ -181,8 +190,11 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   );
 
   // Threshold depends only on the currency code, so it is memoized rather than
-  // recomputed per call — formatAmountCompact runs 3x per summary card, so a
-  // 50-player summary is ~150 calls per mount.
+  // recomputed per call. This feeds formatAmountCompactScaled specifically
+  // (formatAmountCompact uses the flat FLAT_COMPACT_THRESHOLD and never reads
+  // this) — the scaled formatter renders all three collapsed-row segments
+  // (buy-in, rounding, tolerance) on the active screen, so it runs ~3x per
+  // render there.
   const scaledThreshold = useMemo(
     () => compactThreshold(getDefaultCashUnit(currency)),
     [currency],
