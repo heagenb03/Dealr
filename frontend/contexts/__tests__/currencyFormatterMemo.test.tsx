@@ -90,7 +90,9 @@ describe('CurrencyContext formatter memoization', () => {
     for (let i = 0; i < 200; i += 1) {
       seen!.formatAmount(i);
     }
-    expect(constructions).toBe(1);
+    // 2, not 1: mount now also builds scaledNumberFormat (the second formatter
+    // that formatAmountCompact/formatAmountCompactScaled render through).
+    expect(constructions).toBe(2);
   });
 
   it('still formats USD amounts exactly as before', async () => {
@@ -103,7 +105,9 @@ describe('CurrencyContext formatter memoization', () => {
     installCountingIntl();
     await renderProvider();
     seen!.formatAmount(1);
-    expect(constructions).toBe(1);
+    // 2, not 1: same mount, before the currency switch — both formatAmount's
+    // numberFormat and formatAmountCompact's scaledNumberFormat are built once.
+    expect(constructions).toBe(2);
 
     await act(async () => {
       await seen!.setCurrency('JPY');
@@ -118,7 +122,9 @@ describe('CurrencyContext formatter memoization', () => {
 
     seen!.formatAmount(1234.56);
     expect(seen!.formatAmount(1234.56)).toBe(expected);
-    expect(constructions).toBe(2);
+    // 4, not 2: setCurrency('JPY') rebuilds both formatters (numberFormat and
+    // scaledNumberFormat), doubling the per-currency count from the mount above.
+    expect(constructions).toBe(4);
   });
 
   it('falls back to symbol + toFixed when Intl.NumberFormat throws at CONSTRUCTION time', async () => {

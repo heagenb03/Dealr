@@ -16,6 +16,12 @@ import {
   seedPrefIfAbsent,
   resolveEnumPref,
 } from '@/services/userPrefsService';
+import { getDefaultCashUnit } from '@/constants/CashUnits';
+import {
+  compactAmountFrom,
+  compactThreshold,
+  FLAT_COMPACT_THRESHOLD,
+} from '@/utils/compactAmount';
 
 const CURRENCY_CODES = Object.keys(SUPPORTED_CURRENCIES) as CurrencyCode[];
 
@@ -29,8 +35,18 @@ interface CurrencyContextType {
   setCurrency: (code: CurrencyCode) => Promise<void>;
   /** Full locale-formatted amount, e.g. "$1,234.56", "¥1,235", "1.234,56 €" */
   formatAmount: (value: number) => string;
-  /** Compact stat format, e.g. "$1.2k", "¥1.2k", "€1.2k" */
+  /**
+   * Compact stat format at a flat 1,000 threshold, e.g. "$1.2k", "￥1.2k".
+   * For summary and profile tiles, which show computed totals at a glance.
+   */
   formatAmountCompact: (value: number) => string;
+  /**
+   * Compact format whose threshold scales with the currency's smallest banknote
+   * (JPY does not truncate until ￥200,000). For the collapsed Settings row,
+   * which echoes a value the host chose — see docs/superpowers/specs/
+   * 2026-08-10-compact-amount-formatting-design.md.
+   */
+  formatAmountCompactScaled: (value: number) => string;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +131,24 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     }
   }, [meta]);
 
+  // Second formatter, for the already-divided value in a compact result.
+  // Fraction digits are pinned 0-1 REGARDLESS of meta.decimals: JPY is a
+  // 0-decimal currency, and inheriting that would round ￥200,500 to "￥201k"
+  // instead of "￥200.5k". Same try/catch degradation as numberFormat above —
+  // construction happens during render and can throw on a limited-Intl runtime.
+  const scaledNumberFormat = useMemo<Intl.NumberFormat | null>(() => {
+    try {
+      return new Intl.NumberFormat(meta.locale, {
+        style: 'currency',
+        currency: meta.code,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      });
+    } catch {
+      return null;
+    }
+  }, [meta]);
+
   const formatAmount = useCallback((value: number): string => {
     if (numberFormat) {
       try {
@@ -126,21 +160,51 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     return `${meta.symbol}${value.toFixed(meta.decimals)}`;
   }, [numberFormat, meta]);
 
-  const formatAmountCompact = useCallback((value: number): string => {
-    const absValue = Math.abs(value);
-    let formatted: string;
-    if (absValue >= 1_000_000) {
-      formatted = `${meta.symbol}${parseFloat((absValue / 1_000_000).toFixed(1))}M`;
-    } else if (absValue >= 1_000) {
-      formatted = `${meta.symbol}${parseFloat((absValue / 1_000).toFixed(1))}k`;
-    } else {
-      formatted = `${meta.symbol}${absValue.toFixed(meta.decimals)}`;
+  // Renders an already-scaled value (e.g. 1.5 for "1.5k"). Falls back to a bare
+  // symbol prefix if Intl is unavailable, so a missing Intl cannot take the
+  // provider down. Not locale-correct in that path — nothing is.
+  const formatScaled = useCallback((scaled: number): string => {
+    if (scaledNumberFormat) {
+      try {
+        return scaledNumberFormat.format(scaled);
+      } catch {
+        // fall through
+      }
     }
-    return formatted;
-  }, [meta]);
+    return `${meta.symbol}${scaled}`;
+  }, [scaledNumberFormat, meta]);
+
+  const formatAmountCompact = useCallback(
+    (value: number): string =>
+      compactAmountFrom(value, FLAT_COMPACT_THRESHOLD, formatAmount, formatScaled),
+    [formatAmount, formatScaled],
+  );
+
+  // Threshold depends only on the currency code, so it is memoized rather than
+  // recomputed per call — formatAmountCompact runs 3x per summary card, so a
+  // 50-player summary is ~150 calls per mount.
+  const scaledThreshold = useMemo(
+    () => compactThreshold(getDefaultCashUnit(currency)),
+    [currency],
+  );
+
+  const formatAmountCompactScaled = useCallback(
+    (value: number): string =>
+      compactAmountFrom(value, scaledThreshold, formatAmount, formatScaled),
+    [scaledThreshold, formatAmount, formatScaled],
+  );
 
   return (
-    <CurrencyContext.Provider value={{ currency, meta, setCurrency, formatAmount, formatAmountCompact }}>
+    <CurrencyContext.Provider
+      value={{
+        currency,
+        meta,
+        setCurrency,
+        formatAmount,
+        formatAmountCompact,
+        formatAmountCompactScaled,
+      }}
+    >
       {children}
     </CurrencyContext.Provider>
   );

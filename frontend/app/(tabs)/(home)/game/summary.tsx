@@ -85,7 +85,9 @@ function BalanceCard({ balance, reduceMotion, hint }: BalanceCardProps) {
     .onFinalize(() => runOnJS(animateScaleUp)()), [animateScaleDown, animateScaleUp]);
 
   // Summary cards show compact (k/M) figures at a glance; settlement cards carry the exact amounts.
-  const netSign = balance.netBalance > 0 ? '+' : balance.netBalance < 0 ? '-' : '';
+  // '+' only — formatAmountCompact now carries the minus itself (it no longer
+  // calls Math.abs), so prepending '-' here would render "--$1.5k".
+  const netSign = balance.netBalance > 0 ? '+' : '';
   const netDisplay = `${netSign}${formatAmountCompact(balance.netBalance)}`;
 
   return (
