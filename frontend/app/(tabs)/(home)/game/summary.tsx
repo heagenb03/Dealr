@@ -112,12 +112,12 @@ function BalanceCard({ balance, reduceMotion, hint }: BalanceCardProps) {
         <View style={styles.dataRow}>
           <View style={styles.dataItem}>
             <Text style={styles.dataLabel}>In</Text>
-            <Text style={styles.dataValue}>{formatAmountCompact(balance.totalBuyins)}</Text>
+            <Text style={styles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalBuyins)}</Text>
           </View>
           <View style={styles.dataDivider} />
           <View style={styles.dataItem}>
             <Text style={styles.dataLabel}>Out</Text>
-            <Text style={styles.dataValue}>{formatAmountCompact(balance.totalCashouts)}</Text>
+            <Text style={styles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalCashouts)}</Text>
           </View>
           <View style={styles.dataDivider} />
           <View style={styles.dataItem}>
@@ -125,7 +125,7 @@ function BalanceCard({ balance, reduceMotion, hint }: BalanceCardProps) {
             <Text style={[
               styles.dataValue,
               { color: getNetBalanceColor(balance.netBalance) }
-            ]}>
+            ]} numberOfLines={1}>
               {netDisplay}
             </Text>
           </View>

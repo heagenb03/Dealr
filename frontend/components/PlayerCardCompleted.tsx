@@ -129,12 +129,12 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
             <View style={styles.dataRow}>
               <View style={styles.dataItem}>
                 <Text style={styles.dataLabel}>In</Text>
-                <Text style={styles.dataValue}>{formatAmount(balance.totalBuyins)}</Text>
+                <Text style={styles.dataValue} numberOfLines={1}>{formatAmount(balance.totalBuyins)}</Text>
               </View>
               <View style={styles.dataDivider} />
               <View style={styles.dataItem}>
                 <Text style={styles.dataLabel}>Out</Text>
-                <Text style={styles.dataValue}>{formatAmount(balance.totalCashouts)}</Text>
+                <Text style={styles.dataValue} numberOfLines={1}>{formatAmount(balance.totalCashouts)}</Text>
               </View>
               <View style={styles.dataDivider} />
               <View style={styles.dataItem}>
@@ -142,7 +142,7 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
                 <Text style={[
                   styles.dataValue,
                   { color: getNetBalanceColor(balance.netBalance) }
-                ]}>
+                ]} numberOfLines={1}>
                   {netDisplay}
                 </Text>
               </View>

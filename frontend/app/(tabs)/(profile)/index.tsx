@@ -117,7 +117,7 @@ export default function AccountScreen() {
           {stats.map((s) => (
             <View key={s.label} style={styles.statTile}>
               <Text style={styles.statLabel}>{s.label}</Text>
-              <Text style={styles.statValue}>{s.value}</Text>
+              <Text style={styles.statValue} numberOfLines={1}>{s.value}</Text>
             </View>
           ))}
         </View>
