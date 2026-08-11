@@ -83,7 +83,7 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
 
   // Compact (k/M) at a glance, same as the summary screen's BalanceCard.
   // netBalanceDisplay prepends '+' only — formatAmountCompact carries the minus.
-  const netDisplay = balance ? netBalanceDisplay(balance.netBalance, formatAmountCompact) : null;
+  const netDisplay = balance ? netBalanceDisplay(balance.netBalance, formatAmountCompact) : '';
 
   return (
     <Swipeable
