@@ -2,9 +2,13 @@
  * Utility functions for formatting and displaying data
  */
 
-/** Format a large number compactly: 0, 1, 42, 1.2k, 15k, 1.5M */
+import { M_PROMOTE } from './compactAmount';
+
+/** Format a large count compactly: 0, 1, 42, 1.2k, 15k, 1M. Counts, not currency. */
 export const formatStatNumber = (value: number): string => {
-  if (value >= 1_000_000) return `${parseFloat((value / 1_000_000).toFixed(1))}M`;
+  // M_PROMOTE, not 1_000_000: at one decimal, anything from 999,950 up rounds
+  // to "1000.0k". Shares the boundary with the currency formatter on purpose.
+  if (value >= M_PROMOTE) return `${parseFloat((value / 1_000_000).toFixed(1))}M`;
   if (value >= 1_000) return `${parseFloat((value / 1_000).toFixed(1))}k`;
   return value.toFixed(0);
 };
@@ -57,3 +61,18 @@ export const formatNetBalanceDisplay = (netBalance: number, symbol = '$'): strin
   if (netBalance < 0) return `-${formattedValue}`;
   return `${symbol}0`;
 };
+
+/**
+ * Net balance for display, e.g. "+$125.00", "-$1.5k", "$0.00".
+ *
+ * `formatCompact` carries the minus itself (it does not call Math.abs), so only
+ * '+' is ever prepended here. Prepending '-' as well renders "--$1.5k".
+ *
+ * The formatter is injected rather than imported: jest-expo/node has no React
+ * Native renderer, so anything reaching CurrencyProvider cannot be exercised at
+ * all. Same technique as utils/compactAmount.ts.
+ */
+export const netBalanceDisplay = (
+  netBalance: number,
+  formatCompact: (n: number) => string,
+): string => `${netBalance > 0 ? '+' : ''}${formatCompact(netBalance)}`;
