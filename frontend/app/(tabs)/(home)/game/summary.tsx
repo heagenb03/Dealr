@@ -14,7 +14,7 @@ import { reverseProfileStats } from '@/services/firebaseService';
 import { getSettlements, calculateBankerSettlements, SOLVER_TIMEOUT_SENTINEL } from '@/services/settlementService';
 import { PlayerBalance, SettlementResult } from '@/types/game';
 import { groupSettlementsByRecipient, sortPaymentsByAmount } from '@/utils/settlementUtils';
-import { getNetBalanceColor } from '@/utils/formatUtils';
+import { getNetBalanceColor, netBalanceDisplay } from '@/utils/formatUtils';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import Button from '@/components/Button';
 import { Ionicons } from '@expo/vector-icons';
@@ -85,10 +85,9 @@ function BalanceCard({ balance, reduceMotion, hint }: BalanceCardProps) {
     .onFinalize(() => runOnJS(animateScaleUp)()), [animateScaleDown, animateScaleUp]);
 
   // Summary cards show compact (k/M) figures at a glance; settlement cards carry the exact amounts.
-  // '+' only — formatAmountCompact now carries the minus itself (it no longer
-  // calls Math.abs), so prepending '-' here would render "--$1.5k".
-  const netSign = balance.netBalance > 0 ? '+' : '';
-  const netDisplay = `${netSign}${formatAmountCompact(balance.netBalance)}`;
+  // The sign rule lives in netBalanceDisplay so this card and the active screen's
+  // PlayerCardCompleted cannot drift apart again.
+  const netDisplay = netBalanceDisplay(balance.netBalance, formatAmountCompact);
 
   return (
     <GestureDetector gesture={tapGesture}>

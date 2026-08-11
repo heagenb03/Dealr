@@ -6,7 +6,7 @@ import { runOnJS } from 'react-native-reanimated';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { Player, PlayerBalance } from '@/types/game';
-import { getNetBalanceColor, formatNetBalanceDisplay } from '@/utils/formatUtils';
+import { getNetBalanceColor, netBalanceDisplay } from '@/utils/formatUtils';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
@@ -27,7 +27,7 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
   reduceMotion
 }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const { formatAmount, meta } = useCurrency();
+  const { formatAmount, formatAmountCompact } = useCurrency();
 
   const animateScaleDown = useCallback(() => {
     if (!reduceMotion) {
@@ -81,6 +81,10 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
     </TouchableOpacity>
   ), [player, onDelete]);
 
+  // Compact (k/M) at a glance, same as the summary screen's BalanceCard.
+  // netBalanceDisplay prepends '+' only — formatAmountCompact carries the minus.
+  const netDisplay = balance ? netBalanceDisplay(balance.netBalance, formatAmountCompact) : null;
+
   return (
     <Swipeable
       renderLeftActions={renderLeftActions}
@@ -96,7 +100,7 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
           accessible={true}
           accessibilityRole="button"
           accessibilityLabel={balance
-            ? `${player.name}, Net: ${formatNetBalanceDisplay(balance.netBalance, meta.symbol)}`
+            ? `${player.name}, Net: ${netDisplay}`
             : `${player.name}, No transaction data`
           }
           accessibilityHint="Swipe to reactivate or delete player"
@@ -139,7 +143,7 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
                   styles.dataValue,
                   { color: getNetBalanceColor(balance.netBalance) }
                 ]}>
-                  {formatNetBalanceDisplay(balance.netBalance, meta.symbol)}
+                  {netDisplay}
                 </Text>
               </View>
             </View>

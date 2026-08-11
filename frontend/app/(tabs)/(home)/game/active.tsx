@@ -21,7 +21,6 @@ import { ACTIVE_GAME_TOPIC_IDS, getTopicsByIds } from '@/constants/helpTopics';
 import { GameService } from '@/services/gameService';
 import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
 import { Player, PlayerBalance, Validation, PreferredPayment } from '@/types/game';
-import { getNetBalanceColor, formatNetBalanceDisplay } from '@/utils/formatUtils';
 import { incrementProfileStats } from '@/services/firebaseService';
 import { isValidNumericInput } from '@/utils/validationUtils';
 import { loadSavedPlayers, SavedPlayer, savedCapFor, canAddMoreSavedPlayers, getSavedPlayersByName, getSavedPlayerById, createSavedPlayer, updateSavedPlayer } from '@/services/savedPlayersService';
