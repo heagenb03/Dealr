@@ -33,6 +33,7 @@ import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
 import { buildSummaryListData, SummaryListItem } from '@/utils/summaryListData';
+import { buildPaymentGridRows } from '@/utils/paymentGridRows';
 
 // HUD Section Header Component
 function HudSectionHeader({ label }: { label: string }) {
@@ -168,8 +169,16 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
     ? formatHandleForDisplay(recipientPayment.method, recipientPayment.handle)
     : '';
 
-  // Sort payments by amount (largest first)
-  const sortedPayments = sortPaymentsByAmount(groupedSettlement).payments;
+  // Sort payments by amount (largest first), then chunk into fixed-width grid rows.
+  // The chunker owns "first cell of a visual row" so the render never has to infer
+  // it from the item index — see utils/paymentGridRows.ts for why that matters.
+  // The sort lives INSIDE the memo: sortPaymentsByAmount returns a fresh array every
+  // call, so keying on its result would change the dep on every render and memoize
+  // nothing.
+  const paymentRows = useMemo(
+    () => buildPaymentGridRows(sortPaymentsByAmount(groupedSettlement).payments),
+    [groupedSettlement],
+  );
 
   const handleToggle = useCallback(() => {
     const newExpandedState = !isExpanded;
@@ -318,27 +327,44 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
             FROM ({groupedSettlement.payments.length} {groupedSettlement.payments.length === 1 ? 'PLAYER' : 'PLAYERS'})
           </Text>
           <View style={styles.paymentGrid}>
-            {sortedPayments.map((payment, index) => (
-              <React.Fragment key={index}>
-                {index > 0 && index % 3 !== 0 && <View style={styles.paymentGridDivider} />}
-                <View style={styles.paymentGridCell}>
-                  <Text style={styles.paymentNameLabel} numberOfLines={2} ellipsizeMode="tail">
-                    {payment.from}
-                  </Text>
-                  <View style={styles.paymentAmountRow}>
-                    <Text style={styles.paymentAmountValue}>
-                      {formatAmount(payment.amount)}
-                    </Text>
-                  </View>
-                  {recipientPayment && buildPaymentUri(recipientPayment.method, recipientPayment.handle, payment.amount, 'x') && (
-                    <TouchableOpacity onPress={() => handlePay(payment.amount)} style={styles.payButton}>
-                      <Text style={styles.payButtonText}>
-                        Pay →
+            {paymentRows.map((row, rowIndex) => (
+              <View key={rowIndex} style={styles.paymentGridRow}>
+                {row.map((slot, slotIndex) => {
+                  if (slot.kind === 'divider') {
+                    // The invisible ones still hold their width, so a short last
+                    // row keeps the same column positions as the rows above it.
+                    return (
+                      <View
+                        key={slotIndex}
+                        style={slot.visible ? styles.paymentGridDivider : styles.paymentGridDividerSpacer}
+                      />
+                    );
+                  }
+                  if (slot.kind === 'spacer') {
+                    return <View key={slotIndex} style={styles.paymentGridCell} />;
+                  }
+                  const payment = slot.payment;
+                  return (
+                    <View key={slotIndex} style={styles.paymentGridCell}>
+                      <Text style={styles.paymentNameLabel} numberOfLines={2} ellipsizeMode="tail">
+                        {payment.from}
                       </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </React.Fragment>
+                      <View style={styles.paymentAmountRow}>
+                        <Text style={styles.paymentAmountValue}>
+                          {formatAmount(payment.amount)}
+                        </Text>
+                      </View>
+                      {recipientPayment && buildPaymentUri(recipientPayment.method, recipientPayment.handle, payment.amount, 'x') && (
+                        <TouchableOpacity onPress={() => handlePay(payment.amount)} style={styles.payButton}>
+                          <Text style={styles.payButtonText}>
+                            Pay →
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             ))}
           </View>
         </Animated.View>
@@ -1292,14 +1318,26 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     fontFamily: 'SpaceMono',
   },
+  // Rows are built in JS (buildPaymentGridRows) and each is its own flex row, so
+  // nothing wraps. Do NOT reintroduce flexWrap here: the previous single wrapping
+  // row gave its cells a percentage width that left no room for the dividers
+  // between them, which overflowed the container and wrapped a cell away.
   paymentGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     backgroundColor: 'transparent',
     rowGap: 14,
   },
+  paymentGridRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: 'transparent',
+  },
+  // flex:1 over a fixed percentage: cells split whatever the dividers leave behind,
+  // so the row fits at any screen width instead of overflowing by a fixed amount.
   paymentGridCell: {
-    width: '33.333%',
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
     paddingHorizontal: 4,
     backgroundColor: 'transparent',
   },
@@ -1310,8 +1348,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     alignSelf: 'center',
   },
+  // Same footprint as the divider, no rule. Holds the column geometry of a
+  // partially filled last row so its cells line up with the rows above.
+  paymentGridDividerSpacer: {
+    width: 1,
+    marginHorizontal: 8,
+    backgroundColor: 'transparent',
+  },
+  // lineHeight + minHeight reserve the full two lines numberOfLines={2} allows, so a
+  // one-line name and a wrapped one push the amount below them to the same baseline.
   paymentNameLabel: {
     fontSize: 9,
+    lineHeight: 12,
+    minHeight: 24,
     color: 'rgba(176,114,187,0.65)',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
@@ -1320,6 +1369,8 @@ const styles = StyleSheet.create({
   paymentAmountRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    // Guaranteed minimum gap above payButton, whose own marginTop is 'auto'.
+    marginBottom: 6,
     backgroundColor: 'transparent',
   },
   paymentAmountValue: {
@@ -1480,8 +1531,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
+  // marginTop:'auto' pins the button to the bottom of the (stretched) cell, so the
+  // buttons in a row stay on one line even where font scaling defeats the name slot's
+  // fixed minHeight. The gap above it is paymentAmountRow's marginBottom, because an
+  // auto margin cannot also carry a minimum.
   payButton: {
-    marginTop: 6,
+    marginTop: 'auto',
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 4,
