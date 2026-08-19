@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, Share, ActivityIndicator } from 'react-native';
+import { StyleSheet, TouchableOpacity, Share, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as StoreReview from 'expo-store-review';
 import { Text, View } from '@/components/Themed';
@@ -26,13 +26,10 @@ import { buildShareMessage } from '@/utils/shareMessage';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
-import { buildSummaryListData, SummaryListItem } from '@/utils/summaryListData';
-import { summaryStyles } from '@/components/summary/summaryStyles';
-import BalanceCard from '@/components/summary/BalanceCard';
-import BankerPayoutRow from '@/components/summary/BankerPayoutRow';
-import SettlementCard from '@/components/summary/SettlementCard';
+import { buildSummaryListData } from '@/utils/summaryListData';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
+import SummaryView from '@/components/summary/SummaryView';
 
 // Fallback Banner Component
 function isRetryableFallback(error?: string, balances?: PlayerBalance[], tolerance: number = 2.50): boolean {
@@ -439,53 +436,6 @@ setSettlementResult(cachedResult);
     [groupedSettlements, summary, activeGame],
   );
 
-  const keyExtractor = useCallback((item: SummaryListItem) => item.key, []);
-
-  const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<SummaryListItem>) => {
-      switch (item.type) {
-        case 'empty':
-          return <SummaryEmptyState label={item.label} icon={item.icon} />;
-        case 'bankerPayout':
-          return (
-            <BankerPayoutRow
-              recipient={item.recipient}
-              amount={item.amount}
-              recipientPayment={paymentByName.get(item.recipient)}
-              formatAmount={formatAmount}
-            />
-          );
-        case 'settlement':
-          return (
-            <SettlementCard
-              groupedSettlement={item.grouped}
-              recipientPayment={paymentByName.get(item.grouped.recipient)}
-              reduceMotion={reduceMotion}
-              formatAmount={formatAmount}
-            />
-          );
-        case 'sectionHeader':
-          return (
-            <View style={summaryStyles.listSectionHeader}>
-              <SummaryHudHeader label={item.label} />
-            </View>
-          );
-        case 'balance':
-          return (
-            <View style={item.isLast ? undefined : summaryStyles.balanceGap}>
-              <BalanceCard
-                balance={item.balance}
-                reduceMotion={reduceMotion}
-                hint={item.hint}
-                formatAmountCompact={formatAmountCompact}
-              />
-            </View>
-          );
-      }
-    },
-    [paymentByName, reduceMotion, formatAmount, formatAmountCompact],
-  );
-
   if (!activeGame || !summary) {
     return (
       <View style={styles.container}>
@@ -592,27 +542,13 @@ setSettlementResult(cachedResult);
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <SummaryView
         data={listData}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
+        formatAmount={formatAmount}
+        formatAmountCompact={formatAmountCompact}
+        paymentByName={paymentByName}
+        reduceMotion={reduceMotion}
         ListHeaderComponent={listHeader}
-        style={summaryStyles.scrollView}
-        contentContainerStyle={summaryStyles.listContent}
-        initialNumToRender={10}
-        maxToRenderPerBatch={8}
-        /* RN's default 21, not the 5 the other converted surfaces use: SettlementCard
-           owns `isExpanded` local state that a user expects to persist. At windowSize=5
-           a card scrolled ~2 viewports away unmounts and comes back COLLAPSED, which is
-           reachable around a 12-20 player game. Under the pre-virtualization ScrollView
-           expansion survived any amount of scrolling; this keeps that. */
-        windowSize={21}
-        /* Same reason, second half: these cells CHANGE HEIGHT on expand, and Android's
-           default removeClippedSubviews={true} detaches/reattaches native views around
-           measurements it took at the old height. index.tsx:211 opts out for a different
-           reason (Reanimated Swipeable); this surface is the only one with variable-height
-           cells. */
-        removeClippedSubviews={false}
       />
 
       {/* Actions */}
