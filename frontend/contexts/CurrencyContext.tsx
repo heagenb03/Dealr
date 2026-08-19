@@ -16,12 +16,7 @@ import {
   seedPrefIfAbsent,
   resolveEnumPref,
 } from '@/services/userPrefsService';
-import { getDefaultCashUnit } from '@/constants/CashUnits';
-import {
-  compactAmountFrom,
-  compactThreshold,
-  FLAT_COMPACT_THRESHOLD,
-} from '@/utils/compactAmount';
+import { createCurrencyFormatters } from '@/utils/currencyFormat';
 
 const CURRENCY_CODES = Object.keys(SUPPORTED_CURRENCIES) as CurrencyCode[];
 
@@ -108,102 +103,17 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     }
   }, [uid]);
 
-  const meta = SUPPORTED_CURRENCIES[currency];
-
-  // One formatter per currency, not one per call. PlayerCardActive calls
-  // formatAmount 4x per card, so a 50-player active screen constructed ~200 of
-  // these per mount. `meta` is a stable module constant per code, so this
-  // rebuilds only on a real currency change.
+  // One formatter bundle per currency, not one per call. PlayerCardActive calls
+  // formatAmount 4x per card, so a 50-player active screen would otherwise
+  // construct ~200 Intl.NumberFormats per mount. `currency` is a plain string, so
+  // this rebuilds only on a real currency change.
   //
-  // Construction can throw on a runtime with limited Intl support, and it now
-  // happens during render — so it is caught here and degrades to null rather
-  // than taking the whole provider down. `.format()` keeps its own catch.
-  const numberFormat = useMemo<Intl.NumberFormat | null>(() => {
-    try {
-      return new Intl.NumberFormat(meta.locale, {
-        style: 'currency',
-        currency: meta.code,
-        minimumFractionDigits: meta.decimals,
-        maximumFractionDigits: meta.decimals,
-      });
-    } catch {
-      return null;
-    }
-  }, [meta]);
-
-  // Second formatter, for the already-divided value in a compact result.
-  // Fraction digits are pinned 0-1 REGARDLESS of meta.decimals: JPY is a
-  // 0-decimal currency, and inheriting that would round ￥200,500 to "￥201k"
-  // instead of "￥200.5k". Same try/catch degradation as numberFormat above —
-  // construction happens during render and can throw on a limited-Intl runtime.
-  const scaledNumberFormat = useMemo<Intl.NumberFormat | null>(() => {
-    try {
-      return new Intl.NumberFormat(meta.locale, {
-        style: 'currency',
-        currency: meta.code,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 1,
-      });
-    } catch {
-      return null;
-    }
-  }, [meta]);
-
-  const formatAmount = useCallback((value: number): string => {
-    if (numberFormat) {
-      try {
-        return numberFormat.format(value);
-      } catch {
-        // fall through to the symbol fallback below
-      }
-    }
-    return `${meta.symbol}${value.toFixed(meta.decimals)}`;
-  }, [numberFormat, meta]);
-
-  // Renders an already-scaled value (e.g. 1.5 for "1.5k"). Falls back to a bare
-  // symbol prefix if Intl is unavailable, so a missing Intl cannot take the
-  // provider down. Not locale-correct in that path — nothing is. The suffix
-  // ("k"/"M") is NOT missing here: spliceSuffix runs in compactAmount.ts's
-  // compactAmountFrom, outside this function, so it's still appended to
-  // whatever this returns.
-  //
-  // `scaled` arrives undivided by anything but the /1000 or /1e6 compactAmount
-  // already did — it is a raw JS float (1234.56 / 1000 = 1.2345599999999999),
-  // so it must be rounded to one decimal here, matching what the Intl path
-  // above and formatAmount's own fallback both produce. parseFloat drops a
-  // trailing ".0" so 1.0 renders "1", not "1.0".
-  const formatScaled = useCallback((scaled: number): string => {
-    if (scaledNumberFormat) {
-      try {
-        return scaledNumberFormat.format(scaled);
-      } catch {
-        // fall through
-      }
-    }
-    return `${meta.symbol}${parseFloat(scaled.toFixed(1))}`;
-  }, [scaledNumberFormat, meta]);
-
-  const formatAmountCompact = useCallback(
-    (value: number): string =>
-      compactAmountFrom(value, FLAT_COMPACT_THRESHOLD, formatAmount, formatScaled),
-    [formatAmount, formatScaled],
-  );
-
-  // Threshold depends only on the currency code, so it is memoized rather than
-  // recomputed per call. This feeds formatAmountCompactScaled specifically
-  // (formatAmountCompact uses the flat FLAT_COMPACT_THRESHOLD and never reads
-  // this) — the scaled formatter renders all three collapsed-row segments
-  // (buy-in, rounding, tolerance) on the active screen, so it runs ~3x per
-  // render there.
-  const scaledThreshold = useMemo(
-    () => compactThreshold(getDefaultCashUnit(currency)),
+  // Construction can throw on a runtime with limited Intl support, and it happens
+  // during render — createCurrencyFormatters catches it internally and degrades
+  // to a symbol-prefix fallback rather than taking the whole provider down.
+  const { meta, formatAmount, formatAmountCompact, formatAmountCompactScaled } = useMemo(
+    () => createCurrencyFormatters(currency),
     [currency],
-  );
-
-  const formatAmountCompactScaled = useCallback(
-    (value: number): string =>
-      compactAmountFrom(value, scaledThreshold, formatAmount, formatScaled),
-    [scaledThreshold, formatAmount, formatScaled],
   );
 
   return (
