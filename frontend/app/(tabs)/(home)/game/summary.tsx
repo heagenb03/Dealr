@@ -14,7 +14,6 @@ import { reverseProfileStats } from '@/services/firebaseService';
 import { getSettlements, calculateBankerSettlements, SOLVER_TIMEOUT_SENTINEL } from '@/services/settlementService';
 import { PlayerBalance, SettlementResult } from '@/types/game';
 import { groupSettlementsByRecipient, sortPaymentsByAmount } from '@/utils/settlementUtils';
-import { getNetBalanceColor, netBalanceDisplay } from '@/utils/formatUtils';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import Button from '@/components/Button';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,119 +34,9 @@ import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
 import { buildSummaryListData, SummaryListItem } from '@/utils/summaryListData';
 import { buildPaymentGridRows } from '@/utils/paymentGridRows';
 import { summaryStyles } from '@/components/summary/summaryStyles';
-
-// HUD Section Header Component
-function HudSectionHeader({ label }: { label: string }) {
-  return (
-    <View style={summaryStyles.hudHeader}>
-      <View style={summaryStyles.hudLine} />
-      <Text style={summaryStyles.hudLabel}>{label}</Text>
-      <View style={summaryStyles.hudLine} />
-    </View>
-  );
-}
-
-// Read-Only Player Balance Card Component
-interface BalanceCardProps {
-  balance: PlayerBalance;
-  reduceMotion: boolean;
-  hint?: string;
-}
-
-function BalanceCard({ balance, reduceMotion, hint }: BalanceCardProps) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const { formatAmountCompact } = useCurrency();
-
-  const animateScaleDown = useCallback(() => {
-    if (!reduceMotion) {
-      Animated.spring(scaleAnim, {
-        toValue: 0.975,
-        tension: 300,
-        friction: 20,
-        useNativeDriver: true
-      }).start();
-    }
-  }, [reduceMotion, scaleAnim]);
-
-  const animateScaleUp = useCallback(() => {
-    if (!reduceMotion) {
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 200,
-        friction: 15,
-        useNativeDriver: true
-      }).start();
-    }
-  }, [reduceMotion, scaleAnim]);
-
-  const tapGesture = useMemo(() => Gesture.Tap()
-    .maxDuration(200)
-    .maxDistance(10)
-    .onBegin(() => runOnJS(animateScaleDown)())
-    .onFinalize(() => runOnJS(animateScaleUp)()), [animateScaleDown, animateScaleUp]);
-
-  // Summary cards show compact (k/M) figures at a glance; settlement cards carry the exact amounts.
-  // The sign rule lives in netBalanceDisplay so this card and the active screen's
-  // PlayerCardCompleted cannot drift apart again.
-  const netDisplay = netBalanceDisplay(balance.netBalance, formatAmountCompact);
-
-  return (
-    <GestureDetector gesture={tapGesture}>
-      <Animated.View
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel={`${balance.playerName}, Net: ${netDisplay}`}
-        style={[
-          summaryStyles.playerCard,
-          !reduceMotion && { transform: [{ scale: scaleAnim }] }
-        ]}
-      >
-        {/* Name row */}
-        <View style={summaryStyles.cardHeader}>
-          <View style={summaryStyles.nameRow}>
-            <Text style={summaryStyles.playerName}>{balance.playerName}</Text>
-            {hint && <Text style={summaryStyles.balanceHint}>{hint}</Text>}
-          </View>
-        </View>
-
-        {/* Data row — IN | OUT | NET */}
-        <View style={summaryStyles.dataRow}>
-          <View style={summaryStyles.dataItem}>
-            <Text style={summaryStyles.dataLabel}>In</Text>
-            <Text style={summaryStyles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalBuyins)}</Text>
-          </View>
-          <View style={summaryStyles.dataDivider} />
-          <View style={summaryStyles.dataItem}>
-            <Text style={summaryStyles.dataLabel}>Out</Text>
-            <Text style={summaryStyles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalCashouts)}</Text>
-          </View>
-          <View style={summaryStyles.dataDivider} />
-          <View style={summaryStyles.dataItem}>
-            <Text style={summaryStyles.dataLabel}>Net</Text>
-            <Text style={[
-              summaryStyles.dataValue,
-              { color: getNetBalanceColor(balance.netBalance) }
-            ]} numberOfLines={1}>
-              {netDisplay}
-            </Text>
-          </View>
-        </View>
-      </Animated.View>
-    </GestureDetector>
-  );
-}
-
-// Empty State Component
-function EmptyState({ label, icon }: { label: string; icon: string }) {
-  return (
-    <View style={summaryStyles.emptyState}>
-      <View style={summaryStyles.emptyIconRing}>
-        <Ionicons name={icon as any} size={28} color="rgba(176,114,187,0.35)" />
-      </View>
-      <Text style={summaryStyles.emptyStateText}>{label}</Text>
-    </View>
-  );
-}
+import BalanceCard from '@/components/summary/BalanceCard';
+import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
+import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
 
 // Settlement Card Component
 interface SettlementCardProps {
@@ -536,7 +425,7 @@ export default function GameSummaryScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const reduceMotion = useReduceMotion();
-  const { formatAmount, currency } = useCurrency();
+  const { formatAmount, formatAmountCompact, currency } = useCurrency();
   const { registerHelp } = useHelp();
   const [helpVisible, setHelpVisible] = useState(false);
 
@@ -860,7 +749,7 @@ setSettlementResult(cachedResult);
     ({ item }: ListRenderItemInfo<SummaryListItem>) => {
       switch (item.type) {
         case 'empty':
-          return <EmptyState label={item.label} icon={item.icon} />;
+          return <SummaryEmptyState label={item.label} icon={item.icon} />;
         case 'bankerPayout':
           return (
             <BankerPayoutRow
@@ -880,25 +769,30 @@ setSettlementResult(cachedResult);
         case 'sectionHeader':
           return (
             <View style={summaryStyles.listSectionHeader}>
-              <HudSectionHeader label={item.label} />
+              <SummaryHudHeader label={item.label} />
             </View>
           );
         case 'balance':
           return (
             <View style={item.isLast ? undefined : summaryStyles.balanceGap}>
-              <BalanceCard balance={item.balance} reduceMotion={reduceMotion} hint={item.hint} />
+              <BalanceCard
+                balance={item.balance}
+                reduceMotion={reduceMotion}
+                hint={item.hint}
+                formatAmountCompact={formatAmountCompact}
+              />
             </View>
           );
       }
     },
-    [paymentByName, reduceMotion],
+    [paymentByName, reduceMotion, formatAmountCompact],
   );
 
   if (!activeGame || !summary) {
     return (
       <View style={styles.container}>
         <View style={{ flex: 1, justifyContent: 'center' }}>
-          <EmptyState label="No active game" icon="game-controller-outline" />
+          <SummaryEmptyState label="No active game" icon="game-controller-outline" />
         </View>
       </View>
     );
@@ -956,7 +850,7 @@ setSettlementResult(cachedResult);
 
       {/* Total Pot Hero Metric */}
       <View style={styles.heroPotSection}>
-        <HudSectionHeader label="TOTAL POT" />
+        <SummaryHudHeader label="TOTAL POT" />
         <View style={styles.heroPotDisplay}>
           <Text style={styles.heroPotAmount}>
             {formatAmount(summary.totalPot)}
@@ -964,7 +858,7 @@ setSettlementResult(cachedResult);
         </View>
       </View>
 
-      <HudSectionHeader label={isBanker ? 'PAYOUTS' : 'SETTLEMENTS'} />
+      <SummaryHudHeader label={isBanker ? 'PAYOUTS' : 'SETTLEMENTS'} />
 
       {isBanker && (
         <Text style={styles.bankerSubhead}>
