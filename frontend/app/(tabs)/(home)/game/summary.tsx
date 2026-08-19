@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, Share, ActivityIndicator, Animated, Linking } from 'react-native';
+import { StyleSheet, FlatList, ListRenderItemInfo, TouchableOpacity, Share, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as StoreReview from 'expo-store-review';
 import { Text, View } from '@/components/Themed';
@@ -17,16 +17,11 @@ import { groupSettlementsByRecipient } from '@/utils/settlementUtils';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import Button from '@/components/Button';
 import { Ionicons } from '@expo/vector-icons';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { computeRoundingDistortion } from '@/utils/roundingUtils';
 import { resolveCashUnit } from '@/constants/CashUnits';
 import { resolveTolerance } from '@/constants/Tolerances';
-import * as Clipboard from 'expo-clipboard';
 import { PreferredPayment } from '@/types/game';
-import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
-import { buildPaymentUri, formatHandleForDisplay } from '@/utils/paymentLinks';
 import { buildShareMessage } from '@/utils/shareMessage';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
@@ -34,84 +29,10 @@ import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
 import { buildSummaryListData, SummaryListItem } from '@/utils/summaryListData';
 import { summaryStyles } from '@/components/summary/summaryStyles';
 import BalanceCard from '@/components/summary/BalanceCard';
+import BankerPayoutRow from '@/components/summary/BankerPayoutRow';
 import SettlementCard from '@/components/summary/SettlementCard';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
-
-// Banker-mode payout row — a flat "pay this player their stack" line with an
-// optional instant Pay button. No expand/collapse: the payer is always the banker,
-// so there is nothing to drill into.
-interface BankerPayoutRowProps {
-  recipient: string;
-  amount: number;
-  recipientPayment?: PreferredPayment;
-}
-
-function BankerPayoutRow({ recipient, amount, recipientPayment }: BankerPayoutRowProps) {
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { formatAmount } = useCurrency();
-
-  const hasHandle = !!recipientPayment?.handle?.trim();
-  const methodLabel = recipientPayment ? getPaymentMethodMeta(recipientPayment.method).label : '';
-  const displayHandle = recipientPayment && hasHandle
-    ? formatHandleForDisplay(recipientPayment.method, recipientPayment.handle)
-    : '';
-  const canPay =
-    !!recipientPayment &&
-    !!buildPaymentUri(recipientPayment.method, recipientPayment.handle, amount, 'x');
-
-  const handleCopyHandle = useCallback(() => {
-    if (!recipientPayment?.handle) return;
-    Clipboard.setStringAsync(
-      formatHandleForDisplay(recipientPayment.method, recipientPayment.handle),
-    ).catch(() => {});
-    setCopied(true);
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setCopied(false), 1200);
-  }, [recipientPayment]);
-
-  useEffect(() => () => {
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-  }, []);
-
-  const handlePay = useCallback(() => {
-    if (!recipientPayment) return;
-    const uri = buildPaymentUri(recipientPayment.method, recipientPayment.handle, amount, '');
-    if (uri) Linking.openURL(uri).catch(() => {});
-  }, [recipientPayment, amount]);
-
-  return (
-    <View style={summaryStyles.payoutRow}>
-      <View style={summaryStyles.payoutInfo}>
-        <Text style={summaryStyles.recipientName}>{recipient}</Text>
-        {recipientPayment && hasHandle && (
-          <TouchableOpacity
-            onPress={handleCopyHandle}
-            accessibilityRole="button"
-            accessibilityLabel={copied ? 'Handle copied' : `Copy ${methodLabel} handle ${displayHandle}`}
-            style={summaryStyles.payeeBadgeTap}
-          >
-            <Text style={summaryStyles.payeeBadge} numberOfLines={1}>
-              {copied ? 'Copied ✓' : `${methodLabel} · ${displayHandle}`}
-            </Text>
-          </TouchableOpacity>
-        )}
-        {recipientPayment && !hasHandle && (
-          <Text style={summaryStyles.payeeBadge} numberOfLines={1}>{methodLabel}</Text>
-        )}
-      </View>
-      <View style={summaryStyles.payoutRight}>
-        <Text style={summaryStyles.payoutAmount}>{formatAmount(amount)}</Text>
-        {canPay && (
-          <TouchableOpacity onPress={handlePay} style={summaryStyles.payButton}>
-            <Text style={summaryStyles.payButtonText}>Pay →</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-}
 
 // Fallback Banner Component
 function isRetryableFallback(error?: string, balances?: PlayerBalance[], tolerance: number = 2.50): boolean {
@@ -531,6 +452,7 @@ setSettlementResult(cachedResult);
               recipient={item.recipient}
               amount={item.amount}
               recipientPayment={paymentByName.get(item.recipient)}
+              formatAmount={formatAmount}
             />
           );
         case 'settlement':

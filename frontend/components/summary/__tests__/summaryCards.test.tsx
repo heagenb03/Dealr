@@ -36,6 +36,7 @@ jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resol
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 import BalanceCard from '@/components/summary/BalanceCard';
+import BankerPayoutRow from '@/components/summary/BankerPayoutRow';
 import SettlementCard from '@/components/summary/SettlementCard';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
@@ -213,5 +214,46 @@ describe('SettlementCard', () => {
       <SettlementCard groupedSettlement={group()} reduceMotion={false} formatAmount={usd} />
     );
     expect(a11yLabels(json)).toContain('Ada receives $70.00. Expand payment details.');
+  });
+});
+
+describe('BankerPayoutRow', () => {
+  it('renders the recipient and the injected amount, with no expand affordance', () => {
+    const json = render(
+      <BankerPayoutRow recipient="Ada" amount={70} formatAmount={usd} />
+    );
+    expect(texts(json)).toEqual(['Ada', '$70.00']);
+  });
+
+  it('formats through the INJECTED formatter', () => {
+    const eur = (n: number) => `${n.toFixed(2)} €`;
+    const json = render(
+      <BankerPayoutRow recipient="Ada" amount={70} formatAmount={eur} />
+    );
+    expect(texts(json)).toContain('70.00 €');
+  });
+
+  it('renders a Pay button when the recipient has a payable handle', () => {
+    const payment: PreferredPayment = { method: 'venmo', handle: 'ada-l' };
+    const json = render(
+      <BankerPayoutRow recipient="Ada" amount={70} recipientPayment={payment} formatAmount={usd} />
+    );
+    expect(texts(json)).toContain('Pay →');
+  });
+
+  it('renders no Pay button when there is no payment method at all', () => {
+    const json = render(
+      <BankerPayoutRow recipient="Ada" amount={70} formatAmount={usd} />
+    );
+    expect(texts(json)).not.toContain('Pay →');
+  });
+
+  it('renders the method label alone when there is a method but no handle', () => {
+    const payment: PreferredPayment = { method: 'cash' };
+    const json = render(
+      <BankerPayoutRow recipient="Ada" amount={70} recipientPayment={payment} formatAmount={usd} />
+    );
+    expect(texts(json).some((t) => t.includes('·'))).toBe(false);
+    expect(texts(json)).not.toContain('Pay →');
   });
 });
