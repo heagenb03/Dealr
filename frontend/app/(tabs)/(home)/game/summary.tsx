@@ -34,14 +34,15 @@ import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
 import { buildSummaryListData, SummaryListItem } from '@/utils/summaryListData';
 import { buildPaymentGridRows } from '@/utils/paymentGridRows';
+import { summaryStyles } from '@/components/summary/summaryStyles';
 
 // HUD Section Header Component
 function HudSectionHeader({ label }: { label: string }) {
   return (
-    <View style={styles.hudHeader}>
-      <View style={styles.hudLine} />
-      <Text style={styles.hudLabel}>{label}</Text>
-      <View style={styles.hudLine} />
+    <View style={summaryStyles.hudHeader}>
+      <View style={summaryStyles.hudLine} />
+      <Text style={summaryStyles.hudLabel}>{label}</Text>
+      <View style={summaryStyles.hudLine} />
     </View>
   );
 }
@@ -97,34 +98,34 @@ function BalanceCard({ balance, reduceMotion, hint }: BalanceCardProps) {
         accessibilityRole="button"
         accessibilityLabel={`${balance.playerName}, Net: ${netDisplay}`}
         style={[
-          styles.playerCard,
+          summaryStyles.playerCard,
           !reduceMotion && { transform: [{ scale: scaleAnim }] }
         ]}
       >
         {/* Name row */}
-        <View style={styles.cardHeader}>
-          <View style={styles.nameRow}>
-            <Text style={styles.playerName}>{balance.playerName}</Text>
-            {hint && <Text style={styles.balanceHint}>{hint}</Text>}
+        <View style={summaryStyles.cardHeader}>
+          <View style={summaryStyles.nameRow}>
+            <Text style={summaryStyles.playerName}>{balance.playerName}</Text>
+            {hint && <Text style={summaryStyles.balanceHint}>{hint}</Text>}
           </View>
         </View>
 
         {/* Data row — IN | OUT | NET */}
-        <View style={styles.dataRow}>
-          <View style={styles.dataItem}>
-            <Text style={styles.dataLabel}>In</Text>
-            <Text style={styles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalBuyins)}</Text>
+        <View style={summaryStyles.dataRow}>
+          <View style={summaryStyles.dataItem}>
+            <Text style={summaryStyles.dataLabel}>In</Text>
+            <Text style={summaryStyles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalBuyins)}</Text>
           </View>
-          <View style={styles.dataDivider} />
-          <View style={styles.dataItem}>
-            <Text style={styles.dataLabel}>Out</Text>
-            <Text style={styles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalCashouts)}</Text>
+          <View style={summaryStyles.dataDivider} />
+          <View style={summaryStyles.dataItem}>
+            <Text style={summaryStyles.dataLabel}>Out</Text>
+            <Text style={summaryStyles.dataValue} numberOfLines={1}>{formatAmountCompact(balance.totalCashouts)}</Text>
           </View>
-          <View style={styles.dataDivider} />
-          <View style={styles.dataItem}>
-            <Text style={styles.dataLabel}>Net</Text>
+          <View style={summaryStyles.dataDivider} />
+          <View style={summaryStyles.dataItem}>
+            <Text style={summaryStyles.dataLabel}>Net</Text>
             <Text style={[
-              styles.dataValue,
+              summaryStyles.dataValue,
               { color: getNetBalanceColor(balance.netBalance) }
             ]} numberOfLines={1}>
               {netDisplay}
@@ -139,11 +140,11 @@ function BalanceCard({ balance, reduceMotion, hint }: BalanceCardProps) {
 // Empty State Component
 function EmptyState({ label, icon }: { label: string; icon: string }) {
   return (
-    <View style={styles.emptyState}>
-      <View style={styles.emptyIconRing}>
+    <View style={summaryStyles.emptyState}>
+      <View style={summaryStyles.emptyIconRing}>
         <Ionicons name={icon as any} size={28} color="rgba(176,114,187,0.35)" />
       </View>
-      <Text style={styles.emptyStateText}>{label}</Text>
+      <Text style={summaryStyles.emptyStateText}>{label}</Text>
     </View>
   );
 }
@@ -263,23 +264,23 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
   return (
     <Animated.View
       style={[
-        styles.settlementCard,
+        summaryStyles.settlementCard,
         !reduceMotion && { transform: [{ scale: scaleAnim }] }
       ]}
     >
       <GestureDetector gesture={tapGesture}>
-        <View style={styles.settlementCardBody}>
-          <View style={styles.settlementHeader}>
-            <View style={styles.recipientNameWrapper}>
+        <View style={summaryStyles.settlementCardBody}>
+          <View style={summaryStyles.settlementHeader}>
+            <View style={summaryStyles.recipientNameWrapper}>
               <View
                 accessible={true}
                 accessibilityRole="button"
                 accessibilityLabel={`${groupedSettlement.recipient} receives ${formatAmount(groupedSettlement.totalAmount)}. ${isExpanded ? 'Collapse' : 'Expand'} payment details.`}
                 accessibilityHint={isExpanded ? 'Double tap to collapse payment details' : 'Double tap to expand payment details'}
                 accessibilityState={{ expanded: isExpanded }}
-                style={styles.toggleA11yRegion}
+                style={summaryStyles.toggleA11yRegion}
               >
-                <Text style={styles.recipientName}>{groupedSettlement.recipient}</Text>
+                <Text style={summaryStyles.recipientName}>{groupedSettlement.recipient}</Text>
               </View>
               {recipientPayment && hasHandle && (
                 <GestureDetector gesture={badgeTapGesture}>
@@ -287,16 +288,16 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
                     accessible={true}
                     accessibilityRole="button"
                     accessibilityLabel={copied ? 'Handle copied' : `Copy ${methodLabel} handle ${displayHandle}`}
-                    style={styles.payeeBadgeTap}
+                    style={summaryStyles.payeeBadgeTap}
                   >
-                    <Text style={styles.payeeBadge} numberOfLines={1}>
+                    <Text style={summaryStyles.payeeBadge} numberOfLines={1}>
                       {copied ? 'Copied ✓' : `${methodLabel} · ${displayHandle}`}
                     </Text>
                   </View>
                 </GestureDetector>
               )}
               {recipientPayment && !hasHandle && (
-                <Text style={styles.payeeBadge} numberOfLines={1}>{methodLabel}</Text>
+                <Text style={summaryStyles.payeeBadge} numberOfLines={1}>{methodLabel}</Text>
               )}
             </View>
             <Ionicons
@@ -305,9 +306,9 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
               color="rgba(176,114,187,0.6)"
             />
           </View>
-          <View style={styles.totalSection}>
-            <Text style={styles.totalLabel}>RECEIVES</Text>
-            <Text style={styles.totalAmount}>
+          <View style={summaryStyles.totalSection}>
+            <Text style={summaryStyles.totalLabel}>RECEIVES</Text>
+            <Text style={summaryStyles.totalAmount}>
               {formatAmount(groupedSettlement.totalAmount)}
             </Text>
           </View>
@@ -318,17 +319,17 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
       {isExpanded && (
         <Animated.View
           style={[
-            styles.paymentDetailsSection,
+            summaryStyles.paymentDetailsSection,
             !reduceMotion && { opacity: opacityAnim }
           ]}
         >
-          <View style={styles.paymentDivider} />
-          <Text style={styles.paymentSectionLabel}>
+          <View style={summaryStyles.paymentDivider} />
+          <Text style={summaryStyles.paymentSectionLabel}>
             FROM ({groupedSettlement.payments.length} {groupedSettlement.payments.length === 1 ? 'PLAYER' : 'PLAYERS'})
           </Text>
-          <View style={styles.paymentGrid}>
+          <View style={summaryStyles.paymentGrid}>
             {paymentRows.map((row, rowIndex) => (
-              <View key={rowIndex} style={styles.paymentGridRow}>
+              <View key={rowIndex} style={summaryStyles.paymentGridRow}>
                 {row.map((slot, slotIndex) => {
                   if (slot.kind === 'divider') {
                     // The invisible ones still hold their width, so a short last
@@ -336,27 +337,27 @@ function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: S
                     return (
                       <View
                         key={slotIndex}
-                        style={slot.visible ? styles.paymentGridDivider : styles.paymentGridDividerSpacer}
+                        style={slot.visible ? summaryStyles.paymentGridDivider : summaryStyles.paymentGridDividerSpacer}
                       />
                     );
                   }
                   if (slot.kind === 'spacer') {
-                    return <View key={slotIndex} style={styles.paymentGridCell} />;
+                    return <View key={slotIndex} style={summaryStyles.paymentGridCell} />;
                   }
                   const payment = slot.payment;
                   return (
-                    <View key={slotIndex} style={styles.paymentGridCell}>
-                      <Text style={styles.paymentNameLabel} numberOfLines={2} ellipsizeMode="tail">
+                    <View key={slotIndex} style={summaryStyles.paymentGridCell}>
+                      <Text style={summaryStyles.paymentNameLabel} numberOfLines={2} ellipsizeMode="tail">
                         {payment.from}
                       </Text>
-                      <View style={styles.paymentAmountRow}>
-                        <Text style={styles.paymentAmountValue}>
+                      <View style={summaryStyles.paymentAmountRow}>
+                        <Text style={summaryStyles.paymentAmountValue}>
                           {formatAmount(payment.amount)}
                         </Text>
                       </View>
                       {recipientPayment && buildPaymentUri(recipientPayment.method, recipientPayment.handle, payment.amount, 'x') && (
-                        <TouchableOpacity onPress={() => handlePay(payment.amount)} style={styles.payButton}>
-                          <Text style={styles.payButtonText}>
+                        <TouchableOpacity onPress={() => handlePay(payment.amount)} style={summaryStyles.payButton}>
+                          <Text style={summaryStyles.payButtonText}>
                             Pay →
                           </Text>
                         </TouchableOpacity>
@@ -417,30 +418,30 @@ function BankerPayoutRow({ recipient, amount, recipientPayment }: BankerPayoutRo
   }, [recipientPayment, amount]);
 
   return (
-    <View style={styles.payoutRow}>
-      <View style={styles.payoutInfo}>
-        <Text style={styles.recipientName}>{recipient}</Text>
+    <View style={summaryStyles.payoutRow}>
+      <View style={summaryStyles.payoutInfo}>
+        <Text style={summaryStyles.recipientName}>{recipient}</Text>
         {recipientPayment && hasHandle && (
           <TouchableOpacity
             onPress={handleCopyHandle}
             accessibilityRole="button"
             accessibilityLabel={copied ? 'Handle copied' : `Copy ${methodLabel} handle ${displayHandle}`}
-            style={styles.payeeBadgeTap}
+            style={summaryStyles.payeeBadgeTap}
           >
-            <Text style={styles.payeeBadge} numberOfLines={1}>
+            <Text style={summaryStyles.payeeBadge} numberOfLines={1}>
               {copied ? 'Copied ✓' : `${methodLabel} · ${displayHandle}`}
             </Text>
           </TouchableOpacity>
         )}
         {recipientPayment && !hasHandle && (
-          <Text style={styles.payeeBadge} numberOfLines={1}>{methodLabel}</Text>
+          <Text style={summaryStyles.payeeBadge} numberOfLines={1}>{methodLabel}</Text>
         )}
       </View>
-      <View style={styles.payoutRight}>
-        <Text style={styles.payoutAmount}>{formatAmount(amount)}</Text>
+      <View style={summaryStyles.payoutRight}>
+        <Text style={summaryStyles.payoutAmount}>{formatAmount(amount)}</Text>
         {canPay && (
-          <TouchableOpacity onPress={handlePay} style={styles.payButton}>
-            <Text style={styles.payButtonText}>Pay →</Text>
+          <TouchableOpacity onPress={handlePay} style={summaryStyles.payButton}>
+            <Text style={summaryStyles.payButtonText}>Pay →</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -878,13 +879,13 @@ setSettlementResult(cachedResult);
           );
         case 'sectionHeader':
           return (
-            <View style={styles.listSectionHeader}>
+            <View style={summaryStyles.listSectionHeader}>
               <HudSectionHeader label={item.label} />
             </View>
           );
         case 'balance':
           return (
-            <View style={item.isLast ? undefined : styles.balanceGap}>
+            <View style={item.isLast ? undefined : summaryStyles.balanceGap}>
               <BalanceCard balance={item.balance} reduceMotion={reduceMotion} hint={item.hint} />
             </View>
           );
@@ -1004,8 +1005,8 @@ setSettlementResult(cachedResult);
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListHeaderComponent={listHeader}
-        style={styles.scrollView}
-        contentContainerStyle={styles.listContent}
+        style={summaryStyles.scrollView}
+        contentContainerStyle={summaryStyles.listContent}
         initialNumToRender={10}
         maxToRenderPerBatch={8}
         /* RN's default 21, not the 5 the other converted surfaces use: SettlementCard
@@ -1087,29 +1088,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
-  // padding moved to listContent: RN documents contentContainerStyle as the place for a
-  // list's inner padding; padding on a FlatList's `style` insets the scroll frame itself.
-  scrollView: {
-    flex: 1,
-  },
-  listContent: {
-    padding: 20,
-    // 20 (the ScrollView's old bottom padding) + 32 (the balances section's old
-    // marginBottom, destroyed by flattening).
-    paddingBottom: 52,
-  },
-  // Re-creates the settlements section's marginBottom: 32, which used to sit between the
-  // last settlement card and the FINAL BALANCES header.
-  listSectionHeader: {
-    marginTop: 32,
-    backgroundColor: 'transparent',
-  },
-  // Re-creates the `gap: 8` the balances container used to apply. Applied to every
-  // balance row but the last, so there is no trailing gap — matching gap semantics exactly.
-  balanceGap: {
-    marginBottom: 8,
-    backgroundColor: 'transparent',
-  },
   header: {
     marginBottom: 24,
     backgroundColor: 'transparent',
@@ -1154,292 +1132,6 @@ const styles = StyleSheet.create({
     fontSize: 52,
     fontWeight: 'bold',
     color: '#B072BB',
-  },
-  hudHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    gap: 10,
-    backgroundColor: 'transparent',
-  },
-  hudLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#2A2A2A',
-  },
-  hudLabel: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#B072BB',
-    textTransform: 'uppercase',
-    letterSpacing: 3,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 28,
-    backgroundColor: 'transparent',
-  },
-  emptyIconRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(176,114,187,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    backgroundColor: 'transparent',
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.35)',
-    letterSpacing: 0.5,
-  },
-  statusCard: {
-    backgroundColor: '#111111',
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    marginBottom: 24,
-    gap: 12,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  statusDotServer: {
-    backgroundColor: '#51A687',
-  },
-  statusDotLocal: {
-    backgroundColor: '#C04657',
-  },
-  statusTextGroup: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  statusTitle: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  statusSubtitle: {
-    color: '#BBBBBB',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  statusActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 12,
-  },
-  retryButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#B072BB',
-  },
-  retryButtonText: {
-    color: '#B072BB',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  settlementCard: {
-    backgroundColor: '#161616',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#242424',
-    borderTopColor: 'rgba(176,114,187,0.15)',
-  },
-  settlementCardBody: {
-    backgroundColor: 'transparent',
-  },
-  settlementHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    backgroundColor: 'transparent',
-  },
-  recipientName: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-  totalSection: {
-    backgroundColor: 'transparent',
-  },
-  totalLabel: {
-    fontSize: 9,
-    color: 'rgba(176,114,187,0.65)',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: 3,
-  },
-  totalAmount: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: 'SpaceMono',
-  },
-  paymentDetailsSection: {
-    backgroundColor: 'transparent',
-    marginTop: 12,
-  },
-  paymentDivider: {
-    height: 1,
-    backgroundColor: '#2A2A2A',
-    marginBottom: 8,
-  },
-  paymentSectionLabel: {
-    fontSize: 9,
-    color: 'rgba(176,114,187,0.65)',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: 8,
-  },
-  paymentRow: {
-    backgroundColor: 'transparent',
-    marginBottom: 6,
-  },
-  paymentText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: 'SpaceMono',
-  },
-  // Rows are built in JS (buildPaymentGridRows) and each is its own flex row, so
-  // nothing wraps. Do NOT reintroduce flexWrap here: the previous single wrapping
-  // row gave its cells a percentage width that left no room for the dividers
-  // between them, which overflowed the container and wrapped a cell away.
-  paymentGrid: {
-    flexDirection: 'column',
-    backgroundColor: 'transparent',
-    rowGap: 14,
-  },
-  paymentGridRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: 'transparent',
-  },
-  // flex:1 over a fixed percentage: cells split whatever the dividers leave behind,
-  // so the row fits at any screen width instead of overflowing by a fixed amount.
-  paymentGridCell: {
-    flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
-    paddingHorizontal: 4,
-    backgroundColor: 'transparent',
-  },
-  paymentGridDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: '#2A2A2A',
-    marginHorizontal: 8,
-    alignSelf: 'center',
-  },
-  // Same footprint as the divider, no rule. Holds the column geometry of a
-  // partially filled last row so its cells line up with the rows above.
-  paymentGridDividerSpacer: {
-    width: 1,
-    marginHorizontal: 8,
-    backgroundColor: 'transparent',
-  },
-  // lineHeight + minHeight reserve the full two lines numberOfLines={2} allows, so a
-  // one-line name and a wrapped one push the amount below them to the same baseline.
-  paymentNameLabel: {
-    fontSize: 9,
-    lineHeight: 12,
-    minHeight: 24,
-    color: 'rgba(176,114,187,0.65)',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: 4,
-  },
-  paymentAmountRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    // Guaranteed minimum gap above payButton, whose own marginTop is 'auto'.
-    marginBottom: 6,
-    backgroundColor: 'transparent',
-  },
-  paymentAmountValue: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: 'SpaceMono',
-  },
-  // Player Card styles (read-only version)
-  playerCard: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#161616',
-    borderWidth: 1,
-    borderColor: '#242424',
-    borderTopColor: 'rgba(176,114,187,0.15)',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    backgroundColor: 'transparent',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'transparent',
-  },
-  playerName: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-  balanceHint: {
-    marginLeft: 6,
-    fontSize: 10,
-    fontStyle: 'italic',
-    color: 'rgba(255,255,255,0.35)',
-  },
-  dataRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  dataItem: {
-    flex: 1,
-    alignItems: 'flex-start',
-    backgroundColor: 'transparent',
-  },
-  dataLabel: {
-    fontSize: 9,
-    color: 'rgba(176,114,187,0.65)',
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    marginBottom: 3,
-  },
-  dataValue: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: 'SpaceMono',
-  },
-  dataDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: '#2A2A2A',
-    marginHorizontal: 12,
   },
   actions: {
     paddingVertical: 20,
@@ -1510,81 +1202,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     letterSpacing: 0.3,
   },
-  recipientNameWrapper: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  payeeBadge: {
-    fontSize: 12,
-    fontFamily: 'SpaceMono',
-    color: 'rgba(176,114,187,0.9)',
-    marginTop: 2,
-    letterSpacing: 0.2,
-  },
-  toggleA11yRegion: {
-    backgroundColor: 'transparent',
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-  },
-  payeeBadgeTap: {
-    backgroundColor: 'transparent',
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-  },
-  // marginTop:'auto' pins the button to the bottom of the (stretched) cell, so the
-  // buttons in a row stay on one line even where font scaling defeats the name slot's
-  // fixed minHeight. The gap above it is paymentAmountRow's marginBottom, because an
-  // auto margin cannot also carry a minimum.
-  payButton: {
-    marginTop: 'auto',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(176,114,187,0.35)',
-    alignSelf: 'stretch',
-  },
-  payButtonText: {
-    fontSize: 11,
-    color: '#B072BB',
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
   bankerSubhead: {
     fontSize: 12,
     color: 'rgba(176,114,187,0.75)',
     textAlign: 'center',
     marginBottom: 12,
     letterSpacing: 0.3,
-  },
-  payoutRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#161616',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#242424',
-    borderTopColor: 'rgba(176,114,187,0.15)',
-    gap: 12,
-  },
-  payoutInfo: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  payoutRight: {
-    alignItems: 'flex-end',
-    backgroundColor: 'transparent',
-    gap: 6,
-  },
-  payoutAmount: {
-    fontSize: 15,
-    color: '#FFFFFF',
-    fontFamily: 'SpaceMono',
-    fontWeight: '600',
   },
 });
