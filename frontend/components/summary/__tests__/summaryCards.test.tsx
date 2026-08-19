@@ -36,9 +36,11 @@ jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resol
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 import BalanceCard from '@/components/summary/BalanceCard';
+import SettlementCard from '@/components/summary/SettlementCard';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
-import { PlayerBalance } from '@/types/game';
+import { GroupedSettlement } from '@/utils/settlementUtils';
+import { PlayerBalance, PreferredPayment } from '@/types/game';
 
 /** Every rendered string, in document order. */
 const texts = (node: any, out: string[] = []): string[] => {
@@ -151,5 +153,65 @@ describe('BalanceCard', () => {
       />
     );
     expect(a11yLabels(json)).toEqual(['Ada, Net: +$1.5k']);
+  });
+});
+
+const group = (over: Partial<GroupedSettlement> = {}): GroupedSettlement => ({
+  recipient: 'Ada',
+  totalAmount: 70,
+  payments: [{ from: 'Bob', amount: 30 }, { from: 'Carl', amount: 40 }],
+  ...over,
+});
+
+describe('SettlementCard', () => {
+  it('renders the recipient, the RECEIVES label and the injected total, collapsed by default', () => {
+    const json = render(
+      <SettlementCard groupedSettlement={group()} reduceMotion={false} formatAmount={usd} />
+    );
+    expect(texts(json)).toEqual(['Ada', 'RECEIVES', '$70.00']);
+    // Collapsed: the FROM grid and its payer names must not be in the tree.
+    expect(texts(json)).not.toContain('Bob');
+  });
+
+  it('formats through the INJECTED formatter', () => {
+    const eur = (n: number) => `${n.toFixed(2)} €`;
+    const json = render(
+      <SettlementCard groupedSettlement={group()} reduceMotion={false} formatAmount={eur} />
+    );
+    expect(texts(json)).toContain('70.00 €');
+  });
+
+  it('renders the payee badge as "method · handle" when the recipient has a handle', () => {
+    const payment: PreferredPayment = { method: 'venmo', handle: 'ada-l' };
+    const json = render(
+      <SettlementCard
+        groupedSettlement={group()}
+        reduceMotion={false}
+        recipientPayment={payment}
+        formatAmount={usd}
+      />
+    );
+    expect(texts(json).some((t) => t.includes('·'))).toBe(true);
+    expect(texts(json).join(' ')).toContain('ada-l');
+  });
+
+  it('renders the method label alone when the recipient has a method but no handle', () => {
+    const payment: PreferredPayment = { method: 'cash' };
+    const json = render(
+      <SettlementCard
+        groupedSettlement={group()}
+        reduceMotion={false}
+        recipientPayment={payment}
+        formatAmount={usd}
+      />
+    );
+    expect(texts(json).some((t) => t.includes('·'))).toBe(false);
+  });
+
+  it('announces the collapsed/expanded state on the toggle region', () => {
+    const json = render(
+      <SettlementCard groupedSettlement={group()} reduceMotion={false} formatAmount={usd} />
+    );
+    expect(a11yLabels(json)).toContain('Ada receives $70.00. Expand payment details.');
   });
 });

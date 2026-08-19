@@ -13,7 +13,7 @@ import { GameService } from '@/services/gameService';
 import { reverseProfileStats } from '@/services/firebaseService';
 import { getSettlements, calculateBankerSettlements, SOLVER_TIMEOUT_SENTINEL } from '@/services/settlementService';
 import { PlayerBalance, SettlementResult } from '@/types/game';
-import { groupSettlementsByRecipient, sortPaymentsByAmount } from '@/utils/settlementUtils';
+import { groupSettlementsByRecipient } from '@/utils/settlementUtils';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import Button from '@/components/Button';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,236 +32,11 @@ import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
 import { buildSummaryListData, SummaryListItem } from '@/utils/summaryListData';
-import { buildPaymentGridRows } from '@/utils/paymentGridRows';
 import { summaryStyles } from '@/components/summary/summaryStyles';
 import BalanceCard from '@/components/summary/BalanceCard';
+import SettlementCard from '@/components/summary/SettlementCard';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
-
-// Settlement Card Component
-interface SettlementCardProps {
-  groupedSettlement: { recipient: string; totalAmount: number; payments: Array<{ from: string; amount: number }> };
-  reduceMotion: boolean;
-  recipientPayment?: PreferredPayment;
-}
-
-function SettlementCard({ groupedSettlement, reduceMotion, recipientPayment }: SettlementCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { formatAmount } = useCurrency();
-
-  const hasHandle = !!recipientPayment?.handle?.trim();
-  const methodLabel = recipientPayment ? getPaymentMethodMeta(recipientPayment.method).label : '';
-  const displayHandle = recipientPayment && hasHandle
-    ? formatHandleForDisplay(recipientPayment.method, recipientPayment.handle)
-    : '';
-
-  // Sort payments by amount (largest first), then chunk into fixed-width grid rows.
-  // The chunker owns "first cell of a visual row" so the render never has to infer
-  // it from the item index — see utils/paymentGridRows.ts for why that matters.
-  // The sort lives INSIDE the memo: sortPaymentsByAmount returns a fresh array every
-  // call, so keying on its result would change the dep on every render and memoize
-  // nothing.
-  const paymentRows = useMemo(
-    () => buildPaymentGridRows(sortPaymentsByAmount(groupedSettlement).payments),
-    [groupedSettlement],
-  );
-
-  const handleToggle = useCallback(() => {
-    const newExpandedState = !isExpanded;
-    setIsExpanded(newExpandedState);
-
-    if (!reduceMotion) {
-      Animated.timing(opacityAnim, {
-        toValue: newExpandedState ? 1 : 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      opacityAnim.setValue(newExpandedState ? 1 : 0);
-    }
-  }, [isExpanded, reduceMotion, opacityAnim]);
-
-  const animateScaleDown = useCallback(() => {
-    if (!reduceMotion) {
-      Animated.spring(scaleAnim, {
-        toValue: 0.975,
-        tension: 300,
-        friction: 20,
-        useNativeDriver: true
-      }).start();
-    }
-  }, [reduceMotion, scaleAnim]);
-
-  const animateScaleUp = useCallback(() => {
-    if (!reduceMotion) {
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 200,
-        friction: 15,
-        useNativeDriver: true
-      }).start();
-    }
-  }, [reduceMotion, scaleAnim]);
-
-  const handleCopyHandle = useCallback(() => {
-    if (!recipientPayment?.handle) return;
-    Clipboard.setStringAsync(formatHandleForDisplay(recipientPayment.method, recipientPayment.handle)).catch(() => {});
-    setCopied(true);
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setCopied(false), 1200);
-  }, [recipientPayment]);
-
-  useEffect(() => () => {
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-  }, []);
-
-  const badgeTapGesture = useMemo(() => Gesture.Tap()
-    .maxDuration(250)
-    .hitSlop({ top: 8, bottom: 8, left: 8, right: 8 })
-    .onEnd((_event, success) => {
-      if (success) {
-        runOnJS(handleCopyHandle)();
-      }
-    }), [handleCopyHandle]);
-
-  const tapGesture = useMemo(() => {
-    const tap = Gesture.Tap()
-      .maxDuration(200)
-      .maxDistance(10)
-      .onBegin(() => runOnJS(animateScaleDown)())
-      .onFinalize((_, success) => {
-        runOnJS(animateScaleUp)();
-        if (success) {
-          runOnJS(handleToggle)();
-        }
-      });
-    // A tap on the badge must copy, not toggle: the card tap only activates
-    // once the badge tap has failed (i.e. the touch wasn't on the badge).
-    return hasHandle ? tap.requireExternalGestureToFail(badgeTapGesture) : tap;
-  }, [animateScaleDown, animateScaleUp, handleToggle, hasHandle, badgeTapGesture]);
-
-  const handlePay = useCallback((amount: number) => {
-    if (!recipientPayment) return;
-    const uri = buildPaymentUri(recipientPayment.method, recipientPayment.handle, amount, '');
-    if (uri) Linking.openURL(uri).catch(() => {});
-  }, [recipientPayment]);
-
-  return (
-    <Animated.View
-      style={[
-        summaryStyles.settlementCard,
-        !reduceMotion && { transform: [{ scale: scaleAnim }] }
-      ]}
-    >
-      <GestureDetector gesture={tapGesture}>
-        <View style={summaryStyles.settlementCardBody}>
-          <View style={summaryStyles.settlementHeader}>
-            <View style={summaryStyles.recipientNameWrapper}>
-              <View
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel={`${groupedSettlement.recipient} receives ${formatAmount(groupedSettlement.totalAmount)}. ${isExpanded ? 'Collapse' : 'Expand'} payment details.`}
-                accessibilityHint={isExpanded ? 'Double tap to collapse payment details' : 'Double tap to expand payment details'}
-                accessibilityState={{ expanded: isExpanded }}
-                style={summaryStyles.toggleA11yRegion}
-              >
-                <Text style={summaryStyles.recipientName}>{groupedSettlement.recipient}</Text>
-              </View>
-              {recipientPayment && hasHandle && (
-                <GestureDetector gesture={badgeTapGesture}>
-                  <View
-                    accessible={true}
-                    accessibilityRole="button"
-                    accessibilityLabel={copied ? 'Handle copied' : `Copy ${methodLabel} handle ${displayHandle}`}
-                    style={summaryStyles.payeeBadgeTap}
-                  >
-                    <Text style={summaryStyles.payeeBadge} numberOfLines={1}>
-                      {copied ? 'Copied ✓' : `${methodLabel} · ${displayHandle}`}
-                    </Text>
-                  </View>
-                </GestureDetector>
-              )}
-              {recipientPayment && !hasHandle && (
-                <Text style={summaryStyles.payeeBadge} numberOfLines={1}>{methodLabel}</Text>
-              )}
-            </View>
-            <Ionicons
-              name={isExpanded ? "chevron-up" : "chevron-down"}
-              size={20}
-              color="rgba(176,114,187,0.6)"
-            />
-          </View>
-          <View style={summaryStyles.totalSection}>
-            <Text style={summaryStyles.totalLabel}>RECEIVES</Text>
-            <Text style={summaryStyles.totalAmount}>
-              {formatAmount(groupedSettlement.totalAmount)}
-            </Text>
-          </View>
-        </View>
-      </GestureDetector>
-
-      {/* Payment details — outside GestureDetector so Pay/Copy taps don't collapse the card */}
-      {isExpanded && (
-        <Animated.View
-          style={[
-            summaryStyles.paymentDetailsSection,
-            !reduceMotion && { opacity: opacityAnim }
-          ]}
-        >
-          <View style={summaryStyles.paymentDivider} />
-          <Text style={summaryStyles.paymentSectionLabel}>
-            FROM ({groupedSettlement.payments.length} {groupedSettlement.payments.length === 1 ? 'PLAYER' : 'PLAYERS'})
-          </Text>
-          <View style={summaryStyles.paymentGrid}>
-            {paymentRows.map((row, rowIndex) => (
-              <View key={rowIndex} style={summaryStyles.paymentGridRow}>
-                {row.map((slot, slotIndex) => {
-                  if (slot.kind === 'divider') {
-                    // The invisible ones still hold their width, so a short last
-                    // row keeps the same column positions as the rows above it.
-                    return (
-                      <View
-                        key={slotIndex}
-                        style={slot.visible ? summaryStyles.paymentGridDivider : summaryStyles.paymentGridDividerSpacer}
-                      />
-                    );
-                  }
-                  if (slot.kind === 'spacer') {
-                    return <View key={slotIndex} style={summaryStyles.paymentGridCell} />;
-                  }
-                  const payment = slot.payment;
-                  return (
-                    <View key={slotIndex} style={summaryStyles.paymentGridCell}>
-                      <Text style={summaryStyles.paymentNameLabel} numberOfLines={2} ellipsizeMode="tail">
-                        {payment.from}
-                      </Text>
-                      <View style={summaryStyles.paymentAmountRow}>
-                        <Text style={summaryStyles.paymentAmountValue}>
-                          {formatAmount(payment.amount)}
-                        </Text>
-                      </View>
-                      {recipientPayment && buildPaymentUri(recipientPayment.method, recipientPayment.handle, payment.amount, 'x') && (
-                        <TouchableOpacity onPress={() => handlePay(payment.amount)} style={summaryStyles.payButton}>
-                          <Text style={summaryStyles.payButtonText}>
-                            Pay →
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </Animated.View>
-      )}
-    </Animated.View>
-  );
-}
 
 // Banker-mode payout row — a flat "pay this player their stack" line with an
 // optional instant Pay button. No expand/collapse: the payer is always the banker,
@@ -764,6 +539,7 @@ setSettlementResult(cachedResult);
               groupedSettlement={item.grouped}
               recipientPayment={paymentByName.get(item.grouped.recipient)}
               reduceMotion={reduceMotion}
+              formatAmount={formatAmount}
             />
           );
         case 'sectionHeader':
@@ -785,7 +561,7 @@ setSettlementResult(cachedResult);
           );
       }
     },
-    [paymentByName, reduceMotion, formatAmountCompact],
+    [paymentByName, reduceMotion, formatAmount, formatAmountCompact],
   );
 
   if (!activeGame || !summary) {
