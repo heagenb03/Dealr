@@ -198,3 +198,39 @@ describe('buildShareMessage banker mode', () => {
     expect(msg).not.toContain('pays out:');
   });
 });
+
+describe('shareUrl in the footer', () => {
+  const base = {
+    gameName: 'Friday Night',
+    totalPot: 200,
+    grouped: [{ recipient: 'Ada', totalAmount: 40, payments: [{ from: 'Bob', amount: 40 }] }],
+    paymentByName: new Map(),
+    formatAmount: (n: number) => `$${n.toFixed(2)}`,
+  };
+
+  it('links to the game when a shareUrl is supplied', () => {
+    const message = buildShareMessage({
+      ...base,
+      shareUrl: 'https://cashcage-app.web.app/g/aB3dEfGh1JkLmN0pQrSt',
+    });
+    expect(message).toContain('https://cashcage-app.web.app/g/aB3dEfGh1JkLmN0pQrSt');
+    expect(message).not.toContain('apps.apple.com');
+  });
+
+  it('falls back to the App Store footer with no shareUrl', () => {
+    // The offline / write-failure path. A host with no signal must still be able
+    // to share, with exactly the message they got before this feature.
+    expect(buildShareMessage(base)).toContain(SHARE_FOOTER);
+    expect(buildShareMessage(base)).toContain('apps.apple.com');
+  });
+
+  it('keeps the footer at the very end in banker mode too', () => {
+    const message = buildShareMessage({
+      ...base,
+      mode: 'banker',
+      bankerName: 'Zoe',
+      shareUrl: 'https://cashcage-app.web.app/g/aB3dEfGh1JkLmN0pQrSt',
+    });
+    expect(message.trimEnd().endsWith('aB3dEfGh1JkLmN0pQrSt')).toBe(true);
+  });
+});

@@ -6,6 +6,19 @@ import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 export const SHARE_FOOTER = '\n\nSettled with Cash Cage\nhttps://apps.apple.com/app/id6759301097';
 
 /**
+ * Footer for a message that carries a link to the game itself. The bare App
+ * Store URL drove few installs and left the Pay buttons usable only by the host;
+ * a link to the game leads somewhere worth going.
+ *
+ * SHARE_FOOTER remains the fallback for when the share document could not be
+ * written (offline, permission, quota) — a host with no signal must still be
+ * able to share.
+ */
+function footerFor(shareUrl: string | undefined): string {
+  return shareUrl ? `\n\nSettled with Cash Cage\n${shareUrl}` : SHARE_FOOTER;
+}
+
+/**
  * Display normalization mirroring the URI normalization in paymentLinks.ts:
  * stored "alice-h" and "@alice-h" must render identically.
  */
@@ -51,8 +64,9 @@ export function buildShareMessage(opts: {
   formatAmount: (n: number) => string;
   mode?: 'optimal' | 'banker';
   bankerName?: string;
+  shareUrl?: string;
 }): string {
-  const { gameName, totalPot, grouped, paymentByName, formatAmount, mode, bankerName } = opts;
+  const { gameName, totalPot, grouped, paymentByName, formatAmount, mode, bankerName, shareUrl } = opts;
 
   let message = `${gameName}\n\n`;
   message += `Total Pot: ${formatAmount(totalPot)}\n\n`;
@@ -67,7 +81,7 @@ export function buildShareMessage(opts: {
         message += `• ${recipient}${formatPaymentAnnotation(paymentByName.get(recipient))}: ${formatAmount(totalAmount)}\n`;
       });
     }
-    message += SHARE_FOOTER;
+    message += footerFor(shareUrl);
     return message;
   }
 
@@ -84,6 +98,6 @@ export function buildShareMessage(opts: {
     });
   }
 
-  message += SHARE_FOOTER;
+  message += footerFor(shareUrl);
   return message;
 }

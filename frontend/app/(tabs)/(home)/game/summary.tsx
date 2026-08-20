@@ -23,6 +23,11 @@ import { resolveCashUnit } from '@/constants/CashUnits';
 import { resolveTolerance } from '@/constants/Tolerances';
 import { PreferredPayment } from '@/types/game';
 import { buildShareMessage } from '@/utils/shareMessage';
+import { useNetwork } from '@/contexts/NetworkContext';
+import { publishSharedGame, SHARED_GAMES_COLLECTION } from '@/services/sharedGameService';
+import { buildShareUrl } from '@/utils/shareLink';
+import { doc, collection } from 'firebase/firestore';
+import { db } from '@/services/firebaseService';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
@@ -30,6 +35,15 @@ import { buildSummaryListData } from '@/utils/summaryListData';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
 import SummaryView from '@/components/summary/SummaryView';
+
+/**
+ * Ceiling on how long the share sheet may be delayed by the share-document
+ * write. Beyond this we share text only — a share that never opens is worse
+ * than a share without a link. Raced (not cancelled): the underlying
+ * Firestore write is NOT aborted when this timeout wins, since setDoc has no
+ * cancellation handle here. See handleShare for how that is made safe.
+ */
+const PUBLISH_TIMEOUT_MS = 3000;
 
 // Fallback Banner Component
 function isRetryableFallback(error?: string, balances?: PlayerBalance[], tolerance: number = 2.50): boolean {
@@ -119,6 +133,7 @@ export default function GameSummaryScreen() {
   const router = useRouter();
   const reduceMotion = useReduceMotion();
   const { formatAmount, formatAmountCompact, currency } = useCurrency();
+  const { isOnline } = useNetwork();
   const { registerHelp } = useHelp();
   const [helpVisible, setHelpVisible] = useState(false);
 
@@ -452,6 +467,88 @@ setSettlementResult(cachedResult);
     : undefined;
 
   const handleShare = async () => {
+    // Publish first, so the message can carry the link. Every failure mode here
+    // degrades to the pre-existing text share rather than blocking or alerting.
+    //
+    // ⚠️ OFFLINE DOES NOT REJECT. firebaseService.ts configures Firestore with
+    // persistentLocalCache, and setDoc resolves only when the BACKEND
+    // acknowledges the write — offline it stays pending indefinitely rather
+    // than throwing. A bare `await` here would hang handleShare forever: no
+    // share sheet, no error, no catch. So the publish is BOTH skipped when
+    // NetworkContext says we are offline AND raced against a timeout, because
+    // isOnline can be stale and "connected to a captive portal" is still a hang.
+    //
+    // The shareId is minted HERE — via Firestore's local, network-free
+    // doc(collection(db, ...)).id — rather than inside publishSharedGame,
+    // and handed in through `game.shareId`, which publishSharedGame already
+    // documents as reusing when present. That decouples "know the id" from
+    // "the write acked": if the write times out but is not cancelled and
+    // lands later, the link already in the message still resolves once it
+    // does, and re-shares reuse (refresh) this doc instead of orphaning it
+    // behind a freshly-minted second one.
+    let shareId: string | undefined;
+    let linkIsSafeToSend = false;
+
+    if (user?.uid && isOnline) {
+      const isRefresh = !!activeGame.shareId;
+      const mintedId = activeGame.shareId ?? doc(collection(db, SHARED_GAMES_COLLECTION)).id;
+      const gameForPublish = isRefresh ? activeGame : { ...activeGame, shareId: mintedId };
+
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const publishPromise = publishSharedGame({
+        uid: user.uid,
+        game: gameForPublish,
+        balances: summary.balances,
+        settlements: settlementsToDisplay,
+        totalPot: summary.totalPot,
+      });
+      // If the timeout below wins the race, this promise is still running.
+      // Swallow whatever it eventually does — nothing else is awaiting it by
+      // then, so an unswallowed rejection would surface as an unhandled
+      // promise rejection.
+      publishPromise.catch(() => {});
+
+      try {
+        const raceResult = await Promise.race([
+          publishPromise.then(() => 'acked' as const),
+          new Promise<'timeout'>(resolve => {
+            timeoutHandle = setTimeout(() => resolve('timeout'), PUBLISH_TIMEOUT_MS);
+          }),
+        ]);
+
+        shareId = mintedId;
+        // A refresh's document already exists from a PRIOR share, so a
+        // timeout here means stale content, never a dead link — safe to send
+        // either way. A first-ever share's document does not exist until the
+        // write lands: on timeout it may still be queued (safe once it
+        // lands) or may never land at all (offline for good) — sending that
+        // link risks the recipient hitting the "this link has expired"
+        // screen for a game that was never actually published. Only include
+        // it once we KNOW the document exists: on ack, or on a refresh.
+        linkIsSafeToSend = raceResult === 'acked' || isRefresh;
+
+        // Persist the id regardless of ack vs timeout, so a re-share reuses
+        // (refreshes) THIS document instead of orphaning it behind a second
+        // mint. Safe unconditionally: on ack it is definitely correct; on
+        // timeout the write may still land under this exact id, and pointing
+        // game.shareId at it now is what prevents the orphan — a document
+        // with nothing in Game referencing it, and a second one minted next
+        // share.
+        if (activeGame.shareId !== shareId) {
+          await updateGame({ ...activeGame, shareId });
+        }
+      } catch (error) {
+        // A genuine rejection (permission-denied, quota, ...) arriving BEFORE
+        // the timeout — the write will not land, so there is no id to send
+        // or persist.
+        console.warn('Could not publish shared game; sharing text only:', error);
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
+    }
+
+    const shareUrl = linkIsSafeToSend && shareId ? buildShareUrl(shareId) : undefined;
+
     try {
       const message = buildShareMessage({
         gameName: activeGame.name,
@@ -461,6 +558,7 @@ setSettlementResult(cachedResult);
         formatAmount,
         mode: isBanker ? 'banker' : 'optimal',
         bankerName,
+        shareUrl,
       });
       await Share.share({ message });
     } catch (error) {
@@ -494,6 +592,9 @@ setSettlementResult(cachedResult);
             <Ionicons name="share-outline" size={20} color="#B072BB" />
           </TouchableOpacity>
         </View>
+        <Text style={styles.shareDisclosure}>
+          Anyone with this link can see names, amounts, and payment handles.
+        </Text>
       </View>
 
       {/* Total Pot Hero Metric */}
@@ -736,5 +837,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
     letterSpacing: 0.3,
+  },
+  shareDisclosure: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#6A6A6A',
+    marginTop: 8,
   },
 });
