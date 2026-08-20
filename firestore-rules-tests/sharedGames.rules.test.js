@@ -119,6 +119,21 @@ describe('read', () => {
     const otherDb = testEnv.authenticatedContext(OTHER).firestore();
     await assertFails(getDoc(doc(otherDb, 'sharedGames', SHARE_ID)));
   });
+
+  it('DENIES an authenticated GET on a nonexistent shareId (Round 2 Fix B — pinned, not changed)', async () => {
+    // Side effect of the Fix-2 expiry gate, not a new design choice: on a
+    // nonexistent document, `resource` is null, so
+    // `resource.data.expiresAt` dereferences a null resource and errors,
+    // which fails closed to permission-denied. Before Fix 2, the same GET
+    // succeeded and returned exists() === false. This test pins that
+    // changed contract so the next person editing `allow get` sees the
+    // consequence instead of rediscovering it. Not a security hole (fails
+    // closed) — deliberately not "fixed": mapping this to a "this link has
+    // expired / never existed" UI state is Task 7's job, not the rules'.
+    // No doc is seeded for this shareId.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(getDoc(doc(db, 'sharedGames', SHARE_ID)));
+  });
 });
 
 describe('create', () => {
@@ -206,6 +221,34 @@ describe('create', () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
     await assertFails(
       setDoc(doc(db, 'sharedGames', SHARE_ID), { ...sharedGame(), hostilePayload: 'x'.repeat(1000) }),
+    );
+  });
+
+  it('denies create with an arbitrary extra key INSIDE snapshot (Round 2 Fix A — the twin hole)', async () => {
+    // Verified against a live emulator: the top-level hasOnly() (Fix 1
+    // above) does not reach one level down. A ~900 KB key inside snapshot
+    // (e.g. snapshot.junk) previously succeeded, because nothing guarded
+    // snapshot's OWN key set — only its balances/settlements/gameName
+    // fields were individually checked.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ snapshot: snapshot({ junk: 'x'.repeat(1000) }) })),
+    );
+  });
+
+  it('allows the optional bankerName/bankerPlayerId snapshot fields (subset, not exact match)', async () => {
+    // hasOnly() permits a SUBSET of the listed keys, so the resolved-banker
+    // shape from sharedGameSnapshot.ts (bankerName/bankerPlayerId present
+    // only in banker mode) must still be writable. This guards against a
+    // future edit accidentally swapping hasOnly's semantics or key list.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(db, 'sharedGames', SHARE_ID),
+        sharedGame({
+          snapshot: snapshot({ settlementMode: 'banker', bankerName: 'Ada', bankerPlayerId: 'p1' }),
+        }),
+      ),
     );
   });
 

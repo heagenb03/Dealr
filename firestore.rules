@@ -84,17 +84,28 @@ service cloud.firestore {
       // gameName's total character count (<=100), the TYPE of each of those
       // three fields (list/list/string — a string can otherwise satisfy
       // size() too, silently passing a malformed snapshot), and the exact
-      // top-level key set via hasOnly (no arbitrary extra field can smuggle
-      // in payload). What it does NOT and CANNOT bound: the byte size of any
-      // individual string inside an array element — e.g. one balance's
-      // playerName. Firestore security rules have no iteration construct, so
-      // per-element field lengths inside balances/settlements cannot be
-      // capped here. A single ~900 KB playerName is not rejected by this
-      // guard; the only backstop against that specific abuse is Firestore's
-      // own 1 MiB total document size limit. This is a partial guard, not a
-      // full one.
+      // key set at BOTH the document top level (hasRequiredKeys below) AND
+      // inside snapshot itself, via hasOnly against the exact shape shipped
+      // in frontend/utils/sharedGameSnapshot.ts's SharedGameSnapshot
+      // interface (bankerName/bankerPlayerId stay optional because hasOnly
+      // permits a subset of the listed keys). Without the snapshot-level
+      // hasOnly, an arbitrary extra key inside snapshot — e.g.
+      // snapshot.junk holding ~900 KB — smuggled in payload exactly like an
+      // extra top-level key did before hasRequiredKeys(). What this does
+      // NOT and CANNOT bound: the byte size of any individual string INSIDE
+      // an array element — e.g. one balance's playerName. Firestore
+      // security rules have no iteration construct, so per-element field
+      // lengths inside the balances/settlements arrays cannot be capped
+      // here; that residual is real, and its only backstop is Firestore's
+      // own 1 MiB total document size limit. Every other field, at either
+      // key level, IS bounded by count, type, or key-set exclusivity — this
+      // is a partial guard with one specific, named hole, not a guard
+      // against "anything inside snapshot".
       function validSnapshot(data) {
-        return data.snapshot.balances is list
+        return data.snapshot.keys().hasOnly(
+                 ['gameName', 'date', 'currency', 'settlementMode', 'bankerName',
+                  'bankerPlayerId', 'totalPot', 'balances', 'settlements', 'payments'])
+               && data.snapshot.balances is list
                && data.snapshot.balances.size() <= 100
                && data.snapshot.settlements is list
                && data.snapshot.settlements.size() <= 500
