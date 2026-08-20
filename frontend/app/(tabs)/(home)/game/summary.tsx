@@ -26,6 +26,7 @@ import { buildShareMessage } from '@/utils/shareMessage';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { publishSharedGame, mintShareId, shareExpiryFrom } from '@/services/sharedGameService';
 import { buildShareUrl } from '@/utils/shareLink';
+import { shouldSendLink } from '@/utils/sharePublishGate';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
@@ -490,9 +491,10 @@ setSettlementResult(cachedResult);
     let linkIsSafeToSend = false;
 
     if (user?.uid && isOnline) {
-      const isRefresh = !!activeGame.shareId;
       const mintedId = activeGame.shareId ?? mintShareId();
-      const gameForPublish = isRefresh ? activeGame : { ...activeGame, shareId: mintedId };
+      const gameForPublish = activeGame.shareId
+        ? activeGame
+        : { ...activeGame, shareId: mintedId };
 
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       const publishPromise = publishSharedGame({
@@ -517,25 +519,42 @@ setSettlementResult(cachedResult);
         ]);
 
         shareId = mintedId;
-        // A refresh's document already exists from a PRIOR share, so a
-        // timeout here means stale content, never a dead link — safe to send
-        // either way. A first-ever share's document does not exist until the
-        // write lands: on timeout it may still be queued (safe once it
-        // lands) or may never land at all (offline for good) — sending that
-        // link risks the recipient hitting the "this link has expired"
-        // screen for a game that was never actually published. Only include
-        // it once we KNOW the document exists: on ack, or on a refresh.
-        linkIsSafeToSend = raceResult === 'acked' || isRefresh;
+        // Gate on "an ack was OBSERVED", never on "an id exists". The block
+        // below persists shareId even on a timeout — deliberately, so a
+        // late-landing write is not orphaned — so a re-share's shareId proves
+        // only that an id was MINTED. Reading it as proof the document exists
+        // sent a link to a document that may never have been written, and the
+        // recipient read "This shared game has expired" for a game the host
+        // believed they had published. shareAcked is the fact that actually
+        // licenses the link.
+        linkIsSafeToSend = shouldSendLink({
+          acked: raceResult === 'acked',
+          previouslyAcked: activeGame.shareAcked,
+        });
 
         // Persist the id regardless of ack vs timeout, so a re-share reuses
         // (refreshes) THIS document instead of orphaning it behind a second
         // mint. Safe unconditionally: on ack it is definitely correct; on
         // timeout the write may still land under this exact id, and pointing
-        // game.shareId at it now is what prevents the orphan — a document
-        // with nothing in Game referencing it, and a second one minted next
-        // share.
-        if (activeGame.shareId !== shareId) {
-          await updateGame({ ...activeGame, shareId });
+        // game.shareId at it now is what prevents the orphan.
+        //
+        // nextAcked is computed separately from linkIsSafeToSend, even though
+        // the two agree today: this stores a FACT ("a write for this game
+        // acked at some point"), while the gate above is a POLICY. Coupling
+        // them would let a future change to the policy silently rewrite the
+        // stored fact. `!!` on both sides is load-bearing — a bare
+        // `raceResult === 'acked' || activeGame.shareAcked` evaluates to
+        // undefined on a first share that times out, which writes an undefined
+        // field and compares unequal to itself on the next pass. A timed-out
+        // first share must store an explicit false.
+        //
+        // saveGameToFirestore uses { merge: true }, so this path is the only
+        // writer of the field. It is NOT remotely monotonic: a second device
+        // holding a stale false can overwrite a true. That fails SAFE — the
+        // stale device withholds a link rather than sending a dead one.
+        const nextAcked = raceResult === 'acked' || !!activeGame.shareAcked;
+        if (activeGame.shareId !== shareId || nextAcked !== !!activeGame.shareAcked) {
+          await updateGame({ ...activeGame, shareId, shareAcked: nextAcked });
         }
       } catch (error) {
         // A genuine rejection (permission-denied, quota, ...) arriving BEFORE
