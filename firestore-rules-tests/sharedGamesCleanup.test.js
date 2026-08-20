@@ -36,13 +36,25 @@ function sharedGame(ownerUid) {
   };
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
     throw new Error('FIRESTORE_EMULATOR_HOST unset — run via `npm test`, not bare jest.');
   }
   admin.initializeApp({ projectId: 'cashcage-app' });
   db = admin.firestore();
-});
+
+  // Warm the Admin SDK's first gRPC connection here, with headroom, instead
+  // of letting it happen inside the first `beforeEach` below. `npm test`
+  // runs this suite under `firebase emulators:exec`, which boots a FRESH
+  // Firestore emulator on every invocation — there is no warm instance to
+  // reuse across runs, so the first-handshake cold start is reproducible on
+  // every cold run, not a one-off. Left unwarmed, that handshake can exceed
+  // Jest's default 5000ms per-hook timeout and fail `beforeEach` before any
+  // test body runs. This suite is a release gate (Task 7 Step 2 requires
+  // "both suites PASS" before shipping), so an intermittent cold-start
+  // failure here is worse than no gate at all — do not remove this.
+  await db.collection('sharedGames').limit(1).get();
+}, 15000);
 
 afterAll(async () => {
   await admin.app().delete();
@@ -51,7 +63,7 @@ afterAll(async () => {
 beforeEach(async () => {
   const all = await db.collection('sharedGames').get();
   await Promise.all(all.docs.map(d => d.ref.delete()));
-});
+}, 15000);
 
 it("deletes the target user's share documents", async () => {
   await db.collection('sharedGames').doc('a').set(sharedGame(OWNER));
