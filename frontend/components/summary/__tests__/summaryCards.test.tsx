@@ -238,14 +238,14 @@ describe('BankerPayoutRow', () => {
     const json = render(
       <BankerPayoutRow recipient="Ada" amount={70} recipientPayment={payment} formatAmount={usd} />
     );
-    expect(texts(json)).toContain('Pay →');
+    expect(texts(json)).toContain('Pay');
   });
 
   it('renders no Pay button when there is no payment method at all', () => {
     const json = render(
       <BankerPayoutRow recipient="Ada" amount={70} formatAmount={usd} />
     );
-    expect(texts(json)).not.toContain('Pay →');
+    expect(texts(json)).not.toContain('Pay');
   });
 
   it('renders the method label alone when there is a method but no handle', () => {
@@ -254,6 +254,6 @@ describe('BankerPayoutRow', () => {
       <BankerPayoutRow recipient="Ada" amount={70} recipientPayment={payment} formatAmount={usd} />
     );
     expect(texts(json).some((t) => t.includes('·'))).toBe(false);
-    expect(texts(json)).not.toContain('Pay →');
+    expect(texts(json)).not.toContain('Pay');
   });
 });

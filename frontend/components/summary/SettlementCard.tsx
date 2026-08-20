@@ -238,9 +238,7 @@ export default function SettlementCard({
                       </View>
                       {recipientPayment && buildPaymentUri(recipientPayment.method, recipientPayment.handle, payment.amount, 'x') && (
                         <TouchableOpacity onPress={() => handlePay(payment.amount)} style={styles.payButton}>
-                          <Text style={styles.payButtonText}>
-                            Pay →
-                          </Text>
+                          <Text style={styles.payButtonText}>Pay</Text>
                         </TouchableOpacity>
                       )}
                     </View>

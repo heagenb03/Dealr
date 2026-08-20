@@ -116,9 +116,9 @@ describe('renderSummaryItem', () => {
     const [payout] = listOf([grp('Ada', 70)], [], true);
     const payment: PreferredPayment = { method: 'venmo', handle: 'ada-l' };
     const withPayment = item(payout, deps({ paymentByName: new Map([['Ada', payment]]) }));
-    expect(withPayment).toContain('Pay →');
+    expect(withPayment).toContain('Pay');
     expect(withPayment.join(' ')).toContain('ada-l');
     // ...and no Pay button when the map has no entry for that name.
-    expect(item(payout)).not.toContain('Pay →');
+    expect(item(payout)).not.toContain('Pay');
   });
 });

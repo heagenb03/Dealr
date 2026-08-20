@@ -172,10 +172,12 @@ export const summaryStyles = StyleSheet.create({
   },
   // lineHeight + minHeight reserve the full two lines numberOfLines={2} allows, so a
   // one-line name and a wrapped one push the amount below them to the same baseline.
+  // No reserved height: the label takes exactly the one or two lines its name needs.
+  // Column alignment is paymentAmountRow's job (it bottom-anchors), so a row of
+  // one-line names collapses tight instead of always holding a second line open.
   paymentNameLabel: {
     fontSize: 9,
     lineHeight: 12,
-    minHeight: 24,
     color: 'rgba(176,114,187,0.65)',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
@@ -184,7 +186,14 @@ export const summaryStyles = StyleSheet.create({
   paymentAmountRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    // Guaranteed minimum gap above payButton, whose own marginTop is 'auto'.
+    // THIS is what keeps the grid's columns aligned. Cells stretch to the tallest in
+    // their row, and the auto top margin absorbs all of that cell's slack, so the
+    // amount and the Pay button beneath it both sit on the cell floor no matter how
+    // many lines the name above them took. The name label therefore reserves no
+    // height of its own, and a row of one-line names has no dead space in it.
+    marginTop: 'auto',
+    // Gap down to payButton, which carries no top margin: Yoga does not collapse
+    // margins, so exactly one side owns this.
     marginBottom: 6,
     backgroundColor: 'transparent',
   },
@@ -277,12 +286,10 @@ export const summaryStyles = StyleSheet.create({
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
-  // marginTop:'auto' pins the button to the bottom of the (stretched) cell, so the
-  // buttons in a row stay on one line even where font scaling defeats the name slot's
-  // fixed minHeight. The gap above it is paymentAmountRow's marginBottom, because an
-  // auto margin cannot also carry a minimum.
+  // Deliberately carries NO top margin. In the settlement grid the gap above it is
+  // paymentAmountRow's marginBottom, and that row's auto top margin already bottom-
+  // anchors the pair; in BankerPayoutRow the parent's `gap: 6` owns the spacing.
   payButton: {
-    marginTop: 'auto',
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 4,

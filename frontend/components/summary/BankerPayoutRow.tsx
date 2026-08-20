@@ -84,7 +84,7 @@ export default function BankerPayoutRow({
         <Text style={styles.payoutAmount}>{formatAmount(amount)}</Text>
         {canPay && (
           <TouchableOpacity onPress={handlePay} style={styles.payButton}>
-            <Text style={styles.payButtonText}>Pay →</Text>
+            <Text style={styles.payButtonText}>Pay</Text>
           </TouchableOpacity>
         )}
       </View>
