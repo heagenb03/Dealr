@@ -242,6 +242,77 @@ describe('resolveAuthGateNavigation', () => {
       );
       expect(again).toBe(`/g/${OTHER}`);
     });
+
+    it('releases the latch for real: re-entering a gate screen later with NOTHING pending gets the ordinary /(tabs) fallback', () => {
+      // The test above ("releases the latch once segments catch up...") does
+      // NOT prove the latch actually clears — its own follow-up call always
+      // has a fresh OTHER id pending, so `destination` is `/g/OTHER`, never
+      // '/(tabs)', and the suppression branch is never even reached. Deleting
+      // the release block entirely still passes that test. THIS test forces
+      // the suppression branch to be reached with the latch's true state:
+      // issue a share, let segments catch up, then re-enter a gate screen
+      // with nothing pending at all.
+      setPendingShare(ID);
+      const issued = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: '(auth)', hasUser: true, mustVerify: false },
+        consumePendingShare,
+      );
+      expect(issued).toBe(`/g/${ID}`);
+
+      const settled = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: 'g', hasUser: true, mustVerify: false },
+        consumePendingShare,
+      );
+      expect(settled).toBeNull();
+
+      // Nothing pending this time. If the latch is still (wrongly) set, the
+      // suppression branch fires on this '/(tabs)' destination and returns
+      // null instead.
+      const later = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: '(auth)', hasUser: true, mustVerify: false },
+        consumePendingShare,
+      );
+      expect(later).toBe('/(tabs)');
+    });
+
+    it('does not re-open the clobber when mustVerify wobbles mid-transition with segments still stale', () => {
+      // Kills a specific rejected design: releasing the latch whenever
+      // `!onGateScreen || !(hasUser && !mustVerify)` (i.e. keyed on
+      // `leavingGate`, which includes the auth booleans) instead of on
+      // `segments` alone. seg0 stays '(auth)' — stale — for the whole test;
+      // only the auth booleans move, the way `refreshVerification` moves them
+      // for real during this exact transition.
+      setPendingShare(ID);
+
+      // Call 1: issues the share navigation and latches.
+      const call1 = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: '(auth)', hasUser: true, mustVerify: false },
+        consumePendingShare,
+      );
+      expect(call1).toBe(`/g/${ID}`);
+
+      // Call 2: verification lapses mid-transition, seg0 still stale. Must
+      // still route to /verify-email — the latch must never suppress a
+      // genuinely different destination.
+      const call2 = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: '(auth)', hasUser: true, mustVerify: true },
+        consumePendingShare,
+      );
+      expect(call2).toBe('/verify-email');
+
+      // Call 3: mustVerify flips back to false, seg0 STILL stale, nothing
+      // left pending (call 1 already consumed it). This is the exact re-fire
+      // the clobber bug describes. A leavingGate-keyed release clears the
+      // latch at call 2 (mustVerify was true there), so by call 3 the latch
+      // is gone and '/(tabs)' clobbers. Segments-only keying never clears it
+      // here, because onGateScreen was true at every call.
+      const call3 = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: '(auth)', hasUser: true, mustVerify: false },
+        consumePendingShare,
+      );
+      expect(call3).toBeNull();
+      expect(call3).not.toBe('/(tabs)');
+    });
   });
 
   describe('no pending share — matches resolveAuthRedirect once hydrated', () => {
