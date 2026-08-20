@@ -2,7 +2,7 @@
 
 Emulator-backed tests for `../firestore.rules`. **Not part of the frontend jest
 suite** — the frontend's 863/57 count must stay unambiguous, so these are counted
-separately (this suite is 43 tests on its own).
+separately (this suite is 46 tests on its own).
 
 ## Prerequisites
 
@@ -13,6 +13,10 @@ separately (this suite is 43 tests on its own).
   prepend it for this command, e.g. (bash):
   `export PATH="/path/to/jdk-21/bin:$PATH"`
 - `firebase-tools` on PATH (`firebase --version`)
+- **`functions/` dependencies installed.** `npm test` here runs a `pretest` hook
+  that builds `../functions` (the cleanup test requires the compiled helper the
+  Cloud Function actually calls). Once, from the repo root:
+  `npm --prefix functions install`
 
 ## Run
 
@@ -52,3 +56,11 @@ emulator down. No project data is touched — the emulator is entirely local.
   drops the size caps on update).
 - **delete** is owner-only. No UI calls delete today; the rule ships anyway
   because it costs nothing and the tests assert it.
+
+`sharedGamesCleanup.test.js` — the account-deletion cleanup of `/sharedGames`,
+run against the compiled `functions/lib/sharedGamesCleanup.js` rather than a
+reimplementation. Covers the `ownerUid` query scoping, the batched delete, and
+cross-user isolation (a helper that dropped the `where` clause would pass a
+single-user test and wipe the collection). It does NOT cover whether
+`deleteUserData` calls the helper, or whether it calls it before
+`admin.auth().deleteUser` — that is a read-the-diff check.

@@ -1,6 +1,7 @@
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { deleteSharedGamesForOwner } from './sharedGamesCleanup';
 
 admin.initializeApp();
 
@@ -8,8 +9,10 @@ admin.initializeApp();
 // deleteUserData — called by the client when a user deletes their account.
 // Performs (in order):
 //   1. Cancel the RevenueCat subscription (delete subscriber record)
-//   2. Recursively delete all Firestore data under /users/{uid}
-//   3. Delete the Firebase Auth user
+//   2. Delete the user's /sharedGames documents (top-level; the recursiveDelete
+//      below does not reach them)
+//   3. Recursively delete all Firestore data under /users/{uid}
+//   4. Delete the Firebase Auth user
 // ---------------------------------------------------------------------------
 // The secret MUST be declared here or firebase-functions v2 never mounts it
 // into process.env and cancelRevenueCatSubscriber silently skips (bug-355).
@@ -25,11 +28,25 @@ export const deleteUserData = onCall({ secrets: ['REVENUECAT_SECRET_API_KEY'] },
     //    user is not billed after account deletion (GDPR Article 17 compliance).
     await cancelRevenueCatSubscriber(uid);
 
-    // 2. Recursively delete Firestore documents under /users/{uid}
+    // 2. Delete this user's /sharedGames documents. That collection is TOP
+    //    LEVEL, so the recursiveDelete below never reaches it — an account
+    //    deletion would otherwise leave player names, amounts and payment
+    //    handles readable by anyone holding the URL. Same GDPR Article 17
+    //    obligation the RevenueCat cancellation above cites.
+    //
+    //    BEFORE admin.auth().deleteUser and inside this try, so a failure
+    //    surfaces as the HttpsError below rather than silently leaving data
+    //    behind after the auth record is already gone.
+    const deletedShares = await deleteSharedGamesForOwner(admin.firestore(), uid);
+    if (deletedShares > 0) {
+      logger.info(`deleteUserData: deleted ${deletedShares} shared game(s) for ${uid}`);
+    }
+
+    // 3. Recursively delete Firestore documents under /users/{uid}
     const userDocRef = admin.firestore().doc(`users/${uid}`);
     await admin.firestore().recursiveDelete(userDocRef);
 
-    // 3. Delete the Firebase Auth user
+    // 4. Delete the Firebase Auth user
     await admin.auth().deleteUser(uid);
   } catch (error) {
     logger.error(`Failed to fully delete user ${uid}`, error);
