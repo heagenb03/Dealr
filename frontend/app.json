@@ -42,7 +42,7 @@
             {
               "scheme": "https",
               "host": "cashcage-app.web.app",
-              "pathPrefix": "/g"
+              "pathPrefix": "/g/"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
