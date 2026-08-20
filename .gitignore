@@ -1,32 +1,7 @@
 .vscode/
 .github/
+.firebase/
 
-CLAUDE.md
-.claude/
-.reports
-.wolf/
-.firecrawl/
 docs/
-.superpowers/
-
-# functions/ is tracked. It holds the Firebase Cloud Functions source that backs
-# account deletion (deleteUserData) and RevenueCat subscription state
-# (revenuecatWebhook) -- deployed production code, so it belongs in version control.
-# Its build output (lib/) and node_modules/ are excluded by functions/.gitignore.
-# No credentials live there: every secret is read from process.env via Firebase
-# Secret Manager, never hardcoded.
-
-# tools/ is ALLOW-BY-DEFAULT. Each tool owns its own .gitignore for its build output
-# (node_modules/, dist/, temp files), which is where that knowledge belongs and where
-# it keeps working if the tool is ever moved or extracted.
-#
-# This replaced a `tools/*` blanket plus a `!tools/appstore-screenshots/` negation.
-# That worked, but made every NEW tool invisible until someone remembered to add
-# another negation, and nothing warns you: an untracked-but-ignored directory never
-# shows up in `git status`. If you add a tool, give it a .gitignore, not a rule here.
-#
-# (For the record, since the old form looked like a typo: the blanket had to be
-# `tools/*` and not `tools/`, because git does not descend into an excluded directory,
-# so a negation under a plain `tools/` can never be evaluated.)
 
 nul
