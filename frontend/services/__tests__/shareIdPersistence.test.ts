@@ -95,6 +95,42 @@ describe('shareId — Firestore round-trip', () => {
     };
     expect(deserializeFirestoreGame(doc).shareId).toBeUndefined();
   });
+
+  it('preserves shareAcked through deserializeFirestoreGame', () => {
+    // Same whitelist hazard as shareId above. Dropped here, a host who shares
+    // from device A and then shares again from device B sends TEXT ONLY,
+    // because device B reads shareAcked back as undefined.
+    const doc = {
+      id: 'g1',
+      name: 'Friday Night',
+      date: new Date('2026-08-19T00:00:00.000Z'),
+      status: 'completed',
+      createdAt: new Date('2026-08-19T00:00:00.000Z'),
+      players: [{ id: 'p1', name: 'Ada' }],
+      transactions: [],
+      shareId: SHARE_ID,
+      shareAcked: true,
+    };
+    expect(deserializeFirestoreGame(doc).shareAcked).toBe(true);
+  });
+
+  it('preserves an explicit false shareAcked', () => {
+    // A first share that timed out stores an explicit false. Reading that back
+    // as undefined is harmless today (both are falsy) but would break the
+    // moment anything distinguishes "never shared" from "shared, never acked".
+    const doc = {
+      id: 'g1',
+      name: 'Friday Night',
+      date: new Date('2026-08-19T00:00:00.000Z'),
+      status: 'completed',
+      createdAt: new Date('2026-08-19T00:00:00.000Z'),
+      players: [{ id: 'p1', name: 'Ada' }],
+      transactions: [],
+      shareId: SHARE_ID,
+      shareAcked: false,
+    };
+    expect(deserializeFirestoreGame(doc).shareAcked).toBe(false);
+  });
 });
 
 describe('shareId — AsyncStorage round-trip', () => {
@@ -114,5 +150,14 @@ describe('shareId — AsyncStorage round-trip', () => {
     await StorageService.saveGames([unshared as Game]);
     const loaded = await StorageService.loadGames();
     expect(loaded[0].shareId).toBeUndefined();
+  });
+
+  it('survives saveGames -> loadGames with shareAcked set', async () => {
+    // No storageService change is expected: loadGames spreads unknown fields by
+    // deliberate design. This test is the guard that a future refactor to a
+    // whitelist does not silently drop the field.
+    await StorageService.saveGames([{ ...baseGame, shareAcked: true }]);
+    const loaded = await StorageService.loadGames();
+    expect(loaded[0].shareAcked).toBe(true);
   });
 });

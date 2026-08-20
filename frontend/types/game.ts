@@ -77,6 +77,15 @@ export interface Game {
    *  minting a second one beside a stale first. 20 chars, [A-Za-z0-9]. */
   shareId?: string;
 
+  /** True once a /sharedGames write for this game has been ACKNOWLEDGED by the
+   *  backend. NOT implied by shareId: the id is minted locally and persisted
+   *  even when the write times out, so shareId proves only that an id exists.
+   *  This is what makes it safe to include the link in a share whose write did
+   *  not ack in time. Boolean, never a Date — StorageService.loadGames revives
+   *  dates field by field and spreads the rest, so a Date here would return
+   *  from AsyncStorage as an ISO string typed as Date. */
+  shareAcked?: boolean;
+
   // Cloud sync — set by Firestore serverTimestamp on each write
   syncedAt?: Date;
 }
