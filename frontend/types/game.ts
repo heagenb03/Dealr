@@ -72,6 +72,11 @@ export interface Game {
    *  re-completed. Absent on games completed before this feature. */
   statsCounted?: boolean;
 
+  /** The /sharedGames document this game was last published to, if any. Present
+   *  so a re-share REFRESHES the link already sitting in a group chat instead of
+   *  minting a second one beside a stale first. 20 chars, [A-Za-z0-9]. */
+  shareId?: string;
+
   // Cloud sync — set by Firestore serverTimestamp on each write
   syncedAt?: Date;
 }

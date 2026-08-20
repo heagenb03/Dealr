@@ -468,6 +468,7 @@ export function deserializeFirestoreGame(data: Record<string, any>): Game {
     bankerPlayerId: data.bankerPlayerId,
     statsCounted: data.statsCounted,
     defaultBuyIn: data.defaultBuyIn,
+    shareId: data.shareId,
   };
 }
 
