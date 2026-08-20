@@ -1,15 +1,32 @@
 #!/usr/bin/env node
 /**
- * Predeploy gate for `firebase deploy --only hosting`.
+ * Predeploy gate for `firebase deploy` / `firebase deploy --only hosting`.
  *
- * public/.well-known/apple-app-site-association and assetlinks.json ship with
- * placeholder sentinels for two values that cannot be derived from this repo:
- * the Apple Team ID and the Play app-signing SHA-256 fingerprint (see Task 8
- * report, .superpowers/sdd/2026-08-19-shared-game-links/task-8-report.md, for
- * exactly where to obtain each one). A sentinel that ships silently produces
- * universal/app links that fail on every device with no visible error, and
- * iOS caches that failure past a fix. This script fails the deploy loudly
- * instead.
+ * NOTE: `firebase hosting:channel:deploy <channel>` does NOT run predeploy
+ * hooks at all (verified against firebase-tools 15.5.1's deploy targets) —
+ * this script never runs for a preview-channel deploy, so a channel deploy
+ * can still ship unfilled sentinels or a missing claim file with no gate
+ * firing. Lower severity (preview URLs, not cashcage-app.web.app), but real;
+ * treat it as a manual check before any channel deploy. See Task 8 report.
+ *
+ * Two things this script guards, both required for real (non-sentinel)
+ * universal/app links to work:
+ *
+ * 1. public/.well-known/apple-app-site-association and assetlinks.json ship
+ *    with placeholder sentinels for two values that cannot be derived from
+ *    this repo: the Apple Team ID and the Play app-signing SHA-256
+ *    fingerprint (see Task 8 report,
+ *    .superpowers/sdd/2026-08-19-shared-game-links/task-8-report.md, for
+ *    exactly where to obtain each one). A sentinel that ships silently
+ *    produces universal/app links that fail on every device with no visible
+ *    error, and iOS caches that failure past a fix.
+ * 2. Both claim files must actually exist and parse as valid JSON at deploy
+ *    time — Firebase Hosting's ignore-glob behavior for `.well-known/` was
+ *    checked empirically against the real `glob` dependency firebase-tools
+ *    uses and found NOT to exclude these files (see Task 8 report), so this
+ *    check exists as a genuine safety net against a file being accidentally
+ *    deleted, renamed, or corrupted — not as a workaround for that glob
+ *    behavior, which needs none.
  */
 
 const fs = require('fs');
@@ -34,11 +51,26 @@ let failed = false;
 
 for (const { file, marker, label, source } of SENTINELS) {
   if (!fs.existsSync(file)) {
-    console.error(`[verify-hosting-sentinels] MISSING FILE: ${file}`);
+    console.error(
+      `[verify-hosting-sentinels] MISSING FILE: ${file}\n` +
+        `  This claim file is required for universal/app links to work at all.`
+    );
     failed = true;
     continue;
   }
+
   const content = fs.readFileSync(file, 'utf8');
+
+  try {
+    JSON.parse(content);
+  } catch (err) {
+    console.error(
+      `[verify-hosting-sentinels] INVALID JSON: ${file}\n` + `  Parse error: ${err.message}`
+    );
+    failed = true;
+    continue;
+  }
+
   if (content.includes(marker)) {
     console.error(
       `[verify-hosting-sentinels] BLOCKED: ${file} still contains the placeholder ` +
@@ -51,8 +83,8 @@ for (const { file, marker, label, source } of SENTINELS) {
 }
 
 if (failed) {
-  console.error('\n[verify-hosting-sentinels] Deploy aborted: one or more unfilled sentinels found.');
+  console.error('\n[verify-hosting-sentinels] Deploy aborted: see errors above.');
   process.exit(1);
 }
 
-console.log('[verify-hosting-sentinels] OK: no unfilled sentinels in public/.well-known/*.');
+console.log('[verify-hosting-sentinels] OK: both claim files exist, parse as JSON, and have no unfilled sentinels.');
