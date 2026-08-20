@@ -1,0 +1,14 @@
+{
+  "name": "cashcage-rules-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Firestore security rules tests. Run with the emulator; NOT part of the frontend jest suite.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project cashcage-app \"jest --runInBand\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^12.11.0",
+    "jest": "^29.7.0"
+  }
+}

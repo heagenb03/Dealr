@@ -60,5 +60,86 @@ service cloud.firestore {
           && request.resource.data.players.size() <= 200;
       }
     }
+
+    // -----------------------------------------------------------------------
+    // Shared game links — the ONLY cross-user read path in this database.
+    //
+    // The document holds a frozen, presentational projection of a completed
+    // game (see frontend/utils/sharedGameSnapshot.ts). The 20-character
+    // auto-ID IS the credential: unguessable at ~119 bits, and unlisted.
+    //
+    // ownerUid sits at document level and IS readable by any viewer, because
+    // `get` covers the whole document. Accepted, not overlooked: the delete and
+    // update rules need it, and a Firebase uid grants nothing on its own —
+    // /users/{uid} reads already require request.auth.uid == uid.
+    //
+    // Documents expire via a native TTL policy on expiresAt (a console/gcloud
+    // setting, no Cloud Function). See the release runbook (Task 15).
+    // -----------------------------------------------------------------------
+    match /sharedGames/{shareId} {
+
+      // Storage-abuse guard, applied to create AND update alike. The balances
+      // ceiling mirrors the one on /users/{uid}/games/{gameId} and sits
+      // deliberately above PRO_PLAYER_CAP (50) so the product number can rise
+      // without a rules deploy.
+      function validSnapshot(data) {
+        return data.snapshot.balances.size() <= 100
+               && data.snapshot.settlements.size() <= 500
+               && data.snapshot.gameName.size() <= 100;
+      }
+
+      // The URL IS the credential — anyone holding the ~119-bit link may read
+      // it, signed in or not. Most recipients of a shared game link will never
+      // have signed into this app at all, so gating read on request.auth would
+      // defeat the feature.
+      allow get: if true;
+
+      // LOAD-BEARING. Without this, any caller — authenticated or not — can
+      // enumerate every shared game ever created: names, amounts and payment
+      // handles included. A ~119-bit unlisted id is only a secret if it can
+      // never be discovered by iteration or query. Do not relax this for any
+      // feature; a "Shared with me" list is explicitly out of scope for
+      // exactly this reason.
+      allow list: if false;
+
+      // Document-ID format guard. shareId must be exactly the 20-character
+      // [A-Za-z0-9] Firestore auto-ID shape the app itself mints (see
+      // frontend/utils/shareId.ts SHARE_ID_RE). Without this a client could
+      // create a document at a short, guessable id like /sharedGames/abc,
+      // voiding the "URL is the credential" security model, because an
+      // attacker could then enumerate short ids directly. matches() on
+      // Firestore rules uses RE2 and is fully anchored by default; the ^...$
+      // is written explicitly anyway so the intent survives a copy-paste.
+      allow create: if request.auth != null
+                    && shareId.matches('^[A-Za-z0-9]{20}$')
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && validSnapshot(request.resource.data)
+                    // One day of clock skew over the 30-day policy. Stops a
+                    // client writing a snapshot that outlives the TTL window.
+                    && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
+
+      // Owner-only, NOT forbidden. The invariant that matters is "exactly one
+      // writer, never a viewer" — which the ownerUid check gives in full, so the
+      // multi-writer problem the frozen-snapshot design exists to avoid stays
+      // impossible. Forbidding update outright was over-tight: a host who
+      // reopens and re-completes a game (the statsCounted path exists for this)
+      // could never correct a link already sitting in a group chat.
+      //
+      // "Frozen" means frozen against viewers and against concurrency, not
+      // immutable forever. Runs the same validSnapshot() check as create —
+      // deliberately stronger than spec §4, which re-asserts ownerUid on
+      // update but drops the size caps, which would let an owner refresh a
+      // 10-row link into a 10,000-row document and bypass the storage guard
+      // entirely.
+      allow update: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.ownerUid == resource.data.ownerUid
+                    && validSnapshot(request.resource.data)
+                    && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
+
+      // No UI calls delete today. Shipped anyway: it costs nothing and the
+      // tests assert it.
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
   }
 }
