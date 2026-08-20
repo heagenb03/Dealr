@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 
+import ClipboardShareHandoff from '@/components/ClipboardShareHandoff';
 import { GameProvider } from '@/contexts/GameContext';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
@@ -152,6 +153,7 @@ function AuthNavigator() {
               <Stack.Screen name="g/[shareId]" />
               <Stack.Screen name="how-it-works" options={{ presentation: 'modal' }} />
             </Stack>
+            <ClipboardShareHandoff />
           </View>
         </GameProvider>
       </GameDefaultsProvider>
