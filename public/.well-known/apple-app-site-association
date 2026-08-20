@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["__APPLE_TEAM_ID__.com.heagenb03.CashCage"],
+        "components": [
+          {
+            "/": "/g/*",
+            "comment": "Shared game links"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>A Cash Cage game was shared with you</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      background: #0A0A0A; color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+    }
+    .card { max-width: 380px; width: 100%; }
+    h1 { font-size: 24px; line-height: 1.25; margin: 0 0 12px; font-weight: 700; }
+    p { font-size: 15px; line-height: 1.5; margin: 0 0 28px; color: #A0A0A0; }
+    a.cta {
+      display: block; padding: 16px 24px; border-radius: 12px;
+      background: #B072BB; color: #0A0A0A;
+      font-size: 16px; font-weight: 700; text-decoration: none;
+    }
+    .note { margin: 20px 0 0; font-size: 13px; color: #6A6A6A; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Someone shared a Cash Cage game with you</h1>
+    <p>Get the app to see who owes what &mdash; and pay them in a tap.</p>
+    <a class="cta" id="cta" href="https://apps.apple.com/app/id6759301097">Get the App</a>
+    <p class="note">Already have it? Tap the original link again.</p>
+  </div>
+
+  <script>
+    // This page renders NO game data and performs NO Firestore read. Its only
+    // job is the "app not installed" branch: iOS only loads this file when no
+    // installed app claimed the URL.
+    (function () {
+      var APP_STORE = 'https://apps.apple.com/app/id6759301097';
+      var PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.heagenb03.CashCage';
+
+      var isAndroid = /android/i.test(navigator.userAgent);
+      var cta = document.getElementById('cta');
+      var storeUrl = isAndroid ? PLAY_STORE : APP_STORE;
+      cta.setAttribute('href', storeUrl);
+
+      // Deferred deep link by clipboard handoff. The app reads this on first
+      // launch after sign-in; see frontend/services/pendingShare.ts. A vendor
+      // SDK would do this properly, but adds a third-party data-sharing
+      // relationship to declare and a dependency that can itself sunset.
+      var match = window.location.pathname.match(/^\/g\/([A-Za-z0-9]{20})\/?$/);
+      var token = match ? 'CC-' + match[1] : null;
+
+      cta.addEventListener('click', function (event) {
+        if (!token || !navigator.clipboard) return;
+        event.preventDefault();
+        // Navigate whether or not the copy resolves — a failed copy must never
+        // strand the user on this page. The documented recovery is to re-tap the
+        // original link once the app is installed.
+        navigator.clipboard.writeText(token)
+          .catch(function () {})
+          .then(function () { window.location.href = storeUrl; });
+      });
+    })();
+  </script>
+</body>
+</html>

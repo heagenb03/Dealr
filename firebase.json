@@ -8,5 +8,23 @@
   "emulators": {
     "firestore": { "port": 8080 },
     "ui": { "enabled": false }
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "!/.well-known/**", "**/node_modules/**"],
+    "appAssociation": "NONE",
+    "predeploy": ["node scripts/verify-hosting-sentinels.js"],
+    "rewrites": [
+      {
+        "source": "/g/**",
+        "destination": "/g/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/.well-known/apple-app-site-association",
+        "headers": [{ "key": "Content-Type", "value": "application/json" }]
+      }
+    ]
   }
 }
