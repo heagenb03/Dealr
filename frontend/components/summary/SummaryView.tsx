@@ -89,6 +89,7 @@ export function renderSummaryItem(
             balance={item.balance}
             reduceMotion={reduceMotion}
             hint={item.hint}
+            isBanker={item.isBanker}
             formatAmountCompact={formatAmountCompact}
           />
         </View>

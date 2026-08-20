@@ -218,12 +218,6 @@ export default function SharedGameScreen() {
       />
 
       <SummaryHudHeader label={snapshot.settlementMode === 'banker' ? 'PAYOUTS' : 'SETTLEMENTS'} />
-
-      {snapshot.settlementMode === 'banker' && (
-        <Text style={styles.bankerSubhead}>
-          {snapshot.bankerName ?? '—'}, the banker, pays out below
-        </Text>
-      )}
     </>
   );
 
@@ -312,7 +306,6 @@ const styles = StyleSheet.create({
   heroPotSection: { marginTop: 24, marginBottom: 24 },
   heroPotDisplay: { alignItems: 'center', paddingVertical: 12 },
   heroPotAmount: { fontSize: 40, fontWeight: '700', color: '#B072BB' },
-  bankerSubhead: { fontSize: 13, color: '#A0A0A0', marginTop: 6, marginBottom: 8 },
   actions: { padding: 20, paddingBottom: 34 },
   doneButton: {
     paddingVertical: 16,

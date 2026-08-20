@@ -19,6 +19,8 @@ export interface BalanceCardProps {
   balance: PlayerBalance;
   reduceMotion: boolean;
   hint?: string;
+  /** Renders the BANKER badge. True only for the banker's row in banker mode. */
+  isBanker?: boolean;
   formatAmountCompact: (value: number) => string;
 }
 
@@ -26,6 +28,7 @@ export default function BalanceCard({
   balance,
   reduceMotion,
   hint,
+  isBanker,
   formatAmountCompact,
 }: BalanceCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -68,7 +71,7 @@ export default function BalanceCard({
       <Animated.View
         accessible={true}
         accessibilityRole="button"
-        accessibilityLabel={`${balance.playerName}, Net: ${netDisplay}`}
+        accessibilityLabel={`${balance.playerName}${isBanker ? ', banker' : ''}, Net: ${netDisplay}`}
         style={[
           styles.playerCard,
           !reduceMotion && { transform: [{ scale: scaleAnim }] }
@@ -78,6 +81,7 @@ export default function BalanceCard({
         <View style={styles.cardHeader}>
           <View style={styles.nameRow}>
             <Text style={styles.playerName}>{balance.playerName}</Text>
+            {isBanker && <Text style={styles.bankerLabel}>BANKER</Text>}
             {hint && <Text style={styles.balanceHint}>{hint}</Text>}
           </View>
         </View>

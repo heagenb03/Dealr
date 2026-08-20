@@ -24,7 +24,7 @@ import { resolveTolerance } from '@/constants/Tolerances';
 import { PreferredPayment } from '@/types/game';
 import { buildShareMessage } from '@/utils/shareMessage';
 import { useNetwork } from '@/contexts/NetworkContext';
-import { publishSharedGame, mintShareId } from '@/services/sharedGameService';
+import { publishSharedGame, mintShareId, shareExpiryFrom } from '@/services/sharedGameService';
 import { buildShareUrl } from '@/utils/shareLink';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
@@ -547,7 +547,18 @@ setSettlementResult(cachedResult);
       }
     }
 
-    const shareUrl = linkIsSafeToSend && shareId ? buildShareUrl(shareId) : undefined;
+    // The expiry is recomputed here rather than read back off the write,
+    // which is deliberate. On a refresh the URL is built whether or not the
+    // write acked (see linkIsSafeToSend above), so a failed refresh leaves the
+    // document on its OLD expiresAt while this stamps a fresh one -- the link
+    // then claims to live longer than it does, and the doormat falls through to
+    // its normal "get the app" path. That is the harmless direction: claiming
+    // an expired link is still good costs one install; claiming a good link is
+    // expired turns a working share into a dead end.
+    const shareUrl =
+      linkIsSafeToSend && shareId
+        ? buildShareUrl(shareId, shareExpiryFrom(new Date()))
+        : undefined;
 
     try {
       const message = buildShareMessage({
@@ -605,12 +616,6 @@ setSettlementResult(cachedResult);
       </View>
 
       <SummaryHudHeader label={isBanker ? 'PAYOUTS' : 'SETTLEMENTS'} />
-
-      {isBanker && (
-        <Text style={styles.bankerSubhead}>
-          {bankerName ?? '—'}, the banker, pays out below
-        </Text>
-      )}
 
       {/* Fallback notice */}
       {showFallbackBanner && (
@@ -826,13 +831,6 @@ const styles = StyleSheet.create({
     color: 'rgba(176,114,187,0.55)',
     textAlign: 'center',
     marginBottom: 10,
-    letterSpacing: 0.3,
-  },
-  bankerSubhead: {
-    fontSize: 12,
-    color: 'rgba(176,114,187,0.75)',
-    textAlign: 'center',
-    marginBottom: 12,
     letterSpacing: 0.3,
   },
 });

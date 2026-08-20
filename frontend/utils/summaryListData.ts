@@ -11,7 +11,15 @@ export type SummaryListItem =
   | { type: 'settlement'; key: string; grouped: GroupedSettlement }
   | { type: 'bankerPayout'; key: string; recipient: string; amount: number }
   | { type: 'sectionHeader'; key: string; label: string }
-  | { type: 'balance'; key: string; balance: PlayerBalance; hint?: string; isLast: boolean }
+  | {
+      type: 'balance';
+      key: string;
+      balance: PlayerBalance;
+      hint?: string;
+      /** True only for the banker's own row, and only in banker mode. */
+      isBanker: boolean;
+      isLast: boolean;
+    }
   | { type: 'empty'; key: string; label: string; icon: string };
 
 export interface SummaryListParams {
@@ -63,20 +71,26 @@ export function buildSummaryListData({
   items.push({ type: 'sectionHeader', key: 'header-balances', label: 'FINAL BALANCES' });
 
   balances.forEach((balance, index) => {
-    // A banker who never bought in or cashed out is in the roster only to receive and
-    // disburse; the hint keeps a flat 0 row from reading as "forgot to enter anything".
+    // The BANKER badge marks EVERY banker, matching PlayerCardActive, which gates
+    // its badge on isBanker alone.
+    const isThisPlayerBanker = isBanker && bankerPlayerId === balance.playerId;
+    // The hint is the narrower case: a banker who never bought in or cashed out is
+    // in the roster only to receive and disburse; the hint keeps a flat 0 row from
+    // reading as "forgot to enter anything".
     const isNonPlayingBanker =
-      isBanker &&
-      bankerPlayerId === balance.playerId &&
+      isThisPlayerBanker &&
       balance.totalBuyins === 0 &&
       balance.totalCashouts === 0;
     items.push({
       type: 'balance',
       key: `balance-${balance.playerId}`,
       balance,
+      isBanker: isThisPlayerBanker,
       // isLast reproduces balancesContainer's `gap: 8` without a trailing gap.
       isLast: index === balances.length - 1,
-      ...(isNonPlayingBanker ? { hint: 'banker · not playing' } : {}),
+      // 'not playing', NOT 'banker · not playing': the BANKER badge now sits
+      // immediately left of this, so the old copy read "Ada BANKER banker · not playing".
+      ...(isNonPlayingBanker ? { hint: 'not playing' } : {}),
     });
   });
 

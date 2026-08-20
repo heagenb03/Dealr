@@ -69,7 +69,50 @@ describe('buildSummaryListData', () => {
       bankerPlayerId: 'p1',
     });
     const balances = items.filter(i => i.type === 'balance') as any[];
-    expect(balances.map(b => b.hint)).toEqual(['banker · not playing', undefined]);
+    // 'not playing' only — the BANKER badge beside it now carries the role, so
+    // the old 'banker · not playing' would read "Ada BANKER banker · not playing".
+    expect(balances.map(b => b.hint)).toEqual(['not playing', undefined]);
+  });
+
+  // The badge and the hint have DIFFERENT conditions and must not be collapsed:
+  // the badge marks every banker, the hint only a banker with no activity.
+  it('flags the banker row and nobody else, playing or not', () => {
+    const playing = buildSummaryListData({
+      grouped: [],
+      balances: [bal('p1', 'Ada', 50, 30), bal('p2', 'Bob', 50, 20)],
+      isBanker: true,
+      bankerPlayerId: 'p1',
+    }).filter(i => i.type === 'balance') as any[];
+    expect(playing.map(b => b.isBanker)).toEqual([true, false]);
+    expect(playing.map(b => b.hint)).toEqual([undefined, undefined]);
+
+    const notPlaying = buildSummaryListData({
+      grouped: [],
+      balances: [bal('p1', 'Ada', 0, 0), bal('p2', 'Bob', 50, 20)],
+      isBanker: true,
+      bankerPlayerId: 'p1',
+    }).filter(i => i.type === 'balance') as any[];
+    expect(notPlaying.map(b => b.isBanker)).toEqual([true, false]);
+  });
+
+  it('flags nobody in direct mode, even the player named as banker', () => {
+    const items = buildSummaryListData({
+      grouped: [],
+      balances: [bal('p1', 'Ada', 0, 0), bal('p2', 'Bob', 50, 20)],
+      isBanker: false,
+      bankerPlayerId: 'p1',
+    }).filter(i => i.type === 'balance') as any[];
+    expect(items.map(b => b.isBanker)).toEqual([false, false]);
+  });
+
+  it('flags nobody when the banker id matches no player in the roster', () => {
+    const items = buildSummaryListData({
+      grouped: [],
+      balances: [bal('p1', 'Ada', 0, 0), bal('p2', 'Bob', 50, 20)],
+      isBanker: true,
+      bankerPlayerId: 'ghost',
+    }).filter(i => i.type === 'balance') as any[];
+    expect(items.map(b => b.isBanker)).toEqual([false, false]);
   });
 
   it('does not hint a banker who actually played', () => {

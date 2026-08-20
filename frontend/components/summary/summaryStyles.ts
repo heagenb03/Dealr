@@ -155,6 +155,12 @@ export const summaryStyles = StyleSheet.create({
     minWidth: 0,
     paddingHorizontal: 4,
     backgroundColor: 'transparent',
+    // Cross-axis only. The amount and the Pay button beneath it share a centre
+    // axis; payButton keeps alignSelf: 'stretch', so it still spans the column
+    // and its already-centred label lands directly under the amount. This does
+    // NOT touch paymentAmountRow's marginTop: 'auto' (main axis), which is what
+    // keeps the amount and button on the cell floor.
+    alignItems: 'center',
   },
   paymentGridDivider: {
     width: 1,
@@ -182,6 +188,9 @@ export const summaryStyles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     marginBottom: 4,
+    // The cell centres its children, but a name long enough to wrap fills the
+    // full column width — without this its second line hangs left of the first.
+    textAlign: 'center',
   },
   paymentAmountRow: {
     flexDirection: 'row',
@@ -230,6 +239,18 @@ export const summaryStyles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  // Copied VERBATIM from PlayerCardActive.tsx's bankerLabel so the summary's
+  // banker badge and the active game's are the same mark. Both nameRow styles
+  // are identical (row, alignItems: 'center', gap: 4) above an identical 17px/600
+  // playerName, so marginLeft: 6 yields the same offset on both screens.
+  bankerLabel: {
+    marginLeft: 6,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: '#B072BB',
   },
   balanceHint: {
     marginLeft: 6,
