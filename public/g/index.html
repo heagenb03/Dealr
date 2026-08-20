@@ -24,6 +24,20 @@
       text-align: center;
     }
     .card { max-width: 380px; width: 100%; }
+    /* The icon file's own corners sample #0A0A0A -- byte-identical to this
+       page's background -- so the tile has no visible fill of its own and the
+       1px hairline is what defines its shape. Do NOT "restore" a drop shadow
+       here: black on #0A0A0A renders nothing. Flat is also what it is quoting,
+       since iOS Home Screen icons carry no shadow.
+       Served from /icon.png, which MUST stay absolute: firebase.json rewrites
+       /g/** to /g/index.html, so a relative src resolves to /g/icon.png and
+       comes back as this HTML document instead of a PNG. */
+    .hero {
+      display: block; width: 88px; height: 88px;
+      margin: 0 auto 28px;
+      border-radius: 22%;
+      border: 1px solid #2A2A2A;
+    }
     h1 { font-size: 24px; line-height: 1.25; margin: 0 0 12px; font-weight: 700; }
     p { font-size: 15px; line-height: 1.5; margin: 0 0 28px; color: #A0A0A0; }
     .cta {
@@ -48,10 +62,11 @@
 </head>
 <body>
   <div class="card">
+    <img class="hero" src="/icon.png" alt="Cash Cage" width="88" height="88" decoding="async" />
     <h1>Someone shared a Cash Cage game with you</h1>
-    <p id="lede">Get the app to see who owes what &mdash; and pay them in a tap.</p>
-    <a class="cta" id="cta" href="https://apps.apple.com/app/id6759301097">Get the App</a>
-    <p class="note" id="note">Already have it? Tap the original link again.</p>
+    <p id="lede">Get the app below to see who owes what and pay them in a tap.</p>
+    <a class="cta" id="cta" href="https://apps.apple.com/app/id6759301097">Download on the App Store</a>
+    <p class="note" id="note">Already have it? Tap or hold down the original link again.</p>
   </div>
 
   <script>
@@ -79,8 +94,9 @@
         badge.className = 'cta cta--off';
         badge.textContent = 'iOS only';
         cta.parentNode.replaceChild(badge, cta);
-        // The note reads "Already have it? Tap the original link again" -- a
-        // loop instruction for someone who cannot install the app at all.
+        // The note reads "Already have it? Tap or hold down the original link
+        // again" -- a loop instruction for someone who cannot install the app
+        // at all.
         document.getElementById('note').remove();
         return;
       }
