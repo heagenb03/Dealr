@@ -32,6 +32,7 @@ import { buildSummaryListData } from '@/utils/summaryListData';
 import { parseShareId } from '@/utils/shareLink';
 import { chipNamesFromBalances, filterSummaryInputs } from '@/utils/shareFilter';
 import { paymentMapFromSnapshot, SHARED_GAME_SCHEMA } from '@/utils/sharedGameSnapshot';
+import { formatSharedAgo } from '@/utils/sharedAgo';
 import { fetchSharedGame, SharedGameDoc } from '@/services/sharedGameService';
 import { clearPendingShare, setPendingShare } from '@/services/pendingShare';
 import { DEFAULT_CURRENCY } from '@/constants/Currencies';
@@ -99,6 +100,11 @@ export default function SharedGameScreen() {
   }, [shareId, canView]);
 
   const snapshot = state.status === 'ready' ? state.doc.snapshot : null;
+
+  // Read off the DOCUMENT, not the snapshot: snapshot.date is the GAME's date.
+  // publishSharedGame rebuilds the body on every refresh, so createdAt is the
+  // MOST RECENT publish — which is exactly what this line must report.
+  const sharedAt = state.status === 'ready' ? state.doc.createdAt : null;
 
   // One formatter bundle per currency, not one per row. Keyed on the SNAPSHOT's
   // currency, not the viewer's: a game played in EUR reads in EUR no matter what
@@ -202,6 +208,9 @@ export default function SharedGameScreen() {
       <View style={styles.header}>
         <Text style={styles.gameTitle}>{snapshot.gameName}</Text>
         <Text style={styles.gameDate}>{new Date(snapshot.date).toLocaleDateString()}</Text>
+        {sharedAt && sharedAt.getTime() > 0 ? (
+          <Text style={styles.sharedAgo}>{formatSharedAgo(sharedAt, new Date())}</Text>
+        ) : null}
       </View>
 
       <View style={styles.heroPotSection}>
@@ -303,6 +312,7 @@ const styles = StyleSheet.create({
   header: { paddingTop: 60, paddingBottom: 8 },
   gameTitle: { fontSize: 28, fontWeight: '700', color: '#FFFFFF' },
   gameDate: { fontSize: 14, color: '#A0A0A0', marginTop: 4 },
+  sharedAgo: { fontSize: 13, color: '#A0A0A0', marginTop: 2 },
   heroPotSection: { marginTop: 24, marginBottom: 24 },
   heroPotDisplay: { alignItems: 'center', paddingVertical: 12 },
   heroPotAmount: { fontSize: 40, fontWeight: '700', color: '#B072BB' },
