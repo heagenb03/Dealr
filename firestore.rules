@@ -78,14 +78,39 @@ service cloud.firestore {
     // -----------------------------------------------------------------------
     match /sharedGames/{shareId} {
 
-      // Storage-abuse guard, applied to create AND update alike. The balances
-      // ceiling mirrors the one on /users/{uid}/games/{gameId} and sits
-      // deliberately above PRO_PLAYER_CAP (50) so the product number can rise
-      // without a rules deploy.
+      // Storage-abuse guard, applied to create AND update alike via
+      // validSnapshot() plus hasRequiredKeys() below. What this ACTUALLY
+      // bounds: array COUNTS on balances (<=100) and settlements (<=500),
+      // gameName's total character count (<=100), the TYPE of each of those
+      // three fields (list/list/string — a string can otherwise satisfy
+      // size() too, silently passing a malformed snapshot), and the exact
+      // top-level key set via hasOnly (no arbitrary extra field can smuggle
+      // in payload). What it does NOT and CANNOT bound: the byte size of any
+      // individual string inside an array element — e.g. one balance's
+      // playerName. Firestore security rules have no iteration construct, so
+      // per-element field lengths inside balances/settlements cannot be
+      // capped here. A single ~900 KB playerName is not rejected by this
+      // guard; the only backstop against that specific abuse is Firestore's
+      // own 1 MiB total document size limit. This is a partial guard, not a
+      // full one.
       function validSnapshot(data) {
-        return data.snapshot.balances.size() <= 100
+        return data.snapshot.balances is list
+               && data.snapshot.balances.size() <= 100
+               && data.snapshot.settlements is list
                && data.snapshot.settlements.size() <= 500
+               && data.snapshot.gameName is string
                && data.snapshot.gameName.size() <= 100;
+      }
+
+      // Required-shape guard, applied to create AND update alike. hasAll
+      // stops a required top-level field (ownerUid/snapshot/createdAt/
+      // expiresAt/schema) from being silently absent; hasOnly stops an
+      // arbitrary extra top-level field from being smuggled in (hasAll alone
+      // checks presence, not exclusivity, so it would not catch a payload
+      // with all required fields PLUS a 900 KB extra one).
+      function hasRequiredKeys(data) {
+        return data.keys().hasAll(['ownerUid', 'snapshot', 'createdAt', 'expiresAt', 'schema'])
+               && data.keys().hasOnly(['ownerUid', 'snapshot', 'createdAt', 'expiresAt', 'schema']);
       }
 
       // The URL IS the credential — the ~119-bit id is what actually gates
@@ -97,7 +122,12 @@ service cloud.firestore {
       // there is no reader in this system that is ever unauthenticated at
       // read time; requiring auth here costs nothing and narrows the grant
       // on the one rule that governs cross-user data.
-      allow get: if request.auth != null;
+      //
+      // expiresAt > request.time: an expired link stays intact until the TTL
+      // sweeper happens to run, but must stop being READABLE immediately —
+      // recipients are told links last 30 days, and the rules must enforce
+      // that on read, not just rely on eventual deletion.
+      allow get: if request.auth != null && resource.data.expiresAt > request.time;
 
       // LOAD-BEARING. Without this, any caller — authenticated or not — can
       // enumerate every shared game ever created: names, amounts and payment
@@ -122,10 +152,13 @@ service cloud.firestore {
                     // edit that reorders or guards those dereferences could
                     // otherwise silently turn a missing-field deny into an
                     // allow with the test still green for the wrong reason.
-                    && request.resource.data.keys().hasAll(
-                         ['ownerUid', 'snapshot', 'createdAt', 'expiresAt', 'schema'])
+                    && hasRequiredKeys(request.resource.data)
                     && request.resource.data.ownerUid == request.auth.uid
                     && validSnapshot(request.resource.data)
+                    // A document born already expired must never be
+                    // writable — there is no legitimate reason to create a
+                    // dead link.
+                    && request.resource.data.expiresAt > request.time
                     // One day of clock skew over the 30-day policy. Stops a
                     // client writing a snapshot that outlives the TTL window.
                     && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
@@ -138,14 +171,24 @@ service cloud.firestore {
       // could never correct a link already sitting in a group chat.
       //
       // "Frozen" means frozen against viewers and against concurrency, not
-      // immutable forever. Runs the same validSnapshot() check as create —
-      // deliberately stronger than spec §4, which re-asserts ownerUid on
-      // update but drops the size caps, which would let an owner refresh a
-      // 10-row link into a 10,000-row document and bypass the storage guard
-      // entirely.
+      // immutable forever. Runs the same validSnapshot() AND hasRequiredKeys()
+      // checks as create — deliberately stronger than spec §4, which
+      // re-asserts ownerUid on update but drops the size caps, which would
+      // let an owner refresh a 10-row link into a 10,000-row document and
+      // bypass the storage guard entirely. hasRequiredKeys() on update closes
+      // a second hole in the same spirit: without it an owner could DROP
+      // createdAt or schema via update with nothing else in this rule
+      // noticing (verified: mutation-tested, both drop silently without
+      // hasAll). Dropping expiresAt specifically was ALREADY denied even
+      // before this guard, because the expiresAt-upper-bound clause below
+      // already dereferences request.resource.data.expiresAt and fails
+      // closed on an absent field — hasRequiredKeys() makes that robust
+      // against a future refactor of that clause rather than being the only
+      // thing stopping it today.
       allow update: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid
                     && request.resource.data.ownerUid == resource.data.ownerUid
+                    && hasRequiredKeys(request.resource.data)
                     && validSnapshot(request.resource.data)
                     && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
 

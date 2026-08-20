@@ -2,9 +2,9 @@
  * Firestore rules tests for /sharedGames — the first cross-user read path in
  * this codebase.
  *
- * Run with `npm test` in this directory. Requires Java (17 confirmed on this
- * machine) and firebase-tools. NOT part of the frontend jest suite: its
- * 788/53 count must stay unambiguous.
+ * Run with `npm test` in this directory. Requires Java 21+ (firebase-tools
+ * 15.5.1 hard-rejects anything older) and firebase-tools. NOT part of the
+ * frontend jest suite: its 788/53 count must stay unambiguous.
  */
 const fs = require('fs');
 const path = require('path');
@@ -107,6 +107,18 @@ describe('read', () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(getDocs(collection(db, 'sharedGames')));
   });
+
+  it('DENIES GET on an expired document, even to the owner (Fix 2)', async () => {
+    // Recipients are told links last 30 days. Without this, a doc with a
+    // past expiresAt stays readable until the TTL sweeper happens to run —
+    // verified against a live emulator: a doc expired 365 days in the past
+    // was still readable.
+    await seed(sharedGame({ expiresAt: new Date(Date.now() - 365 * DAY) }));
+    const ownerDb = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(getDoc(doc(ownerDb, 'sharedGames', SHARE_ID)));
+    const otherDb = testEnv.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(otherDb, 'sharedGames', SHARE_ID)));
+  });
 });
 
 describe('create', () => {
@@ -175,6 +187,70 @@ describe('create', () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
     const { expiresAt: _drop, ...rest } = sharedGame();
     await assertFails(setDoc(doc(db, 'sharedGames', SHARE_ID), rest));
+  });
+
+  it('denies a doc missing a required field (schema) — Fix 4', async () => {
+    // Unlike snapshot/expiresAt above, `schema` is never dereferenced
+    // anywhere else in the rule, so this is the ONE case that actually
+    // discriminates hasAll() rather than passing via a dereference error on
+    // some other clause. See the mutation test in the report.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    const { schema: _drop, ...rest } = sharedGame();
+    await assertFails(setDoc(doc(db, 'sharedGames', SHARE_ID), rest));
+  });
+
+  it('denies create with an arbitrary extra top-level field (Fix 1 — hasOnly)', async () => {
+    // Verified against a live emulator: hasAll alone checks presence, not
+    // exclusivity, so a payload with all required fields PLUS an extra one
+    // (in the real attack, ~900 KB of it) previously succeeded outright.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), { ...sharedGame(), hostilePayload: 'x'.repeat(1000) }),
+    );
+  });
+
+  it('denies create when snapshot.balances is a string, not a list (Fix 1 — type guard)', async () => {
+    // Verified against a live emulator: size() works on strings too, so
+    // 'abc'.size() === 3 <= 100 silently passed a malformed snapshot.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ snapshot: snapshot({ balances: 'abc' }) })),
+    );
+  });
+
+  it('denies create when snapshot.settlements is a string, not a list (Fix 1 — type guard)', async () => {
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ snapshot: snapshot({ settlements: 'de' }) })),
+    );
+  });
+
+  it('denies create when snapshot.gameName is not a string (a list) (Fix 1 — type guard)', async () => {
+    // A list also has .size() (3 <= 100 here), so this specifically needs
+    // the `is string` guard, not just a size cap, to be caught.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ snapshot: snapshot({ gameName: ['a', 'b', 'c'] }) })),
+    );
+  });
+
+  it('denies create with an expiresAt already in the past (Fix 2 — born expired)', async () => {
+    // Verified against a live emulator: a doc with expiresAt 365 days in the
+    // past was accepted on create.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ expiresAt: new Date(Date.now() - 365 * DAY) })),
+    );
+  });
+
+  it('denies an expiresAt just over the 31-day bound (31d + 1h) (Fix 4 — tight boundary)', async () => {
+    // The pre-existing "beyond the 31-day bound" test used 40 days, which is
+    // loose enough that any accidental bound between 31 and 39 days would
+    // still pass it unchanged. This pins the actual cutoff at 31 days.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ expiresAt: new Date(Date.now() + 31 * DAY + HOUR) })),
+    );
   });
 });
 
@@ -253,6 +329,66 @@ describe('update — owner only, and never a viewer', () => {
     const db = testEnv.authenticatedContext(OWNER).firestore();
     await assertFails(
       setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ expiresAt: new Date(Date.now() + 40 * DAY) })),
+    );
+  });
+
+  it('denies an owner update at just over the 31-day bound (31d + 1h) (Fix 4 — tight boundary)', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ expiresAt: new Date(Date.now() + 31 * DAY + HOUR) })),
+    );
+  });
+
+  it('DENIES an owner update that drops schema (Fix 3 — hasAll on update)', async () => {
+    // Verified against a live emulator: hasAll() was only checked on
+    // create, so an owner could drop schema (or createdAt) via update with
+    // nothing else in the rule noticing.
+    await seed();
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    const { schema: _drop, ...rest } = sharedGame({ snapshot: snapshot({ totalPot: 999 }) });
+    await assertFails(setDoc(doc(db, 'sharedGames', SHARE_ID), rest));
+  });
+
+  it('DENIES an owner update that drops createdAt (Fix 3 — hasAll on update)', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    const { createdAt: _drop, ...rest } = sharedGame({ snapshot: snapshot({ totalPot: 999 }) });
+    await assertFails(setDoc(doc(db, 'sharedGames', SHARE_ID), rest));
+  });
+
+  it('DENIES an owner update that drops expiresAt (Fix 3 — the bricking scenario)', async () => {
+    // The scenario the coordinator flagged as load-bearing once Fix 2 lands:
+    // if expiresAt could be dropped via update, the new expiry-gated `get`
+    // rule would dereference an absent field on every future read and the
+    // document would be permanently unreadable with no way to tell why.
+    // NOTE (mutation-testing honesty): this specific case was already
+    // fail-closed before hasRequiredKeys() was added to update, because
+    // update's own expiresAt-upper-bound clause already dereferences
+    // request.resource.data.expiresAt — an absent field errors there
+    // independently of hasAll(). hasRequiredKeys() makes it robust against a
+    // future refactor of that clause rather than being the only thing
+    // stopping it today. Kept as a defense-in-depth regression test, not
+    // presented as proof that hasAll() uniquely gates it — see the report.
+    await seed();
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    const { expiresAt: _drop, ...rest } = sharedGame({ snapshot: snapshot({ totalPot: 999 }) });
+    await assertFails(setDoc(doc(db, 'sharedGames', SHARE_ID), rest));
+  });
+
+  it('DENIES an owner update that adds an arbitrary extra top-level field (Fix 3 — hasOnly on update)', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), { ...sharedGame({ snapshot: snapshot({ totalPot: 999 }) }), hostilePayload: 'x'.repeat(1000) }),
+    );
+  });
+
+  it('denies an owner update when snapshot.balances is a string, not a list (Fix 1 — validSnapshot shared by update)', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(
+      setDoc(doc(db, 'sharedGames', SHARE_ID), sharedGame({ snapshot: snapshot({ balances: 'abc' }) })),
     );
   });
 });
