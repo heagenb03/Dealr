@@ -156,7 +156,7 @@ export default function SharedGameScreen() {
     if (selectedName && filtered.grouped.length === 0) {
       return built.map(item =>
         item.type === 'empty'
-          ? { ...item, label: `${selectedName} has nothing to settle — tap the chip above to see everyone` }
+          ? { ...item, label: `${selectedName} has nothing to settle` }
           : item,
       );
     }

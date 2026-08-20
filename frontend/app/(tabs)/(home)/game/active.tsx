@@ -2181,7 +2181,7 @@ export default function ActiveGameScreen() {
 
               {completionModalMode === 'confirm' && (
                 <Text style={styles.completionModalConfirmText}>
-                  Are you sure you want to complete this game? This action cannot be undone.
+                  Are you sure you want to complete this game?
                 </Text>
               )}
 
