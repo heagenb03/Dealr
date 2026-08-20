@@ -6,7 +6,12 @@ separately.
 
 ## Prerequisites
 
-- Java 17+ (the Firestore emulator is a JVM process)
+- **Java 21+.** firebase-tools 15.5.1 hard-rejects anything older with
+  `firebase-tools no longer supports Java version before 21` — Java 17 is NOT
+  enough even though the emulator itself only needs a JVM. If `java -version`
+  on your default PATH reports < 21 but a JDK 21 is installed elsewhere,
+  prepend it for this command, e.g. (bash):
+  `export PATH="/path/to/jdk-21/bin:$PATH"`
 - `firebase-tools` on PATH (`firebase --version`)
 
 ## Run
