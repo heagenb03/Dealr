@@ -178,6 +178,28 @@ describe('resolveAuthGateNavigation', () => {
       expect(second).not.toBe('/(tabs)');
     });
 
+    it('does not fall back to /(tabs) on a stale re-fire from the verify-email screen', () => {
+      // The production path this whole ruling exists for: sign-up -> verify
+      // screen -> refreshVerification flips emailVerified true -> the effect
+      // consumes and navigates to the share -> re-fires with the SAME stale
+      // seg0 ('verify-email', not yet replaced). Same onGateScreen code path
+      // as the '(auth)' case above, exercised from the other gate screen so
+      // the report's claim matches the exact funnel it names.
+      setPendingShare(ID);
+      const first = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: 'verify-email', hasUser: true, mustVerify: false },
+        consumePendingShare,
+      );
+      expect(first).toBe(`/g/${ID}`);
+
+      const second = resolveAuthGateNavigation(
+        { isLoading: false, hydrated: true, seg0: 'verify-email', hasUser: true, mustVerify: false },
+        consumePendingShare,
+      );
+      expect(second).toBeNull();
+      expect(second).not.toBe('/(tabs)');
+    });
+
     it('still routes a genuine verification lapse to /verify-email while the latch is held', () => {
       // The latch must suppress ONLY the '/(tabs)' fallback, not every
       // navigation — otherwise a real auth-state change mid-transition would
