@@ -5,7 +5,7 @@ import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 
@@ -15,6 +15,8 @@ import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { GameDefaultsProvider } from '@/contexts/GameDefaultsContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { needsVerification } from '@/utils/emailVerification';
+import { consumePendingShare, hydratePendingShare } from '@/services/pendingShare';
+import { resolveAuthGateNavigation } from '@/utils/authRedirect';
 
 export {
   ErrorBoundary,
@@ -91,26 +93,42 @@ function AuthNavigator() {
     }
   }, [isLoading]);
 
-  // Redirect based on auth + verification state once auth has resolved
-  useEffect(() => {
-    if (isLoading) return;
+  // A share link tapped before an App Store round trip is stashed in
+  // AsyncStorage; pull it back into memory once, at launch. Never overwrites an
+  // id set this session — see services/pendingShare.ts.
+  //
+  // The flag is what ORDERS this before the redirect effect's consume. Set it in
+  // `finally`: a storage failure must let the gate proceed, not wedge every user
+  // on the splash screen forever. Losing the stash degrades to "lands on the
+  // tabs", and the documented recovery is to re-tap the link in the group chat.
+  const [hydrated, setHydrated] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    hydratePendingShare().finally(() => {
+      if (!cancelled) setHydrated(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Redirect based on auth + verification state once auth has resolved. The
+  // decision itself (including the hydrate-ordering gate and the post-consume
+  // latch that guards against a stale re-fire clobbering a share navigation)
+  // lives in resolveAuthGateNavigation — see utils/authRedirect.ts — so it is
+  // unit-testable without rendering this component tree.
+  useEffect(() => {
     const seg0 = (segments as string[])[0];
-    const inAuthGroup = seg0 === '(auth)';
-    const onVerifyScreen = seg0 === 'verify-email';
     const mustVerify = needsVerification(user, emailVerified);
 
-    if (!user && !inAuthGroup) {
-      // Not signed in and not on an auth screen — go to login
-      router.replace('/(auth)/login' as any);
-    } else if (mustVerify && !onVerifyScreen) {
-      // Signed in but email not verified — block behind the verify screen
-      router.replace('/verify-email' as any);
-    } else if (user && !mustVerify && (inAuthGroup || onVerifyScreen)) {
-      // Verified (or OAuth) but still on an auth/verify screen — go to main app
-      router.replace('/(tabs)' as any);
-    }
-  }, [user, isLoading, emailVerified, segments]);
+    const destination = resolveAuthGateNavigation(
+      { isLoading, hydrated, seg0, hasUser: !!user, mustVerify },
+      consumePendingShare,
+    );
+
+    // `as any` because typedRoutes cannot narrow a computed path string — the
+    // same reason the previous three router.replace calls carried the cast.
+    if (destination) router.replace(destination as any);
+  }, [user, isLoading, emailVerified, segments, hydrated]);
 
   // Neutral loading state — splash screen is still showing above this
   if (isLoading) {
@@ -131,6 +149,7 @@ function AuthNavigator() {
               <Stack.Screen name="(auth)" />
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="verify-email" />
+              <Stack.Screen name="g/[shareId]" />
               <Stack.Screen name="how-it-works" options={{ presentation: 'modal' }} />
             </Stack>
           </View>
