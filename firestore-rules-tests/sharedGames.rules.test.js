@@ -82,13 +82,16 @@ describe('read', () => {
     await assertSucceeds(getDoc(doc(db, 'sharedGames', SHARE_ID)));
   });
 
-  it('lets an UNAUTHENTICATED caller GET a shared game — the URL is the credential', async () => {
-    // The entire security model: anyone holding the ~119-bit id may read it,
-    // signed in or not. This is deliberately looser than the brief's original
-    // draft (auth != null) — see the rules comment on `allow get`.
+  it('DENIES GET to an unauthenticated caller', async () => {
+    // request.auth != null is defense in depth on top of the ~119-bit id,
+    // not a replacement for it: no reader in this system is ever
+    // unauthenticated at read time (Task 10's auth gate sends a signed-out
+    // visitor to /(auth)/login before the shared route renders, and the
+    // doormat page never touches Firestore) — see the rules comment on
+    // `allow get`.
     await seed();
     const db = testEnv.unauthenticatedContext().firestore();
-    await assertSucceeds(getDoc(doc(db, 'sharedGames', SHARE_ID)));
+    await assertFails(getDoc(doc(db, 'sharedGames', SHARE_ID)));
   });
 
   it('DENIES LIST even to the owner', async () => {

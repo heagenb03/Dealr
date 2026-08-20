@@ -88,11 +88,16 @@ service cloud.firestore {
                && data.snapshot.gameName.size() <= 100;
       }
 
-      // The URL IS the credential — anyone holding the ~119-bit link may read
-      // it, signed in or not. Most recipients of a shared game link will never
-      // have signed into this app at all, so gating read on request.auth would
-      // defeat the feature.
-      allow get: if true;
+      // The URL IS the credential — the ~119-bit id is what actually gates
+      // who can find this document. request.auth != null is defense in depth
+      // on top of that, not a replacement for it: Task 10's auth gate
+      // (resolveAuthRedirect) sends a signed-out visitor to /(auth)/login
+      // BEFORE the shared route ever renders, even with a pending share
+      // waiting — and the doormat page performs no Firestore read at all. So
+      // there is no reader in this system that is ever unauthenticated at
+      // read time; requiring auth here costs nothing and narrows the grant
+      // on the one rule that governs cross-user data.
+      allow get: if request.auth != null;
 
       // LOAD-BEARING. Without this, any caller — authenticated or not — can
       // enumerate every shared game ever created: names, amounts and payment
@@ -104,7 +109,7 @@ service cloud.firestore {
 
       // Document-ID format guard. shareId must be exactly the 20-character
       // [A-Za-z0-9] Firestore auto-ID shape the app itself mints (see
-      // frontend/utils/shareId.ts SHARE_ID_RE). Without this a client could
+      // frontend/utils/shareLink.ts SHARE_ID_RE). Without this a client could
       // create a document at a short, guessable id like /sharedGames/abc,
       // voiding the "URL is the credential" security model, because an
       // attacker could then enumerate short ids directly. matches() on
@@ -112,6 +117,13 @@ service cloud.firestore {
       // is written explicitly anyway so the intent survives a copy-paste.
       allow create: if request.auth != null
                     && shareId.matches('^[A-Za-z0-9]{20}$')
+                    // Explicit shape guard, not just a side effect of
+                    // validSnapshot() erroring on an absent field: a future
+                    // edit that reorders or guards those dereferences could
+                    // otherwise silently turn a missing-field deny into an
+                    // allow with the test still green for the wrong reason.
+                    && request.resource.data.keys().hasAll(
+                         ['ownerUid', 'snapshot', 'createdAt', 'expiresAt', 'schema'])
                     && request.resource.data.ownerUid == request.auth.uid
                     && validSnapshot(request.resource.data)
                     // One day of clock skew over the 30-day policy. Stops a

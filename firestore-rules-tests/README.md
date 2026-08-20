@@ -31,13 +31,22 @@ emulator down. No project data is touched — the emulator is entirely local.
 
 - **list denied** to everyone, including the owner and unauthenticated callers
   — the single most important rule in the feature.
-- **get allowed** to anyone holding the id, signed in or not — the URL is the
-  credential.
-- **create** requires sign-in, `ownerUid == request.auth.uid`, a
-  well-formed/sized snapshot, an `expiresAt` inside the 31-day bound, and a
-  document id matching `^[A-Za-z0-9]{20}$` (Firestore auto-ID shape). Tested:
-  too-short id rejected, id with a disallowed character rejected, valid
-  20-char id accepted. A doc missing `snapshot` or `expiresAt` is rejected.
+- **get allowed** to any signed-in user holding the id; **denied to an
+  unauthenticated caller**. The ~119-bit id is what actually gates who can
+  find the document; requiring `request.auth != null` is defense in depth on
+  top of that, not a replacement for it — there is no reader in this app that
+  is ever unauthenticated at read time (Task 10's auth gate sends a
+  signed-out visitor to `/(auth)/login` first, and the doormat page never
+  touches Firestore).
+- **create** requires sign-in, a document id matching `^[A-Za-z0-9]{20}$`
+  (Firestore auto-ID shape), all five required top-level fields present
+  (`ownerUid`, `snapshot`, `createdAt`, `expiresAt`, `schema` — an explicit
+  `hasAll()` guard, not just a side effect of `validSnapshot()` erroring on an
+  absent field), `ownerUid == request.auth.uid`, a well-formed/sized
+  snapshot, and an `expiresAt` inside the 31-day bound. Tested: too-short id
+  rejected, id with a disallowed character rejected, valid 20-char id
+  accepted, doc missing `snapshot` rejected, doc missing `expiresAt`
+  rejected.
 - **update** is owner-only, cannot reassign `ownerUid`, and re-runs the same
   size/format checks as create (a deliberate strengthening over spec §4, which
   drops the size caps on update).
