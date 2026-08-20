@@ -88,12 +88,51 @@ describe('AsyncStorage mirror', () => {
     expect(await AsyncStorage.getItem(PENDING_SHARE_KEY)).toBeNull();
   });
 
-  it('does NOT let hydrate clobber an id set this session', async () => {
-    // A cold start racing a deep link: the link arrives and sets OTHER while the
-    // launch-time hydrate of a stale ID is still in flight. The fresher intent wins.
+  it('skips the read entirely when a link is already pending before hydrate is called', async () => {
+    // This pins the FIRST guard in hydratePendingShare (`if (pending !== null)
+    // return;`, checked before the AsyncStorage read even starts) — a link that
+    // arrived before hydrate was ever invoked must not be touched by hydrate at
+    // all. It does NOT exercise the second guard below.
     await AsyncStorage.setItem(PENDING_SHARE_KEY, ID);
     setPendingShare(OTHER);
     await hydratePendingShare();
+    expect(consumePendingShare()).toBe(OTHER);
+  });
+
+  it('does NOT let a link that arrives WHILE the read is in flight clobber it', async () => {
+    // This is the race the module exists to defend against: a cold start racing
+    // a deep link. hydratePendingShare is suspended mid-await on the AsyncStorage
+    // read, and the link arrives (setPendingShare) before that read resolves —
+    // this pins the SECOND guard, the post-await re-check at pendingShare.ts:66.
+    // The prior test above only proves the pre-call guard; it cannot reach this
+    // one, because pending is already non-null before hydrate's await is ever
+    // scheduled.
+    //
+    // NOTE: we swap AsyncStorage.getItem by direct property assignment and
+    // restore it the same way, rather than jest.spyOn(...).mockRestore(). The
+    // async-storage-mock's methods are already jest.fn()s internally, and
+    // mockRestore() on a spy over an already-mock function does not reinstate
+    // the working implementation here — it leaves getItem returning undefined
+    // for every subsequent call, silently corrupting any test that runs after
+    // it in this file (confirmed empirically). Direct property swap/restore
+    // does not touch spy machinery at all, so it does not have this failure
+    // mode.
+    const originalGetItem = AsyncStorage.getItem;
+    let resolveRead!: (value: string | null) => void;
+    const deferredRead = new Promise<string | null>((resolve) => {
+      resolveRead = resolve;
+    });
+    (AsyncStorage as { getItem: typeof AsyncStorage.getItem }).getItem = jest.fn(
+      () => deferredRead
+    );
+
+    const hydrate = hydratePendingShare(); // suspended at `await AsyncStorage.getItem`
+    setPendingShare(OTHER); // the link arrives while that read is still in flight
+    resolveRead(ID); // the read resolves with the stale stored id
+    await hydrate;
+
+    (AsyncStorage as { getItem: typeof AsyncStorage.getItem }).getItem = originalGetItem;
+
     expect(consumePendingShare()).toBe(OTHER);
   });
 
@@ -104,9 +143,18 @@ describe('AsyncStorage mirror', () => {
   });
 
   it('survives an AsyncStorage read failure', async () => {
-    const spy = jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('boom'));
+    // Same rationale as above: direct property swap/restore instead of
+    // jest.spyOn(...).mockRestore(), which corrupts this mock for any test
+    // that runs afterward in this file.
+    const originalGetItem = AsyncStorage.getItem;
+    (AsyncStorage as { getItem: typeof AsyncStorage.getItem }).getItem = jest.fn(() =>
+      Promise.reject(new Error('boom'))
+    );
+
     await expect(hydratePendingShare()).resolves.toBeUndefined();
+
+    (AsyncStorage as { getItem: typeof AsyncStorage.getItem }).getItem = originalGetItem;
+
     expect(consumePendingShare()).toBeNull();
-    spy.mockRestore();
   });
 });
