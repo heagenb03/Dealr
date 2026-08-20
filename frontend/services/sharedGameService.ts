@@ -149,6 +149,17 @@ export function deserializeSharedGame(data: Record<string, any>): SharedGameDoc 
 }
 
 /**
+ * Mint a shareId without writing. Firestore auto-IDs are generated client-side,
+ * so the host can persist game.shareId BEFORE the write acks — which is what
+ * stops a timed-out-but-later-landing write from orphaning a document. See
+ * Task 13's summary.tsx: it passes the minted id back in via `game.shareId`,
+ * which publishSharedGame below already reuses when present.
+ */
+export function mintShareId(): string {
+  return doc(collection(db, SHARED_GAMES_COLLECTION)).id;
+}
+
+/**
  * Write (or refresh) the share document and resolve to its id.
  *
  * Does NOT persist the id back onto the Game — the caller owns that, because it

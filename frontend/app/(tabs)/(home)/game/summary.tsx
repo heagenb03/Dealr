@@ -24,10 +24,8 @@ import { resolveTolerance } from '@/constants/Tolerances';
 import { PreferredPayment } from '@/types/game';
 import { buildShareMessage } from '@/utils/shareMessage';
 import { useNetwork } from '@/contexts/NetworkContext';
-import { publishSharedGame, SHARED_GAMES_COLLECTION } from '@/services/sharedGameService';
+import { publishSharedGame, mintShareId } from '@/services/sharedGameService';
 import { buildShareUrl } from '@/utils/shareLink';
-import { doc, collection } from 'firebase/firestore';
-import { db } from '@/services/firebaseService';
 import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { fallbackBannerCopy } from '@/utils/fallbackBannerCopy';
@@ -478,20 +476,22 @@ setSettlementResult(cachedResult);
     // NetworkContext says we are offline AND raced against a timeout, because
     // isOnline can be stale and "connected to a captive portal" is still a hang.
     //
-    // The shareId is minted HERE — via Firestore's local, network-free
-    // doc(collection(db, ...)).id — rather than inside publishSharedGame,
-    // and handed in through `game.shareId`, which publishSharedGame already
-    // documents as reusing when present. That decouples "know the id" from
-    // "the write acked": if the write times out but is not cancelled and
-    // lands later, the link already in the message still resolves once it
-    // does, and re-shares reuse (refresh) this doc instead of orphaning it
-    // behind a freshly-minted second one.
+    // The shareId is minted via sharedGameService's mintShareId() — a local,
+    // network-free Firestore auto-ID, not a write — rather than inside
+    // publishSharedGame, and handed in through `game.shareId`, which
+    // publishSharedGame already documents as reusing when present. That
+    // decouples "know the id" from "the write acked": if the write times out
+    // but is not cancelled and lands later, the link already in the message
+    // still resolves once it does, and re-shares reuse (refresh) this doc
+    // instead of orphaning it behind a freshly-minted second one. Firestore
+    // itself stays behind sharedGameService — this screen never imports
+    // firebase/firestore directly.
     let shareId: string | undefined;
     let linkIsSafeToSend = false;
 
     if (user?.uid && isOnline) {
       const isRefresh = !!activeGame.shareId;
-      const mintedId = activeGame.shareId ?? doc(collection(db, SHARED_GAMES_COLLECTION)).id;
+      const mintedId = activeGame.shareId ?? mintShareId();
       const gameForPublish = isRefresh ? activeGame : { ...activeGame, shareId: mintedId };
 
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;

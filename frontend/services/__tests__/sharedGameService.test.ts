@@ -33,12 +33,14 @@ import {
   SHARED_GAMES_COLLECTION,
   buildSharedGameDocument,
   deserializeSharedGame,
+  mintShareId,
   publishSharedGame,
   fetchSharedGame,
 } from '@/services/sharedGameService';
 import { buildSharedGameSnapshot, SHARED_GAME_SCHEMA } from '@/utils/sharedGameSnapshot';
 import { DEFAULT_CURRENCY } from '@/constants/Currencies';
 import { Game, PlayerBalance, Settlement } from '@/types/game';
+import { isShareId } from '@/utils/shareLink';
 
 const NOW = new Date('2026-08-19T12:00:00.000Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -272,6 +274,46 @@ describe('deserializeSharedGame', () => {
       snapshot: { ...raw.snapshot, currency: 'JPY' as any },
     });
     expect(doc.snapshot.currency).toBe('JPY');
+  });
+});
+
+describe('mintShareId', () => {
+  // The shared mockDoc's default 1-arg (auto-ID) branch returns a FIXED
+  // string ('abcdefghij0123456789...') so publishSharedGame's tests below can
+  // assert an exact id. That constant can't discriminate "returns the real
+  // generated id" from "returns a hardcoded string" — a mintShareId that
+  // ignored doc()/collection() entirely and returned a literal would still
+  // pass against it. So for this test only, override doc() to return a
+  // freshly-generated, differently-shaped id per call, and assert BOTH the
+  // format (via Task 1's isShareId) and that two calls actually differ.
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  function randomAutoId(): string {
+    let out = '';
+    for (let i = 0; i < 20; i++) out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+    return out;
+  }
+
+  it('returns a well-formed, unique Firestore auto-ID by delegating to doc(collection(db, ...))', () => {
+    mockDoc
+      .mockImplementationOnce((...args: any[]) => ({ id: randomAutoId(), __col: (args[0] as any).__col }))
+      .mockImplementationOnce((...args: any[]) => ({ id: randomAutoId(), __col: (args[0] as any).__col }));
+
+    const first = mintShareId();
+    const second = mintShareId();
+
+    expect(isShareId(first)).toBe(true);
+    expect(isShareId(second)).toBe(true);
+    expect(first).not.toBe(second);
+
+    // Confirms it actually goes through the collection, not a shortcut.
+    expect(mockCollection).toHaveBeenCalledWith({}, SHARED_GAMES_COLLECTION);
+    expect(mockDoc).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not write anything — it is a pure local id mint', () => {
+    mockDoc.mockImplementationOnce((...args: any[]) => ({ id: randomAutoId(), __col: (args[0] as any).__col }));
+    mintShareId();
+    expect(mockSetDoc).not.toHaveBeenCalled();
   });
 });
 
