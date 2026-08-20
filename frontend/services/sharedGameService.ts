@@ -249,8 +249,13 @@ export async function fetchSharedGame(shareId: string): Promise<SharedGameDoc | 
  *
  * `allow delete: if request.auth != null && resource.data.ownerUid ==
  * request.auth.uid` is already live in production — no rules change is needed.
- * Deleting a document that is already gone is a no-op in Firestore, so a
- * double-delete or a TTL-swept target is not an error.
+ * A delete targeting a document that is already gone (TTL-swept, or a first
+ * share whose write never landed — see mintShareId above) is DENIED by the
+ * rules rather than being a no-op: `resource` is null on a nonexistent
+ * document, so `resource.data.ownerUid` errors and the delete fails closed —
+ * the same mechanism documented for `allow get` above (Ruling 5). That is
+ * harmless here: the caller in syncService.ts catches and logs it, and
+ * nothing downstream depends on the delete succeeding.
  */
 export async function deleteSharedGame(shareId: string): Promise<void> {
   await deleteDoc(doc(db, SHARED_GAMES_COLLECTION, shareId));

@@ -158,8 +158,22 @@ export class SyncService {
    *
    * When the game was shared, its /sharedGames document is deleted too — the
    * link dies with the game, because there is no separate "Stop sharing"
-   * control. Offline, that delete is skipped exactly as the game delete is,
-   * and the document then survives until the native TTL policy sweeps it.
+   * control. This is only SKIPPED when signed out (`if (uid && shareId)`
+   * below) — offline-with-a-uid does NOT skip it: deleteSharedGame's
+   * deleteDoc enters Firestore's persisted mutation queue exactly like the
+   * game delete above it, and lands on reconnect. The isFirestoreOfflineError
+   * branch in the catch below is kept for symmetry with the neighbouring
+   * deleteGameFromFirestore block, but it is near-dead in practice for the
+   * same reason: an offline deleteDoc hangs rather than rejects, so it rarely
+   * gets the chance to fire.
+   *
+   * The one genuine leak path is NOT "offline" alone, it's offline-THEN-
+   * sign-out: firebaseService.ts's firebaseSignOut() calls `signOut(auth)`
+   * with no terminate()/clearIndexedDbPersistence(), so a queued delete for
+   * the signed-out uid is stranded in that user's mutation queue — it either
+   * fails auth on flush or stalls until that uid signs back in. Either way
+   * the share document outlives the game, and the native TTL policy is the
+   * only backstop.
    */
   static async deleteGame(uid: string | null, gameId: string, shareId?: string): Promise<void> {
     if (uid) {

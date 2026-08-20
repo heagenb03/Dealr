@@ -567,13 +567,17 @@ setSettlementResult(cachedResult);
     }
 
     // The expiry is recomputed here rather than read back off the write,
-    // which is deliberate. On a refresh the URL is built whether or not the
-    // write acked (see linkIsSafeToSend above), so a failed refresh leaves the
+    // which is deliberate. On a refresh of a game that was already acked
+    // (previouslyAcked === true) the URL is built whether or not THIS write
+    // acked (see linkIsSafeToSend above) — a failed refresh then leaves the
     // document on its OLD expiresAt while this stamps a fresh one -- the link
     // then claims to live longer than it does, and the doormat falls through to
     // its normal "get the app" path. That is the harmless direction: claiming
     // an expired link is still good costs one install; claiming a good link is
-    // expired turns a working share into a dead end.
+    // expired turns a working share into a dead end. A refresh of a legacy
+    // game that has shareId but no shareAcked is NOT covered by that
+    // reasoning: if its write times out, linkIsSafeToSend is false and no URL
+    // is built at all.
     const shareUrl =
       linkIsSafeToSend && shareId
         ? buildShareUrl(shareId, shareExpiryFrom(new Date()))

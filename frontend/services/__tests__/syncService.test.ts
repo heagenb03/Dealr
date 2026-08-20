@@ -597,4 +597,28 @@ describe('deleteGame — the share document dies with the game', () => {
 
     expect(await StorageService.loadGames()).toHaveLength(0);
   });
+
+  it('deleteGame() itself does not await the share delete (a never-settling deleteSharedGame cannot hang it)', async () => {
+    // The case above proves deleteSharedGame is not awaited-with-no-catch (a
+    // rejection there does not throw out of deleteGame). It cannot distinguish
+    // that from an awaited-but-internally-caught call, because local removal
+    // happens earlier in deleteGame either way and the test awaits + flushes
+    // regardless of which shape deleteGame uses internally.
+    //
+    // That distinction matters: offline, deleteDoc enters Firestore's persisted
+    // mutation queue and never settles (see syncService.ts's deleteGame
+    // docstring). If deleteGame awaited deleteSharedGame — even inside a
+    // try/catch — an offline share delete would hang deleteGame forever, and
+    // with it GameContext.deleteGame and the delete-confirm UI. Making the mock
+    // never settle and asserting deleteGame() still resolves is what actually
+    // rules that out.
+    (deleteSharedGame as jest.Mock).mockReturnValueOnce(new Promise(() => {}));
+    const game = makeGame([{ id: 'A', name: 'Alice' }]);
+    await StorageService.saveGames([game]);
+
+    await SyncService.deleteGame(UID, game.id, 'aB3dEfGh1JkLmN0pQrSt');
+    await flush();
+
+    expect(await StorageService.loadGames()).toHaveLength(0);
+  });
 });

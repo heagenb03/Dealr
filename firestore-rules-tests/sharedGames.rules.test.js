@@ -454,4 +454,16 @@ describe('delete', () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(deleteDoc(doc(db, 'sharedGames', SHARE_ID)));
   });
+
+  it('DENIES an authenticated delete on a nonexistent shareId', async () => {
+    // Same mechanism as the nonexistent-GET case above: on a nonexistent
+    // document `resource` is null, so `resource.data.ownerUid` dereferences a
+    // null resource and errors, which fails closed to permission-denied — not
+    // a silent no-op. This is what a double-delete or a TTL-swept target hits
+    // in production, and what a timed-out first share's later delete hits too
+    // (mintShareId persists a shareId before the write acks). No doc is
+    // seeded for this shareId.
+    const db = testEnv.authenticatedContext(OWNER).firestore();
+    await assertFails(deleteDoc(doc(db, 'sharedGames', SHARE_ID)));
+  });
 });

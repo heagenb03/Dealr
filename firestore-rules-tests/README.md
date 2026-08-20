@@ -59,8 +59,11 @@ emulator down. No project data is touched — the emulator is entirely local.
 
 `sharedGamesCleanup.test.js` — the account-deletion cleanup of `/sharedGames`,
 run against the compiled `functions/lib/sharedGamesCleanup.js` rather than a
-reimplementation. Covers the `ownerUid` query scoping, the batched delete, and
-cross-user isolation (a helper that dropped the `where` clause would pass a
-single-user test and wipe the collection). It does NOT cover whether
+reimplementation. Covers the `ownerUid` query scoping and cross-user isolation
+(a helper that dropped the `where` clause would pass a single-user test and
+wipe the collection) via a single-batch delete (no test seeds more than 2
+documents, so the `BATCH_SIZE = 400` multi-chunk path is covered by
+inspection, not by a test — real uncovered code, since a long-lived heavy
+user can plausibly exceed 400 shared games). It does NOT cover whether
 `deleteUserData` calls the helper, or whether it calls it before
 `admin.auth().deleteUser` — that is a read-the-diff check.
