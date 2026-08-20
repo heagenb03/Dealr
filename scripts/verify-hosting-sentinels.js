@@ -12,19 +12,21 @@
  * Two things this script guards, both required for real (non-sentinel)
  * universal/app links to work:
  *
- * 1. public/.well-known/apple-app-site-association and assetlinks.json ship
- *    with placeholder sentinels for two values that cannot be derived from
- *    this repo: the Apple Team ID and the Play app-signing SHA-256
- *    fingerprint (see Task 8 report,
+ * 1. public/.well-known/apple-app-site-association ships with a placeholder
+ *    sentinel for the one value that cannot be derived from this repo: the
+ *    Apple Team ID (see Task 8 report,
  *    .superpowers/sdd/2026-08-19-shared-game-links/task-8-report.md, for
- *    exactly where to obtain each one). A sentinel that ships silently
- *    produces universal/app links that fail on every device with no visible
- *    error, and iOS caches that failure past a fix.
- * 2. Both claim files must actually exist and parse as valid JSON at deploy
+ *    exactly where to obtain it). A sentinel that ships silently produces
+ *    universal links that fail on every device with no visible error, and iOS
+ *    caches that failure past a fix. The Android counterpart, assetlinks.json,
+ *    was DELETED 2026-08-20 -- Cash Cage has no Play listing, so its
+ *    fingerprint sentinel was unfillable and blocked every deploy. See the
+ *    restore notes on the SENTINELS array below.
+ * 2. The claim file must actually exist and parse as valid JSON at deploy
  *    time — Firebase Hosting's ignore-glob behavior for `.well-known/` was
  *    checked empirically against the real `glob` dependency firebase-tools
- *    uses and found NOT to exclude these files (see Task 8 report), so this
- *    check exists as a genuine safety net against a file being accidentally
+ *    uses and found NOT to exclude this file (see Task 8 report), so this
+ *    check exists as a genuine safety net against it being accidentally
  *    deleted, renamed, or corrupted — not as a workaround for that glob
  *    behavior, which needs none.
  */
@@ -39,12 +41,25 @@ const SENTINELS = [
     label: 'Apple Team ID',
     source: 'developer.apple.com > Account > Membership, or `npx eas credentials -p ios` (frontend/) on the com.heagenb03.CashCage provisioning profile',
   },
-  {
-    file: path.join(__dirname, '..', 'public', '.well-known', 'assetlinks.json'),
-    marker: '__PLAY_SHA256_FINGERPRINT__',
-    label: 'Play app-signing SHA-256 fingerprint',
-    source: 'Play Console > your app > Setup > App integrity > App signing key certificate (authoritative — not the EAS/upload keystore value)',
-  },
+  // NO ANDROID ENTRY, DELIBERATELY. Cash Cage has never been published on Google
+  // Play (confirmed 2026-08-20), so no Play app-signing certificate exists and
+  // __PLAY_SHA256_FINGERPRINT__ could never be filled from any source -- it
+  // blocked `firebase deploy --only hosting` outright, and this script fails on
+  // MISSING FILE too, so deleting public/.well-known/assetlinks.json without
+  // also deleting this entry would just swap one blocked deploy for another.
+  //
+  // TO RESTORE WHEN ANDROID SHIPS -- all three, or App Links die silently:
+  //   1. Recreate public/.well-known/assetlinks.json (see git history:
+  //      `git log --diff-filter=D -- public/.well-known/assetlinks.json`).
+  //   2. Fill sha256_cert_fingerprints from Play Console > Setup > App
+  //      integrity > App signing key certificate. That is authoritative -- NOT
+  //      the EAS/upload keystore value; Google re-signs uploads with its own key
+  //      and App Links verify against that signature.
+  //   3. Re-add the entry here so the deploy gate covers it again.
+  // frontend/app.json still carries the matching android.intentFilters with
+  // autoVerify:true. Inert today (no Android build ships), but the FIRST Android
+  // build must not go out before step 2 lands, or devices cache the verification
+  // failure the same way iOS caches a missing AASA.
 ];
 
 let failed = false;
@@ -87,4 +102,4 @@ if (failed) {
   process.exit(1);
 }
 
-console.log('[verify-hosting-sentinels] OK: both claim files exist, parse as JSON, and have no unfilled sentinels.');
+console.log('[verify-hosting-sentinels] OK: the claim file exists, parses as JSON, and has no unfilled sentinels.');

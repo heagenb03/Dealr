@@ -19,10 +19,15 @@
     .card { max-width: 380px; width: 100%; }
     h1 { font-size: 24px; line-height: 1.25; margin: 0 0 12px; font-weight: 700; }
     p { font-size: 15px; line-height: 1.5; margin: 0 0 28px; color: #A0A0A0; }
-    a.cta {
+    .cta {
       display: block; padding: 16px 24px; border-radius: 12px;
       background: #B072BB; color: #0A0A0A;
       font-size: 16px; font-weight: 700; text-decoration: none;
+    }
+    /* Not a button: nothing to tap, so it must not look tappable. */
+    .cta--off {
+      background: transparent; border: 1px solid #2A2A2A;
+      color: #6A6A6A; font-weight: 600; cursor: default;
     }
     .note { margin: 20px 0 0; font-size: 13px; color: #6A6A6A; }
   </style>
@@ -30,9 +35,9 @@
 <body>
   <div class="card">
     <h1>Someone shared a Cash Cage game with you</h1>
-    <p>Get the app to see who owes what &mdash; and pay them in a tap.</p>
+    <p id="lede">Get the app to see who owes what &mdash; and pay them in a tap.</p>
     <a class="cta" id="cta" href="https://apps.apple.com/app/id6759301097">Get the App</a>
-    <p class="note">Already have it? Tap the original link again.</p>
+    <p class="note" id="note">Already have it? Tap the original link again.</p>
   </div>
 
   <script>
@@ -41,12 +46,32 @@
     // installed app claimed the URL.
     (function () {
       var APP_STORE = 'https://apps.apple.com/app/id6759301097';
-      var PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.heagenb03.CashCage';
 
       var isAndroid = /android/i.test(navigator.userAgent);
       var cta = document.getElementById('cta');
-      var storeUrl = isAndroid ? PLAY_STORE : APP_STORE;
-      cta.setAttribute('href', storeUrl);
+
+      // Android is a terminal state, not a store handoff. Cash Cage has no Play
+      // listing -- play.google.com/store/apps/details?id=com.heagenb03.CashCage
+      // returns 404 -- so a "Get the App" button there dead-ends on a generic
+      // Google error page with no way back, and the "tap the link again" note
+      // below it invites a loop for someone who cannot install the app. Say so
+      // instead, and skip the clipboard write: a CC- token that can never be
+      // redeemed is noise, and Android 12+ pops a visible paste toast for it.
+      // When Android ships, this branch becomes the Play Store handoff.
+      if (isAndroid) {
+        document.getElementById('lede').textContent =
+          'Cash Cage is on iPhone today — the Android app isn’t out yet.';
+        var badge = document.createElement('div');
+        badge.className = 'cta cta--off';
+        badge.textContent = 'iOS only';
+        cta.parentNode.replaceChild(badge, cta);
+        // The note reads "Already have it? Tap the original link again" -- a
+        // loop instruction for someone who cannot install the app at all.
+        document.getElementById('note').remove();
+        return;
+      }
+
+      var storeUrl = APP_STORE;
 
       // Deferred deep link by clipboard handoff. The app reads this on first
       // launch after sign-in; see frontend/services/pendingShare.ts. A vendor
