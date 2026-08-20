@@ -34,6 +34,19 @@ export const SHARE_TTL_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * When a share published at `now` stops being readable.
+ *
+ * Exported because two things need the same number: the document's own
+ * `expiresAt`, and the `?e=` param buildShareUrl bakes into the link so
+ * public/g/index.html can tell a recipient the link expired instead of pitching
+ * an install that lands on the same message. Duplicating `now + 30 days` at the
+ * call site is how those two silently drift apart.
+ */
+export function shareExpiryFrom(now: Date): Date {
+  return new Date(now.getTime() + SHARE_TTL_DAYS * DAY_MS);
+}
+
 export interface SharedGameDoc {
   /** Document level, NOT inside snapshot — the rules need it, and keeping it out
    *  leaves the projection purely presentational. */
@@ -55,7 +68,7 @@ export function buildSharedGameDocument(params: {
   return {
     ownerUid,
     createdAt: now,
-    expiresAt: new Date(now.getTime() + SHARE_TTL_DAYS * DAY_MS),
+    expiresAt: shareExpiryFrom(now),
     schema: SHARED_GAME_SCHEMA,
     snapshot,
   };

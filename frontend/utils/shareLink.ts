@@ -13,7 +13,8 @@
  * static page shipped as-is to Firebase Hosting, which cannot import this
  * module (or run any TypeScript) at all. That page hand-rolls its own
  * `'CC-' + match[1]` and its own `[A-Za-z0-9]{20}` id pattern, independently
- * of CLIPBOARD_PREFIX and SHARE_ID_RE below. buildClipboardToken exists only
+ * of CLIPBOARD_PREFIX and SHARE_ID_RE below -- and, since the expiry landed,
+ * its own copy of EXPIRY_PARAM. buildClipboardToken exists only
  * for tests; nothing in production calls it, and it cannot enforce that the
  * doormat page agrees with the constants here. Change CLIPBOARD_PREFIX or
  * SHARE_ID_RE without also updating public/g/index.html by hand, and every
@@ -31,6 +32,29 @@ export const SHARE_BASE_URL = 'https://cashcage-app.web.app/g/';
 export const CLIPBOARD_PREFIX = 'CC-';
 
 /**
+ * Query parameter carrying the link's expiry, in whole unix seconds.
+ *
+ * ADVISORY, and only for public/g/index.html. That page cannot read the shared
+ * document to find out: firestore.rules requires `request.auth != null` for a
+ * get, and a web visitor is unauthenticated, so the read is denied before
+ * `expiresAt` is ever evaluated -- the page could not tell expired from valid
+ * from nonexistent. Carrying the expiry in the URL lets it say "this expired"
+ * instead of pitching an install that lands on the same message anyway.
+ *
+ * NOT a security control. It is user-visible and editable, and the real expiry
+ * is enforced by the rules on every read. It is also STALE after a re-share:
+ * publishSharedGame rewrites expiresAt 30 days out while an older chat message
+ * still carries the first value, so an old link can report expired while the
+ * document is alive. That reaches only a recipient without the app, whose next
+ * step -- install, ask for a fresh link -- is what the page already tells them.
+ *
+ * The consumer is hand-rolled JS in a static HTML file that cannot import this
+ * module. The drift guard in __tests__/shareLink.test.ts is the only thing
+ * holding the two copies to the same parameter name.
+ */
+export const EXPIRY_PARAM = 'e';
+
+/**
  * Firestore auto-IDs are exactly 20 characters over a 62-char alphabet
  * ([A-Za-z0-9]) — ~119 bits, which is what makes the URL itself the credential.
  * Deliberately strict: a dash or underscore means it did not come from
@@ -42,8 +66,13 @@ export function isShareId(value: string): boolean {
   return SHARE_ID_RE.test(value);
 }
 
-export function buildShareUrl(shareId: string): string {
-  return `${SHARE_BASE_URL}${shareId}`;
+export function buildShareUrl(shareId: string, expiresAt?: Date): string {
+  const url = `${SHARE_BASE_URL}${shareId}`;
+  // An Invalid Date would emit `?e=NaN`, which the doormat's parseInt turns
+  // back into NaN and every comparison against it is false -- harmless, but it
+  // puts visible garbage in a link people read. Omit it instead.
+  if (!expiresAt || !Number.isFinite(expiresAt.getTime())) return url;
+  return `${url}?${EXPIRY_PARAM}=${Math.floor(expiresAt.getTime() / 1000)}`;
 }
 
 /**

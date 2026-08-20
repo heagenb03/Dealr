@@ -3,6 +3,7 @@ import path from 'path';
 import {
   SHARE_BASE_URL,
   CLIPBOARD_PREFIX,
+  EXPIRY_PARAM,
   buildShareUrl,
   buildClipboardToken,
   isShareId,
@@ -17,6 +18,10 @@ describe('shareLink constants', () => {
     expect(SHARE_BASE_URL).toBe('https://cashcage-app.web.app/g/');
     expect(CLIPBOARD_PREFIX).toBe('CC-');
   });
+
+  it('names the expiry query parameter the doormat reads', () => {
+    expect(EXPIRY_PARAM).toBe('e');
+  });
 });
 
 describe('buildShareUrl / buildClipboardToken', () => {
@@ -28,6 +33,41 @@ describe('buildShareUrl / buildClipboardToken', () => {
   it('round-trips through parseShareId', () => {
     expect(parseShareId(buildShareUrl(ID))).toBe(ID);
     expect(parseShareId(buildClipboardToken(ID))).toBe(ID);
+  });
+
+  // The expiry rides in the URL because public/g/index.html cannot read the
+  // document: firestore.rules requires request.auth != null for a get, and a
+  // web visitor is unauthenticated, so a Firestore read there is denied before
+  // expiresAt is ever evaluated. Advisory only -- the rules still enforce the
+  // real expiry.
+  it('appends the expiry as whole unix seconds when one is given', () => {
+    const expiresAt = new Date('2026-09-19T12:00:00.000Z');
+    expect(buildShareUrl(ID, expiresAt)).toBe(
+      `https://cashcage-app.web.app/g/${ID}?e=1789819200`,
+    );
+  });
+
+  it('truncates sub-second precision rather than emitting a decimal', () => {
+    expect(buildShareUrl(ID, new Date('2026-09-19T12:00:00.500Z'))).toBe(
+      `https://cashcage-app.web.app/g/${ID}?e=1789819200`,
+    );
+  });
+
+  it('omits the parameter entirely when no expiry is given', () => {
+    expect(buildShareUrl(ID)).not.toContain('?');
+  });
+
+  it('omits the parameter rather than emitting ?e=NaN for an Invalid Date', () => {
+    expect(buildShareUrl(ID, new Date('not a date'))).toBe(
+      `https://cashcage-app.web.app/g/${ID}`,
+    );
+  });
+
+  // An expiring link is still parsed by the app, which ignores the param:
+  // parseShareId already splits on '?'. Without this the feature would break
+  // every tapped link rather than only the expired ones.
+  it('round-trips an expiring URL through parseShareId', () => {
+    expect(parseShareId(buildShareUrl(ID, new Date('2026-09-19T12:00:00.000Z')))).toBe(ID);
   });
 });
 
@@ -108,5 +148,13 @@ describe('doormat drift guard', () => {
     expect(isShareId('a'.repeat(20))).toBe(true);
     expect(isShareId('a'.repeat(19))).toBe(false);
     expect(doormatSource).toContain('[A-Za-z0-9]{20}');
+  });
+
+  it('reads the expiry from the same query parameter buildShareUrl writes', () => {
+    // Second thing the two copies must agree on. buildShareUrl is the only
+    // producer of this param and the doormat is its only consumer, so nothing
+    // else would catch a rename -- every other test here would stay green
+    // while every shared link silently stopped reporting its expiry.
+    expect(doormatSource).toContain(`get('${EXPIRY_PARAM}')`);
   });
 });

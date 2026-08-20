@@ -53,6 +53,14 @@
          nothing is happening. */
       color: #8A8A8A; font-weight: 600; cursor: default;
     }
+    /* Tappable, unlike .cta--off: the App Store link still works on the
+       expired branch. Demoted because the message is the point there, not the
+       button. #B072BB on #0A0A0A measures 5.63:1 -- clears WCAG AA (4.5:1)
+       for 16px text. */
+    .cta--secondary {
+      background: transparent; border: 1px solid #B072BB;
+      color: #B072BB; font-weight: 600;
+    }
     /* Same #8A8A8A as .cta--off above, same reason: the plain #6A6A6A this
        replaced was 3.66:1 on #0A0A0A, below the WCAG AA 4.5:1 floor for
        13px text -- and this line sits on the primary iOS path, seen by
@@ -63,7 +71,7 @@
 <body>
   <div class="card">
     <img class="hero" src="/icon.png" alt="Cash Cage" width="88" height="88" decoding="async" />
-    <h1>Someone shared a Cash Cage game with you</h1>
+    <h1 id="headline">Someone shared a Cash Cage game with you</h1>
     <p id="lede">Get the app below to see who owes what and pay them in a tap.</p>
     <a class="cta" id="cta" href="https://apps.apple.com/app/id6759301097">Download on the App Store</a>
     <p class="note" id="note">Already have it? Tap or hold down the original link again.</p>
@@ -97,6 +105,40 @@
         // The note reads "Already have it? Tap or hold down the original link
         // again" -- a loop instruction for someone who cannot install the app
         // at all.
+        document.getElementById('note').remove();
+        return;
+      }
+
+      // The expiry rides in the URL (EXPIRY_PARAM in
+      // frontend/utils/shareLink.ts) because this page cannot read the shared
+      // document to find out: firestore.rules requires request.auth != null
+      // for a get, and a visitor here is unauthenticated, so the read is
+      // denied before expiresAt is ever evaluated -- expired, valid and
+      // nonexistent all come back identical.
+      //
+      // ADVISORY ONLY. The rules still enforce the real expiry on every read,
+      // and this value is stale after a re-share (publishSharedGame pushes
+      // expiresAt out another 30 days while an older chat message still
+      // carries the first value). parseInt(null) and parseInt('garbage') are
+      // both NaN, and every comparison against NaN is false, so a missing or
+      // tampered param falls through to the normal path below -- which is the
+      // safe direction to be wrong in.
+      var expiry = parseInt(new URLSearchParams(window.location.search).get('e'), 10);
+      if (expiry > 0 && Date.now() > expiry * 1000) {
+        document.getElementById('headline').textContent = 'This shared game link has expired';
+        document.getElementById('lede').textContent =
+          'Links last 30 days. Ask whoever sent it to share the game again.';
+        // Kept, unlike the Android branch above: this destination is live and
+        // installing is still the right next step. Demoted so it doesn't read
+        // as "tap here to see the game", which it no longer does.
+        cta.className = 'cta cta--secondary';
+        // Returning here also skips the click handler below, so no CC- token
+        // is written: a handoff token for a document the app will refuse is
+        // noise, and Android 12+ pops a visible paste toast for it.
+        //
+        // The note reads "Already have it? Tap or hold down the original link
+        // again" -- re-tapping an expired link changes nothing, and anyone who
+        // does have the app never loads this page at all.
         document.getElementById('note').remove();
         return;
       }

@@ -15,7 +15,7 @@ export const SHARE_FOOTER = '\n\nSettled with Cash Cage\nhttps://apps.apple.com/
  * able to share.
  */
 function footerFor(shareUrl: string | undefined): string {
-  return shareUrl ? `\n\nSettled with Cash Cage\n${shareUrl}` : SHARE_FOOTER;
+  return shareUrl ? `\n\nView the game and pay with a tap:\n${shareUrl}` : SHARE_FOOTER;
 }
 
 /**

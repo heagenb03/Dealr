@@ -32,6 +32,7 @@ import {
   SHARE_TTL_DAYS,
   SHARED_GAMES_COLLECTION,
   buildSharedGameDocument,
+  shareExpiryFrom,
   deserializeSharedGame,
   mintShareId,
   publishSharedGame,
@@ -71,6 +72,21 @@ describe('constants', () => {
   it('names the collection the rules match', () => {
     expect(SHARED_GAMES_COLLECTION).toBe('sharedGames');
     expect(SHARE_TTL_DAYS).toBe(30);
+  });
+});
+
+describe('shareExpiryFrom', () => {
+  it('returns the same instant buildSharedGameDocument stamps as expiresAt', () => {
+    // This is the whole reason it is exported. buildShareUrl's ?e= param and
+    // the document's expiresAt must be the same number: if they drift, the
+    // doormat reports an expiry the rules do not enforce, or the reverse.
+    expect(shareExpiryFrom(NOW)).toEqual(
+      buildSharedGameDocument({ ownerUid: 'u1', snapshot, now: NOW }).expiresAt,
+    );
+  });
+
+  it('is 30 days out from the injected now, not a live clock', () => {
+    expect(shareExpiryFrom(NOW).getTime()).toBe(NOW.getTime() + SHARE_TTL_DAYS * DAY);
   });
 });
 
