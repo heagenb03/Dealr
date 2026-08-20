@@ -12,9 +12,17 @@
  * PRIVACY: the raw clipboard string never leaves this effect. It is read once,
  * fed straight into pickClipboardShare (which returns either a validated
  * shareId or null), and dropped — never logged, never stored, never included in
- * an error message. Only the extracted shareId is persisted (to
- * @cashcage:lastOfferedShare, so the same id is never re-offered) or shown in
- * this component's own state.
+ * an error message. Only the extracted shareId is persisted — to this
+ * account's own key (see lastOfferedShareKeyFor), so the same id is never
+ * re-offered to THIS account — or shown in this component's own state.
+ *
+ * ACCOUNT-SCOPED, not device-scoped: per frontend/CLAUDE.md's "AsyncStorage
+ * Keys" rule, "last offered" describes what an ACCOUNT has already seen, not
+ * what the device has seen, so the key is namespaced by uid. An unnamespaced
+ * key would let account A's decline silently suppress account B's offer for
+ * the same shared game on a shared device — this project has shipped and fixed
+ * that exact leak once already (bug-364) and this key must not reopen it. No
+ * legacy-key migration: see lastOfferedShareKeyFor's docstring for why.
  *
  * Untestable by jest (expo-clipboard is a native module); the decision it makes
  * lives in the pure, tested pickClipboardShare. Covered by device QA.
@@ -30,9 +38,7 @@ import AppModal, { appModalStyles } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { needsVerification } from '@/utils/emailVerification';
-import { pickClipboardShare } from '@/utils/clipboardHandoff';
-
-const LAST_OFFERED_KEY = '@cashcage:lastOfferedShare';
+import { lastOfferedShareKeyFor, pickClipboardShare } from '@/utils/clipboardHandoff';
 
 export default function ClipboardShareHandoff() {
   const { user, emailVerified, isLoading } = useAuth();
@@ -41,17 +47,23 @@ export default function ClipboardShareHandoff() {
   const hasCheckedRef = useRef(false);
 
   const canView = !!user && !needsVerification(user, emailVerified);
+  const uid = user?.uid;
 
   useEffect(() => {
-    if (isLoading || !canView || hasCheckedRef.current) return;
+    // `canView` already implies `!!user`, so `uid` is set whenever this guard
+    // passes — the `!uid` arm is unreachable in practice, kept only so TS (and
+    // a future refactor of `canView`) can't silently let an unscoped read/write
+    // through.
+    if (isLoading || !canView || !uid || hasCheckedRef.current) return;
     hasCheckedRef.current = true;
 
+    const storageKey = lastOfferedShareKeyFor(uid);
     let cancelled = false;
     (async () => {
       try {
         const [text, lastOfferedId] = await Promise.all([
           Clipboard.getStringAsync(),
-          AsyncStorage.getItem(LAST_OFFERED_KEY),
+          AsyncStorage.getItem(storageKey),
         ]);
         // `text` (the raw clipboard string) is consumed here and nowhere else —
         // it is never logged, stored, or passed to anything but this pure
@@ -59,7 +71,7 @@ export default function ClipboardShareHandoff() {
         const candidate = pickClipboardShare({ clipboardText: text, lastOfferedId });
         if (cancelled || !candidate) return;
         // Record BEFORE showing, so a dismissed prompt does not return next launch.
-        await AsyncStorage.setItem(LAST_OFFERED_KEY, candidate);
+        await AsyncStorage.setItem(storageKey, candidate);
         if (!cancelled) setOfferedId(candidate);
       } catch {
         // A clipboard read can be denied outright. The documented recovery is to
@@ -70,7 +82,7 @@ export default function ClipboardShareHandoff() {
     })();
 
     return () => { cancelled = true; };
-  }, [isLoading, canView]);
+  }, [isLoading, canView, uid]);
 
   if (!offeredId) return null;
 

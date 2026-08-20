@@ -1,4 +1,4 @@
-import { pickClipboardShare } from '@/utils/clipboardHandoff';
+import { lastOfferedShareKeyFor, pickClipboardShare } from '@/utils/clipboardHandoff';
 
 const ID = 'aB3dEfGh1JkLmN0pQrSt';
 const OTHER = 'zZ9yYxXwWvVuUtTsSrRq';
@@ -59,5 +59,45 @@ describe('pickClipboardShare', () => {
     expect(
       pickClipboardShare({ clipboardText: `hey check this out CC-${ID} thanks`, lastOfferedId: null }),
     ).toBeNull();
+  });
+});
+
+describe('lastOfferedShareKeyFor', () => {
+  it('produces a different storage key per uid', () => {
+    // Direct discrimination proof: if this ever regressed to a device-global
+    // key (ignoring uid), the two calls below would collide.
+    expect(lastOfferedShareKeyFor('uid-A')).not.toBe(lastOfferedShareKeyFor('uid-B'));
+  });
+
+  it('scopes to the SAME key for the SAME uid, so an account still suppresses its own repeat offer', () => {
+    expect(lastOfferedShareKeyFor('uid-A')).toBe(lastOfferedShareKeyFor('uid-A'));
+  });
+
+  it('does not let one account\'s decline suppress a different account\'s offer for the same shared game', () => {
+    // Simulates exactly what ClipboardShareHandoff does: read this account's key,
+    // decide via pickClipboardShare, and (on an offer) write the id back under
+    // this account's own key BEFORE showing the prompt — using a tiny in-memory
+    // stand-in for AsyncStorage so this stays jest-testable without the native
+    // module.
+    const store = new Map<string, string>();
+    const offerFor = (uid: string, clipboardText: string): string | null => {
+      const key = lastOfferedShareKeyFor(uid);
+      const lastOfferedId = store.get(key) ?? null;
+      const candidate = pickClipboardShare({ clipboardText, lastOfferedId });
+      if (candidate) store.set(key, candidate);
+      return candidate;
+    };
+
+    // Account A is offered the game and (per the real component) the id is
+    // recorded under A's key regardless of what A does with the prompt.
+    expect(offerFor('uid-A', `CC-${ID}`)).toBe(ID);
+
+    // The SAME physical clipboard is read again for a different signed-in
+    // account on the same device (e.g. account switch). B must still be
+    // offered — A's decline must not silently consume B's offer.
+    expect(offerFor('uid-B', `CC-${ID}`)).toBe(ID);
+
+    // And A, asked again, is correctly NOT re-offered the same id.
+    expect(offerFor('uid-A', `CC-${ID}`)).toBeNull();
   });
 });

@@ -16,6 +16,32 @@
  */
 import { CLIPBOARD_PREFIX, isShareId } from '@/utils/shareLink';
 
+/**
+ * Base (unnamespaced) AsyncStorage key for "the last shareId we offered from the
+ * clipboard". Namespace with {@link lastOfferedShareKeyFor} before reading or
+ * writing — see frontend/CLAUDE.md's "AsyncStorage Keys" table: anything that
+ * belongs to the ACCOUNT must be namespaced by uid, or one account's decline
+ * silently suppresses another account's offer on a shared device (bug-364's
+ * exact failure mode, reproduced here if this key stayed global).
+ */
+const LAST_OFFERED_KEY_BASE = '@cashcage:lastOfferedShare';
+
+/**
+ * Per-account storage key for the "last offered" id, following the same
+ * `${base}:${uid}` shape as `userPrefsService.prefKeyFor` and
+ * `savedPlayersService.keyFor`.
+ *
+ * Deliberately no legacy-key migration path: a device-global predecessor never
+ * shipped for this key, and even if one had, copying it into the first
+ * namespaced key written after an update hands that value to whichever account
+ * happens to launch first — reproducing the exact cross-account leak this
+ * scoping exists to close (see userPrefsService's LEGACY_PREF_KEYS comment for
+ * the prior instance of this mistake). Accounts simply start fresh.
+ */
+export function lastOfferedShareKeyFor(uid: string): string {
+  return `${LAST_OFFERED_KEY_BASE}:${uid}`;
+}
+
 export function pickClipboardShare(params: {
   clipboardText: string | null;
   /** The last id we already prompted about; null if we never have. */
