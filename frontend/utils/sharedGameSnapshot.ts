@@ -18,6 +18,7 @@ import {
   DEFAULT_CURRENCY,
   SUPPORTED_CURRENCIES,
 } from '@/constants/Currencies';
+import { GameService } from '@/services/gameService';
 
 /**
  * Bumped only for a snapshot shape that older INSTALLED builds cannot render.
@@ -67,9 +68,12 @@ export function buildSharedGameSnapshot(params: {
   // leaves 'banker' mode in place with no bankerPlayerId, and bankerPlayerId also
   // persists in optimal mode as the remembered choice. The snapshot omits
   // players[], so the viewer cannot re-derive this — it must be decided here.
-  // Mirrors hasResolvedBanker in app/(tabs)/(home)/game/summary.tsx.
+  // The DECISION comes from the shared GameService.hasRememberedBanker, the same
+  // roster-resolution rule active.tsx already calls at two other sites — do not
+  // hand-roll a third copy of it. The lookup below only resolves the display
+  // name/id once the decision says a valid banker exists.
   const bankerPlayer =
-    game.settlementMode === 'banker'
+    game.settlementMode === 'banker' && GameService.hasRememberedBanker(game)
       ? game.players.find(p => p.id === game.bankerPlayerId)
       : undefined;
 
@@ -87,15 +91,21 @@ export function buildSharedGameSnapshot(params: {
 
   return {
     gameName: game.name,
-    date: game.date,
+    // Copy, not alias: game.date is a mutable Date reference. "Frozen" below
+    // has to be literally true — see the module docstring.
+    date: new Date(game.date.getTime()),
     currency: resolveCurrency(game.currency),
     settlementMode: bankerPlayer ? 'banker' : 'optimal',
     ...(bankerPlayer
       ? { bankerName: bankerPlayer.name, bankerPlayerId: bankerPlayer.id }
       : {}),
     totalPot,
-    balances,
-    settlements,
+    // Copy the arrays AND their element objects. balances/settlements are
+    // caller-owned; a caller that recomputes or mutates them in place after
+    // this call must not silently rewrite an already-built (and possibly
+    // already-written) snapshot.
+    balances: balances.map(b => ({ ...b })),
+    settlements: settlements.map(s => ({ ...s })),
     payments,
   };
 }

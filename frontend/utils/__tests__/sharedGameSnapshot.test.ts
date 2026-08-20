@@ -161,6 +161,40 @@ describe('paymentMapFromSnapshot', () => {
   });
 });
 
+describe('buildSharedGameSnapshot — frozen (no aliasing of caller-owned state)', () => {
+  // A test that only reassigns the source array variable, or only pushes to it,
+  // passes against a buggy pass-through implementation — reassignment and push
+  // don't touch the array reference the snapshot already captured. Only mutating
+  // an ELEMENT OBJECT in place discriminates a shallow-copy bug from a real one.
+  it('is unaffected by mutating the source balances/settlements element objects and game.date after the call', () => {
+    const sourceBalances: PlayerBalance[] = [
+      { playerId: 'p1', playerName: 'Ada', totalBuyins: 100, totalCashouts: 140, netBalance: 40 },
+      { playerId: 'p2', playerName: 'Bob', totalBuyins: 100, totalCashouts: 60, netBalance: -40 },
+    ];
+    const sourceSettlements: Settlement[] = [{ from: 'Bob', to: 'Ada', amount: 40 }];
+    const game = makeGame();
+
+    const snap = buildSharedGameSnapshot({
+      game,
+      balances: sourceBalances,
+      settlements: sourceSettlements,
+      totalPot: 200,
+    });
+
+    // Mutate the source element objects in place, and the source Game's date,
+    // AFTER the snapshot was built.
+    sourceBalances[0].netBalance = 999999;
+    sourceBalances[0].playerName = 'MUTATED';
+    sourceSettlements[0].amount = 999999;
+    game.date.setFullYear(1999);
+
+    expect(snap.balances[0].netBalance).toBe(40);
+    expect(snap.balances[0].playerName).toBe('Ada');
+    expect(snap.settlements[0].amount).toBe(40);
+    expect(snap.date).toEqual(new Date('2026-08-19T00:00:00.000Z'));
+  });
+});
+
 describe('SHARED_GAME_SCHEMA', () => {
   it('is 1', () => {
     expect(SHARED_GAME_SCHEMA).toBe(1);
