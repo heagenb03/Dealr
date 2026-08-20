@@ -2,20 +2,22 @@
 /**
  * Predeploy gate for `firebase deploy` / `firebase deploy --only hosting`.
  *
- * NOTE: `firebase hosting:channel:deploy <channel>` does NOT run predeploy
- * hooks at all (verified against firebase-tools 15.5.1's deploy targets) —
- * this script never runs for a preview-channel deploy, so a channel deploy
- * can still ship unfilled sentinels or a missing claim file with no gate
- * firing. Lower severity (preview URLs, not cashcage-app.web.app), but real;
- * treat it as a manual check before any channel deploy. See Task 8 report.
+ * IMPORTANT — this gate does NOT cover every deploy path: `firebase deploy`
+ * and `firebase deploy --only hosting` run it (via `hosting.predeploy` in
+ * firebase.json), but `firebase hosting:channel:deploy <channel>` does NOT run
+ * predeploy hooks at all (verified against firebase-tools 15.5.1's deploy
+ * targets) — this script never runs for a preview-channel deploy, so a
+ * channel deploy can still ship an unfilled `__APPLE_TEAM_ID__` sentinel with
+ * this gate never firing. Lower severity (preview URLs, not
+ * cashcage-app.web.app), but real; check the claim file by hand before any
+ * channel deploy.
  *
  * Two things this script guards, both required for real (non-sentinel)
  * universal/app links to work:
  *
  * 1. public/.well-known/apple-app-site-association ships with a placeholder
  *    sentinel for the one value that cannot be derived from this repo: the
- *    Apple Team ID (see Task 8 report,
- *    .superpowers/sdd/2026-08-19-shared-game-links/task-8-report.md, for
+ *    Apple Team ID (see the `source` field on the sentinel entry below for
  *    exactly where to obtain it). A sentinel that ships silently produces
  *    universal links that fail on every device with no visible error, and iOS
  *    caches that failure past a fix. The Android counterpart, assetlinks.json,
@@ -25,10 +27,10 @@
  * 2. The claim file must actually exist and parse as valid JSON at deploy
  *    time — Firebase Hosting's ignore-glob behavior for `.well-known/` was
  *    checked empirically against the real `glob` dependency firebase-tools
- *    uses and found NOT to exclude this file (see Task 8 report), so this
- *    check exists as a genuine safety net against it being accidentally
- *    deleted, renamed, or corrupted — not as a workaround for that glob
- *    behavior, which needs none.
+ *    uses and found NOT to exclude this file, so this check exists as a
+ *    genuine safety net against it being accidentally deleted, renamed, or
+ *    corrupted — not as a workaround for that glob behavior, which needs
+ *    none.
  */
 
 const fs = require('fs');
@@ -48,7 +50,15 @@ const SENTINELS = [
   // MISSING FILE too, so deleting public/.well-known/assetlinks.json without
   // also deleting this entry would just swap one blocked deploy for another.
   //
-  // TO RESTORE WHEN ANDROID SHIPS -- all three, or App Links die silently:
+  // TODAY'S STATE (both removed 2026-08-20, same day): public/.well-known/
+  // assetlinks.json does not exist, and frontend/app.json's android
+  // block carries NO intentFilters (removed in 99d72ae -- it used to claim
+  // https://cashcage-app.web.app/g/* with autoVerify:true). Android has no
+  // app claim on shared-game links at all right now; the doormat's Android
+  // branch (public/g/index.html) is a terminal "iOS only" notice by design
+  // (75fd269, 4572549), not a fallback waiting to be wired up.
+  //
+  // TO RESTORE WHEN ANDROID SHIPS -- all FOUR steps, or App Links die silently:
   //   1. Recreate public/.well-known/assetlinks.json (see git history:
   //      `git log --diff-filter=D -- public/.well-known/assetlinks.json`).
   //   2. Fill sha256_cert_fingerprints from Play Console > Setup > App
@@ -56,10 +66,16 @@ const SENTINELS = [
   //      the EAS/upload keystore value; Google re-signs uploads with its own key
   //      and App Links verify against that signature.
   //   3. Re-add the entry here so the deploy gate covers it again.
-  // frontend/app.json still carries the matching android.intentFilters with
-  // autoVerify:true. Inert today (no Android build ships), but the FIRST Android
-  // build must not go out before step 2 lands, or devices cache the verification
-  // failure the same way iOS caches a missing AASA.
+  //   4. Re-add android.intentFilters to frontend/app.json (deleted in
+  //      99d72ae; `git show 99d72ae^:frontend/app.json` has the exact prior
+  //      shape). It needs: autoVerify: true, action "VIEW", category
+  //      ["BROWSABLE", "DEFAULT"], and a data entry with scheme "https",
+  //      host "cashcage-app.web.app", pathPrefix "/g/". The TRAILING SLASH on
+  //      pathPrefix matters -- it is a raw string prefix match, so "/g"
+  //      (no slash) would ALSO claim "/games", "/gallery", or any other path
+  //      starting with "g", not just this app's /g/<shareId> routes.
+  //   Do not ship step 4 before step 2 lands -- devices cache an App Links
+  //   verification failure past a fix, the same way iOS caches a missing AASA.
 ];
 
 let failed = false;

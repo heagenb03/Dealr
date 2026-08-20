@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import {
   SHARE_BASE_URL,
   CLIPBOARD_PREFIX,
@@ -79,5 +81,32 @@ describe('parseShareId', () => {
     // The clipboard handoff must fire only on a token we wrote, and the route
     // gets a bare id. Neither case is ever a sentence, so anchoring is correct.
     expect(parseShareId(`look: https://cashcage-app.web.app/g/${ID} !`)).toBeNull();
+  });
+});
+
+describe('doormat drift guard', () => {
+  // public/g/index.html is a static page shipped as-is to Firebase Hosting.
+  // It cannot import this module, so it hand-rolls its own copy of
+  // CLIPBOARD_PREFIX and the [A-Za-z0-9]{20} id pattern (mirroring the
+  // private SHARE_ID_RE above). Nothing else in this test file, and nothing
+  // in production, checks that the doormat's hand-rolled copy still agrees
+  // with the constants here -- change CLIPBOARD_PREFIX without touching the
+  // doormat and every other test in this file stays green while the doormat
+  // emits a token the app rejects. This test is that check.
+  const DOORMAT_PATH = path.join(__dirname, '..', '..', '..', 'public', 'g', 'index.html');
+  const doormatSource = fs.readFileSync(DOORMAT_PATH, 'utf8');
+
+  it('builds the clipboard token with the current CLIPBOARD_PREFIX', () => {
+    expect(doormatSource).toContain(`'${CLIPBOARD_PREFIX}' + match[1]`);
+  });
+
+  it('matches shareIds with the current id pattern', () => {
+    // Mirrors SHARE_ID_RE's core, which is not exported: exactly 20 chars
+    // over [A-Za-z0-9]. isShareId is the exported gate on that same pattern,
+    // asserted against real examples so this test can't silently point at a
+    // pattern isShareId itself no longer enforces.
+    expect(isShareId('a'.repeat(20))).toBe(true);
+    expect(isShareId('a'.repeat(19))).toBe(false);
+    expect(doormatSource).toContain('[A-Za-z0-9]{20}');
   });
 });

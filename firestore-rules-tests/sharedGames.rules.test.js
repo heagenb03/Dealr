@@ -4,7 +4,7 @@
  *
  * Run with `npm test` in this directory. Requires Java 21+ (firebase-tools
  * 15.5.1 hard-rejects anything older) and firebase-tools. NOT part of the
- * frontend jest suite: its 788/53 count must stay unambiguous.
+ * frontend jest suite: its 863/57 count must stay unambiguous.
  */
 const fs = require('fs');
 const path = require('path');

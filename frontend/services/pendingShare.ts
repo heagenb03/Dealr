@@ -19,6 +19,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isShareId } from '@/utils/shareLink';
 
+/**
+ * Deliberately DEVICE-GLOBAL, unlike its sibling in utils/clipboardHandoff.ts
+ * (namespaced by uid, 4493fe6). That asymmetry is correct, not an oversight
+ * left for a future pass to "fix":
+ *
+ *  - A uid-namespaced key CANNOT work here. This is stashed by the redirect
+ *    effect BEFORE sign-in, precisely to survive the gap between tapping the
+ *    link and finishing sign-up/sign-in — there is no uid yet to namespace
+ *    it by.
+ *  - It cannot leak between accounts on a shared device the way an
+ *    unnamespaced PREFERENCE would (frontend/CLAUDE.md's AsyncStorage table):
+ *    `consumePendingShare()` clears both the in-memory value and this storage
+ *    key the moment it is read, on the very next launch after sign-in. There
+ *    is no persistent state left behind for a second account to inherit.
+ *
+ * If you're tempted to namespace this by uid: don't. There is no uid at
+ * stash time, and the clear-on-consume already closes the leak a namespace
+ * would otherwise exist to prevent.
+ */
 export const PENDING_SHARE_KEY = '@cashcage:pendingShare';
 
 let pending: string | null = null;

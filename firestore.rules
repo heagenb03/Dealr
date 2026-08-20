@@ -74,7 +74,12 @@ service cloud.firestore {
     // /users/{uid} reads already require request.auth.uid == uid.
     //
     // Documents expire via a native TTL policy on expiresAt (a console/gcloud
-    // setting, no Cloud Function). See the release runbook (Task 15).
+    // setting, no Cloud Function) -- specifically, a TTL policy on the
+    // `expiresAt` field of the `sharedGames` collection group. Nothing in
+    // this repo creates that policy: it must be set by hand, once, via the
+    // Firebase console or `gcloud firestore fields ttls update`, and
+    // re-checked after any project migration. Until it exists, expired
+    // documents stay readable past their nominal 30-day expiry.
     // -----------------------------------------------------------------------
     match /sharedGames/{shareId} {
 

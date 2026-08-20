@@ -1,11 +1,25 @@
 /**
- * The one place the shared-game link shape is defined.
+ * The one place the shared-game link shape is defined -- for the CONSUMER
+ * side only. Read this carefully before trusting the phrase "defined once":
+ * it is true for parsing, not for producing.
  *
- * Two textual forms carry a shareId, and they are consumed at DIFFERENT points
- * (spec §6): the https URL arrives via the universal link and is handed to
- * app/g/[shareId].tsx by expo-router, while the CC- token is what the static
- * doormat page puts on the clipboard for a fresh installer. Both parse here so
- * neither can drift from the other.
+ * Two textual forms carry a shareId (spec §6): the https URL, handed to
+ * app/g/[shareId].tsx by expo-router after a universal-link tap, and the
+ * CC- token, read back from the clipboard by the app after a fresh install.
+ * Both are PARSED here, by parseShareId, so parsing can't drift.
+ *
+ * They are NOT both PRODUCED here. buildShareUrl is the real producer of the
+ * https form. The CC- token's real producer is public/g/index.html -- a
+ * static page shipped as-is to Firebase Hosting, which cannot import this
+ * module (or run any TypeScript) at all. That page hand-rolls its own
+ * `'CC-' + match[1]` and its own `[A-Za-z0-9]{20}` id pattern, independently
+ * of CLIPBOARD_PREFIX and SHARE_ID_RE below. buildClipboardToken exists only
+ * for tests; nothing in production calls it, and it cannot enforce that the
+ * doormat page agrees with the constants here. Change CLIPBOARD_PREFIX or
+ * SHARE_ID_RE without also updating public/g/index.html by hand, and every
+ * test in this file still passes while the doormat emits a token the app
+ * rejects. The only thing that catches that is the drift-guard test in
+ * __tests__/shareLink.test.ts, which reads public/g/index.html off disk.
  *
  * No react-native import — this must stay unit-testable under jest-expo/node.
  */
@@ -32,6 +46,11 @@ export function buildShareUrl(shareId: string): string {
   return `${SHARE_BASE_URL}${shareId}`;
 }
 
+/**
+ * Test-only. The real producer of this token shape is public/g/index.html,
+ * not this function -- see the module docstring above. Nothing in production
+ * calls this.
+ */
 export function buildClipboardToken(shareId: string): string {
   return `${CLIPBOARD_PREFIX}${shareId}`;
 }

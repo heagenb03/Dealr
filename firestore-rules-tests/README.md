@@ -1,8 +1,8 @@
 # Firestore rules tests
 
 Emulator-backed tests for `../firestore.rules`. **Not part of the frontend jest
-suite** — the frontend's 788/53 count must stay unambiguous, so these are counted
-separately.
+suite** — the frontend's 863/57 count must stay unambiguous, so these are counted
+separately (this suite is 43 tests on its own).
 
 ## Prerequisites
 
