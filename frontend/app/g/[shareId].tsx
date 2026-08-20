@@ -34,6 +34,7 @@ import { chipNamesFromBalances, filterSummaryInputs } from '@/utils/shareFilter'
 import { paymentMapFromSnapshot, SHARED_GAME_SCHEMA } from '@/utils/sharedGameSnapshot';
 import { fetchSharedGame, SharedGameDoc } from '@/services/sharedGameService';
 import { clearPendingShare, setPendingShare } from '@/services/pendingShare';
+import { DEFAULT_CURRENCY } from '@/constants/Currencies';
 import SummaryView from '@/components/summary/SummaryView';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
@@ -57,6 +58,14 @@ export default function SharedGameScreen() {
 
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selectedName, setSelectedName] = useState<string | null>(null);
+
+  // If the navigator ever reuses this instance across a /g/A -> /g/B transition,
+  // a chip selected on game A must not survive into game B's render — the
+  // Ruling-2 override would then name a player who isn't in the game being
+  // viewed, over an empty balances section.
+  useEffect(() => {
+    setSelectedName(null);
+  }, [shareId]);
 
   // Stash the id whenever this route cannot render yet, so the auth gate can
   // replay it after sign-in. THIS EFFECT IS THE DEEP-LINK CAPTURE POINT: a child
@@ -96,7 +105,7 @@ export default function SharedGameScreen() {
   // the viewer's own preference is. This is the reason Plan 1 extracted
   // createCurrencyFormatters out of CurrencyContext at all.
   const { formatAmount, formatAmountCompact } = useMemo(
-    () => createCurrencyFormatters(snapshot?.currency ?? 'USD'),
+    () => createCurrencyFormatters(snapshot?.currency ?? DEFAULT_CURRENCY),
     [snapshot?.currency],
   );
 
@@ -159,11 +168,15 @@ export default function SharedGameScreen() {
     else router.replace('/(tabs)' as any);
   }, [router]);
 
+  // authLoading first: on first render `params.shareId` can be transiently
+  // empty before the router hydrates, and checking `!shareId` first would
+  // flash "That link isn't valid" — alarming, wrong copy — on a link someone
+  // just tapped, during a window that resolves itself a moment later.
+  if (authLoading) return <Loading onClose={handleClose} />;
   if (!shareId) return <Notice label="That link isn't valid" icon="link-outline" onClose={handleClose} />;
-  if (authLoading) return <Loading />;
   // The auth gate is redirecting; render neutral rather than flashing an error.
-  if (!canView) return <Loading />;
-  if (state.status === 'loading') return <Loading />;
+  if (!canView) return <Loading onClose={handleClose} />;
+  if (state.status === 'loading') return <Loading onClose={handleClose} />;
   if (state.status === 'missing') {
     // Ruling 1: `resource` is null on a nonexistent Firestore doc, so the rules'
     // `resource.data.expiresAt > request.time` read DENIES before existence is
@@ -239,10 +252,32 @@ export default function SharedGameScreen() {
   );
 }
 
-function Loading() {
+// Carries the same Done row as Notice. fetchSharedGame -> getDoc has no
+// timeout, and this repo's own sharedGameService docstring documents
+// indefinite-pending as REAL behaviour under persistentLocalCache when
+// offline/flaky — a tapped link can land here and never resolve on its own.
+// The root Stack is headerShown: false, so without this row a stuck fetch (or
+// a stuck auth gate) traps the viewer on a spinner with no way out, cold-start
+// or otherwise. Deliberately not a fetch timeout: that changes behaviour, and
+// any fixed budget short enough to matter would misclassify a merely slow
+// connection as an error. The exit is the fix, not a race.
+function Loading({ onClose }: { onClose: () => void }) {
   return (
-    <View style={styles.centered}>
-      <ActivityIndicator color="#B072BB" size="large" />
+    <View style={styles.container}>
+      <View style={styles.centered}>
+        <ActivityIndicator color="#B072BB" size="large" />
+      </View>
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.doneButton}
+          onPress={onClose}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Done"
+        >
+          <Text style={styles.doneText}>Done</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
