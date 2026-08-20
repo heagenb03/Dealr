@@ -186,12 +186,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [uid]);
 
   const deleteGame = useCallback(async (gameId: string) => {
+    // Resolve the share id BEFORE filtering the game out — after that line the
+    // game, and its shareId with it, is gone from state. gamesRef rather than
+    // the `games` state for the same reason activeGameRef is used below: this
+    // file keeps both refs in sync precisely so callbacks can read them without
+    // taking a dependency that rebuilds the callback on every game edit.
+    const shareId = gamesRef.current.find(g => g.id === gameId)?.shareId;
     setGames(prev => prev.filter(g => g.id !== gameId));
     if (activeGameRef.current?.id === gameId) {
       setActiveGameState(null);
       await StorageService.saveActiveGameId(null);
     }
-    await SyncService.deleteGame(uid, gameId);
+    await SyncService.deleteGame(uid, gameId, shareId);
   }, [uid]);
 
   const refreshGames = useCallback(async () => {

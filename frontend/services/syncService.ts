@@ -6,6 +6,7 @@ import {
   fetchGamesFromFirestore,
   isFirestoreOfflineError,
 } from '@/services/firebaseService';
+import { deleteSharedGame } from '@/services/sharedGameService';
 
 // ---------------------------------------------------------------------------
 // SyncService — offline-first dual-write with background Firestore sync.
@@ -154,8 +155,13 @@ export class SyncService {
 
   /**
    * Remove a game locally and asynchronously delete it from Firestore.
+   *
+   * When the game was shared, its /sharedGames document is deleted too — the
+   * link dies with the game, because there is no separate "Stop sharing"
+   * control. Offline, that delete is skipped exactly as the game delete is,
+   * and the document then survives until the native TTL policy sweeps it.
    */
-  static async deleteGame(uid: string | null, gameId: string): Promise<void> {
+  static async deleteGame(uid: string | null, gameId: string, shareId?: string): Promise<void> {
     if (uid) {
       markPending(pendingDeletes, gameId);
       pendingSaves.delete(gameId);   // a delete fully supersedes any pending save for this id
@@ -184,6 +190,19 @@ export class SyncService {
           }
           console.warn('SyncService: Firestore delete failed', err);
         });
+    }
+
+    if (uid && shareId) {
+      // Deliberately NOT ref-counted in pendingDeletes: that map guards the
+      // local-vs-remote merge for /users/{uid}/games documents, and no merge
+      // path ever reads /sharedGames.
+      deleteSharedGame(shareId).catch(err => {
+        if (isFirestoreOfflineError(err)) {
+          console.debug('SyncService: skipping shared-game delete — device offline');
+          return;
+        }
+        console.warn('SyncService: shared-game delete failed', err);
+      });
     }
   }
 

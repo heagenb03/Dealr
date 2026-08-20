@@ -10,6 +10,7 @@ jest.mock('@/services/firebaseService', () => ({ db: {} }));
 // be exercised without a real network. `mock`-prefixed names are required by
 // babel-plugin-jest-hoist to be visible inside the jest.mock factory below.
 const mockSetDoc = jest.fn((..._args: any[]) => Promise.resolve());
+const mockDeleteDoc = jest.fn((..._args: any[]) => Promise.resolve());
 const mockGetDoc = jest.fn();
 const mockDoc = jest.fn((...args: any[]) => {
   if (args.length === 1) {
@@ -26,6 +27,7 @@ jest.mock('firebase/firestore', () => ({
   collection: (...args: any[]) => mockCollection(...args),
   getDoc: (...args: any[]) => mockGetDoc(...args),
   setDoc: (...args: any[]) => mockSetDoc(...args),
+  deleteDoc: (...args: any[]) => mockDeleteDoc(...args),
 }));
 
 import {
@@ -37,6 +39,7 @@ import {
   mintShareId,
   publishSharedGame,
   fetchSharedGame,
+  deleteSharedGame,
 } from '@/services/sharedGameService';
 import { buildSharedGameSnapshot, SHARED_GAME_SCHEMA } from '@/utils/sharedGameSnapshot';
 import { DEFAULT_CURRENCY } from '@/constants/Currencies';
@@ -411,5 +414,14 @@ describe('fetchSharedGame', () => {
   it('rethrows a genuine transport error rather than swallowing it as missing', async () => {
     mockGetDoc.mockRejectedValueOnce({ code: 'unavailable', message: 'network down' });
     await expect(fetchSharedGame(shareId)).rejects.toMatchObject({ code: 'unavailable' });
+  });
+});
+
+describe('deleteSharedGame', () => {
+  it('deletes the document at /sharedGames/{shareId}', async () => {
+    await deleteSharedGame('aB3dEfGh1JkLmN0pQrSt');
+    expect(mockDeleteDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'aB3dEfGh1JkLmN0pQrSt', __col: SHARED_GAMES_COLLECTION }),
+    );
   });
 });

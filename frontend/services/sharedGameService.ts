@@ -10,7 +10,7 @@
  * sitting in a group chat rather than minting a second one beside a stale first.
  * That is what makes the owner-update rule useful rather than merely permitted.
  */
-import { doc, collection, getDoc, setDoc } from 'firebase/firestore';
+import { doc, collection, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/services/firebaseService';
 import { Game, PlayerBalance, Settlement } from '@/types/game';
 import {
@@ -241,4 +241,17 @@ export async function fetchSharedGame(shareId: string): Promise<SharedGameDoc | 
   }
   if (!snap.exists()) return null;
   return deserializeSharedGame(snap.data());
+}
+
+/**
+ * Delete a share document. This is the REVOKE path: there is no standalone
+ * "Stop sharing" control, so the link dies with the game (decision, 2026-08-20).
+ *
+ * `allow delete: if request.auth != null && resource.data.ownerUid ==
+ * request.auth.uid` is already live in production — no rules change is needed.
+ * Deleting a document that is already gone is a no-op in Firestore, so a
+ * double-delete or a TTL-swept target is not an error.
+ */
+export async function deleteSharedGame(shareId: string): Promise<void> {
+  await deleteDoc(doc(db, SHARED_GAMES_COLLECTION, shareId));
 }

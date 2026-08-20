@@ -9,6 +9,13 @@ jest.mock('@/services/firebaseService', () => ({
   isFirestoreOfflineError: jest.fn(() => false),
 }));
 
+// syncService now imports deleteSharedGame. Mock the module so the test never
+// reaches firebase/firestore — @/services/firebaseService is already stubbed
+// above, so sharedGameService's `db` import would be undefined at runtime.
+jest.mock('@/services/sharedGameService', () => ({
+  deleteSharedGame: jest.fn(() => Promise.resolve()),
+}));
+
 import { Game } from '@/types/game';
 import {
   SyncService,
@@ -22,6 +29,7 @@ import {
   saveGameToFirestore,
   deleteGameFromFirestore,
 } from '@/services/firebaseService';
+import { deleteSharedGame } from '@/services/sharedGameService';
 
 const UID = 'user1';
 
@@ -52,6 +60,7 @@ beforeEach(async () => {
   (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([]);
   (saveGameToFirestore as jest.Mock).mockResolvedValue(undefined);
   (deleteGameFromFirestore as jest.Mock).mockResolvedValue(undefined);
+  (deleteSharedGame as jest.Mock).mockResolvedValue(undefined);
 });
 
 describe('background-sync race: a local edit during the sync window survives (the bug)', () => {
@@ -539,5 +548,53 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
     const stored = await StorageService.loadGames();
     expect(stored[0].players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
     expect(stored[0].players[0].savedPlayerId).toBe('sp_alice');
+  });
+});
+
+describe('deleteGame — the share document dies with the game', () => {
+  it('deletes the share document when the game has a shareId', async () => {
+    const game = makeGame([{ id: 'A', name: 'Alice' }]);
+    await StorageService.saveGames([game]);
+
+    await SyncService.deleteGame(UID, game.id, 'aB3dEfGh1JkLmN0pQrSt');
+    await flush();
+
+    expect(deleteSharedGame).toHaveBeenCalledWith('aB3dEfGh1JkLmN0pQrSt');
+    expect(deleteGameFromFirestore).toHaveBeenCalledWith(UID, game.id);
+  });
+
+  it('does not touch /sharedGames when the game was never shared', async () => {
+    const game = makeGame([{ id: 'A', name: 'Alice' }]);
+    await StorageService.saveGames([game]);
+
+    await SyncService.deleteGame(UID, game.id);
+    await flush();
+
+    expect(deleteSharedGame).not.toHaveBeenCalled();
+  });
+
+  it('does not touch /sharedGames when signed out', async () => {
+    // No uid means no Firestore identity, so the owner-only delete rule could
+    // not pass anyway. The document then survives until the TTL sweeps it —
+    // which is why the TTL policy blocks the release.
+    const game = makeGame([{ id: 'A', name: 'Alice' }]);
+    await StorageService.saveGames([game]);
+
+    await SyncService.deleteGame(null, game.id, 'aB3dEfGh1JkLmN0pQrSt');
+    await flush();
+
+    expect(deleteSharedGame).not.toHaveBeenCalled();
+  });
+
+  it('still removes the game locally when the share delete rejects', async () => {
+    // Fire-and-forget: a failed share delete must not block or throw.
+    (deleteSharedGame as jest.Mock).mockRejectedValueOnce(new Error('nope'));
+    const game = makeGame([{ id: 'A', name: 'Alice' }]);
+    await StorageService.saveGames([game]);
+
+    await SyncService.deleteGame(UID, game.id, 'aB3dEfGh1JkLmN0pQrSt');
+    await flush();
+
+    expect(await StorageService.loadGames()).toHaveLength(0);
   });
 });
