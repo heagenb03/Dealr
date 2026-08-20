@@ -54,8 +54,12 @@ emulator down. No project data is touched — the emulator is entirely local.
 - **update** is owner-only, cannot reassign `ownerUid`, and re-runs the same
   size/format checks as create (a deliberate strengthening over spec §4, which
   drops the size caps on update).
-- **delete** is owner-only. No UI calls delete today; the rule ships anyway
-  because it costs nothing and the tests assert it.
+- **delete** is owner-only. `SyncService.deleteGame` calls it via
+  `deleteSharedGame` when a game is deleted — that is the revoke path, since
+  there is no standalone "Stop sharing" control. Tested: owner delete
+  succeeds, another user's delete denied, unauthenticated delete denied, and
+  a delete on a nonexistent shareId denied (not a Firestore no-op — same
+  null-`resource` mechanism as `allow get`).
 
 `sharedGamesCleanup.test.js` — the account-deletion cleanup of `/sharedGames`,
 run against the compiled `functions/lib/sharedGamesCleanup.js` rather than a
