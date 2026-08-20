@@ -841,7 +841,13 @@ const styles = StyleSheet.create({
   shareDisclosure: {
     fontSize: 12,
     lineHeight: 16,
-    color: '#6A6A6A',
+    // #6A6A6A here was 3.66:1 on the #0A0A0A container -- under the WCAG AA
+    // 4.5:1 floor, and 12px is nowhere near the large-text exemption. This line
+    // is the only warning that a share exposes names, amounts, and payment
+    // handles, so it is the last thing that should be hard to read. #8A8A8A is
+    // 5.73:1 and sits right beside gameDate, which composites to an effective
+    // #848484 (5.29:1) -- so this matches its neighbour rather than standing out.
+    color: '#8A8A8A',
     marginTop: 8,
   },
 });
