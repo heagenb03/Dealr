@@ -557,6 +557,32 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
     expect(stored[0].players[0].defaultMethod).toBe('venmo');
     expect(stored[0].players[0].savedPlayerId).toBe('sp_alice');
   });
+
+  it('adopts remote methods and defaultMethod when local lost them', () => {
+    const result = unionRecoverablePlayerFields(
+      local([{ id: 'A', name: 'Alice' }]),
+      local([{ id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo' }]),
+    );
+    expect(result.players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(result.players[0].defaultMethod).toBe('venmo');
+  });
+
+  it('never overwrites a live local map with a stale remote one', () => {
+    const result = unionRecoverablePlayerFields(
+      local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]),
+      local([{ id: 'A', name: 'Alice', methods: { venmo: 'stale' }, defaultMethod: 'venmo' }]),
+    );
+    expect(result.players[0].methods).toEqual({ cash: '' });
+    expect(result.players[0].defaultMethod).toBe('cash');
+  });
+
+  it('does not adopt across a rename (the deliberate-drop guard)', () => {
+    const result = unionRecoverablePlayerFields(
+      local([{ id: 'A', name: 'Alicia' }]),
+      local([{ id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo' }]),
+    );
+    expect(result.players[0].methods).toBeUndefined();
+  });
 });
 
 describe('deleteGame — the share document dies with the game', () => {

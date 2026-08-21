@@ -278,14 +278,28 @@ function deserializeSyncedAt(game: Game & { syncedAt?: any }): Game {
 /**
  * Fill in player fields that the local copy is missing but remote still has.
  *
- * Recovery for the whitelist bug in StorageService.loadGames(), which dropped
- * preferredPayment and savedPlayerId on every read. That loss only ever reached
- * AsyncStorage on the launch path (the background merge writes locally, never to
- * Firestore), so remote frequently still holds the handle — but local `syncedAt`
- * ties remote from the second launch onward, and mergeGames' strict `>` hands a
- * tie to local, so the intact remote copy would otherwise stay unreachable.
+ * Recovery for two separate write-back defects, both of which strand an intact
+ * copy on remote while local `syncedAt` ties it — and mergeGames' strict `>`
+ * hands every tie to local, so without this union the intact remote copy would
+ * stay unreachable:
+ *   1. The whitelist bug in StorageService.loadGames(), which dropped
+ *      preferredPayment and savedPlayerId on every read. That loss only ever
+ *      reached AsyncStorage on the launch path (the background merge writes
+ *      locally, never to Firestore), so remote frequently still holds the handle.
+ *   2. A shipped 2.0.2 client, which never learned about methods/defaultMethod
+ *      and writes players back through its own field whitelist — so a device
+ *      still running 2.0.2 silently strips those two fields on every save,
+ *      while a device that has since updated keeps writing them to remote.
  *
  * Only fills fields local LACKS, so a live local value is never overwritten.
+ *
+ * methods and defaultMethod are adopted as a PAIR, not independently: if local
+ * has a methods map at all, its defaultMethod is kept as-is (even when
+ * undefined) rather than paired with remote's default. Otherwise a local player
+ * carrying methods but no defaultMethod, merged against a remote copy carrying
+ * both, could end up with local's map and remote's default — a pairing that
+ * existed on neither device. Only when local lacks methods entirely does the
+ * pair come from remote together.
  *
  * The name guard is load-bearing: the one place that deliberately drops these
  * fields is the rename re-resolve in active.tsx, which unbinds a player whose
@@ -307,7 +321,16 @@ export function unionRecoverablePlayerFields(local: Game, remote: Game): Game {
 
     const preferredPayment = lp.preferredPayment ?? rp.preferredPayment;
     const savedPlayerId = lp.savedPlayerId ?? rp.savedPlayerId;
-    if (preferredPayment === lp.preferredPayment && savedPlayerId === lp.savedPlayerId) {
+    // methods and defaultMethod are adopted together, from whichever side supplied
+    // methods — see the doc comment above for why they can't be resolved independently.
+    const methods = lp.methods ?? rp.methods;
+    const defaultMethod = lp.methods ? lp.defaultMethod : rp.defaultMethod;
+    if (
+      preferredPayment === lp.preferredPayment &&
+      savedPlayerId === lp.savedPlayerId &&
+      methods === lp.methods &&
+      defaultMethod === lp.defaultMethod
+    ) {
       return lp;
     }
 
@@ -316,6 +339,7 @@ export function unionRecoverablePlayerFields(local: Game, remote: Game): Game {
       ...lp,
       ...(preferredPayment ? { preferredPayment } : {}),
       ...(savedPlayerId ? { savedPlayerId } : {}),
+      ...(methods ? { methods, defaultMethod } : {}),
     };
   });
 
