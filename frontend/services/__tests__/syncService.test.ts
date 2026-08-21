@@ -568,12 +568,31 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
   });
 
   it('never overwrites a live local map with a stale remote one', () => {
+    const input = local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]);
     const result = unionRecoverablePlayerFields(
-      local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]),
+      input,
       local([{ id: 'A', name: 'Alice', methods: { venmo: 'stale' }, defaultMethod: 'venmo' }]),
     );
     expect(result.players[0].methods).toEqual({ cash: '' });
     expect(result.players[0].defaultMethod).toBe('cash');
+    // Nothing was adopted, so identity must be preserved on the methods/defaultMethod
+    // path too — callers rely on this to avoid churning memoised references.
+    expect(result).toBe(input);
+  });
+
+  it('does not pair a local methods map with a remote defaultMethod (R-16)', () => {
+    // The exact input R-16 exists for: local has a map but no default, remote has
+    // both. Resolving the two fields independently (lp.defaultMethod ?? rp.defaultMethod)
+    // would pair local's map with remote's default — a pair that existed on neither
+    // device. If pairing regresses back to independent resolution, this is the one
+    // input that flips: the other adopt/no-overwrite tests produce the same result
+    // under either implementation and would stay green through such a revert.
+    const result = unionRecoverablePlayerFields(
+      local([{ id: 'A', name: 'Alice', methods: { venmo: 'v' } }]),
+      local([{ id: 'A', name: 'Alice', methods: { zelle: 'z' }, defaultMethod: 'zelle' }]),
+    );
+    expect(result.players[0].methods).toEqual({ venmo: 'v' });
+    expect(result.players[0].defaultMethod).toBeUndefined();
   });
 
   it('does not adopt across a rename (the deliberate-drop guard)', () => {
