@@ -24,15 +24,32 @@ export const summaryStyles = StyleSheet.create({
     // marginBottom, destroyed by flattening).
     paddingBottom: 52,
   },
-  // Re-creates the settlements section's marginBottom: 32, which used to sit between the
-  // last settlement card and the FINAL BALANCES header.
+  // 24, NOT 32, and the difference is the point: the LAST settlement card above this
+  // header still carries its own `marginBottom: 8` (settlementCard / payoutRow), and
+  // Yoga does not collapse adjacent margins. 24 + 8 renders as 32 — the summary
+  // screens' one section gap, matching heroPotSection.marginBottom and
+  // PlayerFilterChips' scroll.marginBottom on both surfaces.
+  //
+  // This key previously read 32 under a comment claiming it "re-creates the settlements
+  // section's marginBottom: 32". It never did: it rendered 40, here and in the pre-
+  // flattening ScrollView layout it was copied from.
   listSectionHeader: {
-    marginTop: 32,
+    marginTop: 24,
     backgroundColor: 'transparent',
   },
   // Re-creates the `gap: 8` the balances container used to apply. Applied to every
   // balance row but the last, so there is no trailing gap — matching gap semantics exactly.
   balanceGap: {
+    marginBottom: 8,
+    backgroundColor: 'transparent',
+  },
+  // The empty state's stand-in for the 8 a settlement card contributes.
+  // buildSummaryListData pushes the FINAL BALANCES sectionHeader immediately after
+  // the 'empty' item whenever `grouped` is empty (a balanced table, or a chip filter
+  // whose player has nothing to settle), and SummaryEmptyState carries no bottom
+  // margin of its own. Without this, listSectionHeader's 24 would render 24 there and
+  // 32 everywhere else — the rule holds only if EVERY predecessor contributes 8.
+  emptyGap: {
     marginBottom: 8,
     backgroundColor: 'transparent',
   },

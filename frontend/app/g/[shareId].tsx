@@ -215,10 +215,17 @@ export default function SharedGameScreen() {
     <>
       <View style={styles.header}>
         <Text style={styles.gameTitle}>{snapshot.gameName}</Text>
-        <Text style={styles.gameDate}>{new Date(snapshot.date).toLocaleDateString()}</Text>
-        {sharedAt && sharedAt.getTime() > 0 ? (
-          <Text style={styles.sharedAgo}>{formatSharedAgo(sharedAt, new Date())}</Text>
-        ) : null}
+        {/* ONE Text node, not two on a row: filter-then-join is what keeps a missing
+            sharedAt from leaving a dangling " · " behind the date, and a single node
+            is one screen-reader announcement instead of two fragments. */}
+        <Text style={styles.gameMeta}>
+          {[
+            new Date(snapshot.date).toLocaleDateString(),
+            sharedAt && sharedAt.getTime() > 0 ? formatSharedAgo(sharedAt, new Date()) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </Text>
       </View>
 
       <View style={styles.heroPotSection}>
@@ -289,9 +296,31 @@ function Notice({ label, icon }: { label: string; icon: string }) {
  * than a signal. The two screens render the same list through the same
  * SummaryView; the header above it now says so too.
  *
- * `sharedAgo` has no counterpart on the host screen, so it keeps its own
- * treatment. There is no `paddingTop` here any more: SharedGameChrome owns the
- * top of the screen and reads the real safe-area inset.
+ * The shared-ago string has no counterpart on the host screen, so it is appended
+ * to the date INSIDE gameMeta rather than given a style of its own — that keeps
+ * the two screens' title blocks the same three style keys. There is no
+ * `paddingTop` here any more: SharedGameChrome owns the top of the screen and
+ * reads the real safe-area inset.
+ *
+ * SPACING RULE, obeyed by both screens: 14 below every HUD header rule (that is
+ * summaryStyles.hudHeader's marginBottom, untouched), 32 of RENDERED space between
+ * sections. RENDERED is the operative word — Yoga does not collapse margins, so
+ * heroPotDisplay carries no padding at all and listSectionHeader says 24, because
+ * every item that can precede it (a settlement card, a payout row, the empty state
+ * via summaryStyles.emptyGap) contributes its own 8.
+ *
+ * The rule governs exactly two gaps: header-rule-to-content, and section-to-next-
+ * header. It says nothing about spacing WITHIN a section — the 8 between cards, and
+ * the host screen's FallbackBanner, which sits between the SETTLEMENTS header and
+ * its cards on the fallback path with its own marginBottom: 10.
+ *
+ * NOT normalized, and visible on the chip filter's no-settlements path:
+ * summaryStyles.emptyState carries paddingVertical: 28, so the empty state's icon
+ * ring sits 42 below the header rule where a card's first line sits 28. The layout
+ * gaps around it obey the rule; the drawn ones read looser. Left alone deliberately
+ * — it is a centred block, not a row of cards.
+ *
+ * Every value here was chosen against that rule; do not adjust one screen's alone.
  */
 const styles = StyleSheet.create({
   centered: {
@@ -301,11 +330,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   loadingLabel: { fontSize: 14, color: '#A0A0A0', marginTop: 12 },
-  header: { marginBottom: 24, backgroundColor: 'transparent' },
+  header: { marginBottom: 32, backgroundColor: 'transparent' },
   gameTitle: { fontSize: 32, fontWeight: 'bold', color: '#B072BB', letterSpacing: 1 },
-  gameDate: { fontSize: 14, opacity: 0.5, color: '#FFFFFF' },
-  sharedAgo: { fontSize: 13, color: '#A0A0A0', marginTop: 2 },
+  // Explicit colour, NOT `opacity: 0.5` on white. Opacity on a Text is applied
+  // inconsistently across platforms, and the value it approximated (~#808080) is
+  // 5.3:1 on #0A0A0A where #A0A0A0 is 8.9:1. Replaces the old gameDate + sharedAgo
+  // pair, which are now one line joined by ' · '.
+  gameMeta: { fontSize: 14, color: '#A0A0A0' },
   heroPotSection: { marginBottom: 32 },
-  heroPotDisplay: { alignItems: 'center', paddingVertical: 20, backgroundColor: 'transparent' },
-  heroPotAmount: { fontSize: 52, fontWeight: 'bold', color: '#B072BB' },
+  // paddingVertical: 0, not 20. SummaryHudHeader's own marginBottom: 14 is the gap
+  // above every other header's content on this screen; the 20 on top of it made the
+  // pot's 34/52 while FILTER BY PLAYER sat at 14/32.
+  heroPotDisplay: { alignItems: 'center', backgroundColor: 'transparent' },
+  // lineHeight is load-bearing, not decoration. With none, a 52pt Text gets ~1.2x
+  // natural leading, so the box carries ~10pt of empty space the style values do not
+  // show — the rule-to-digit distance would read far wider than the identical 14 above
+  // the chips. 56 rather than 52: dropping lineHeight below fontSize clips glyphs on
+  // Android.
+  heroPotAmount: { fontSize: 52, lineHeight: 56, fontWeight: 'bold', color: '#B072BB' },
 });

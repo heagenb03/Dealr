@@ -660,7 +660,7 @@ setSettlementResult(cachedResult);
           cash-out payouts; suppressed in banker mode. */}
       {!isBanker && distortion.maxDelta > 0 && (
         <Text style={styles.roundingNote}>
-          Rounded to {formatAmount(resolveCashUnit(summary.game.cashUnit, currency))} — largest change {formatAmount(distortion.maxDelta)}.
+          Rounded to {formatAmount(resolveCashUnit(summary.game.cashUnit, currency))}. The largest change is {formatAmount(distortion.maxDelta)}.
         </Text>
       )}
     </>
@@ -742,8 +742,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
+  // SPACING RULE, shared with app/g/[shareId].tsx (stated in full in that file's
+  // closing docstring): 14 below every HUD header rule (summaryStyles.hudHeader's
+  // marginBottom), 32 of RENDERED space between sections. It governs those two gaps
+  // only — NOT spacing within a section, which is why fallbackBanner keeps its own
+  // marginBottom: 10 between the SETTLEMENTS header and the first card on the
+  // fallback path. These four keys — header, heroPotSection, heroPotDisplay,
+  // heroPotAmount — plus gameDate are VALUE-MATCHED to that screen. Change together.
   header: {
-    marginBottom: 24,
+    marginBottom: 32,
     backgroundColor: 'transparent',
   },
   headerTitleRow: {
@@ -769,21 +776,30 @@ const styles = StyleSheet.create({
     color: '#B072BB',
     letterSpacing: 1,
   },
+  // Explicit colour, NOT `opacity: 0.5` on white: opacity on a Text is applied
+  // inconsistently across platforms, and the value it approximated (~#808080) is
+  // 5.3:1 on #0A0A0A where #A0A0A0 is 8.9:1. Matches [shareId].tsx's gameMeta.
   gameDate: {
     fontSize: 14,
-    opacity: 0.5,
-    color: '#FFFFFF',
+    color: '#A0A0A0',
   },
   heroPotSection: {
     marginBottom: 32,
   },
+  // No paddingVertical. SummaryHudHeader's own marginBottom: 14 is the gap above
+  // every other header's content; the 20 that used to sit on top of it made the pot
+  // 34 above / 52 below where every other section is 14 / 32.
   heroPotDisplay: {
-    paddingVertical: 20,
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
   heroPotAmount: {
     fontSize: 52,
+    // Load-bearing. With no lineHeight a 52pt Text gets ~1.2x natural leading, so the
+    // box carries ~10pt of empty space no style value shows and the rule-to-digit
+    // distance reads far wider than the identical 14 elsewhere. 56 rather than 52:
+    // dropping lineHeight below fontSize clips glyphs on Android.
+    lineHeight: 56,
     fontWeight: 'bold',
     color: '#B072BB',
   },

@@ -75,11 +75,13 @@ const styles = StyleSheet.create({
     // flexGrow:0 keeps the row at its content height inside a column parent —
     // without it a ScrollView claims all the remaining vertical space.
     flexGrow: 0,
-    marginBottom: 16,
+    // 32 is the shared summary section gap (see summaryStyles.listSectionHeader and
+    // the screens' heroPotSection). The row below owns no vertical padding, so this
+    // margin IS the rendered gap down to the next HUD header — nothing adds to it.
+    marginBottom: 32,
   },
   row: {
     gap: 8,
-    paddingVertical: 4,
   },
   chip: {
     paddingHorizontal: 14,

@@ -57,7 +57,15 @@ export function renderSummaryItem(
 ) {
   switch (item.type) {
     case 'empty':
-      return <SummaryEmptyState label={item.label} icon={item.icon} />;
+      // Wrapped rather than styled inside SummaryEmptyState: that component is also
+      // rendered standalone by [shareId].tsx's Notice, centred in a flex container,
+      // where a bottom margin would shift it off centre. Same reason 'balance' wraps
+      // in balanceGap instead of BalanceCard owning the margin.
+      return (
+        <View style={styles.emptyGap}>
+          <SummaryEmptyState label={item.label} icon={item.icon} />
+        </View>
+      );
     case 'bankerPayout':
       return (
         <BankerPayoutRow

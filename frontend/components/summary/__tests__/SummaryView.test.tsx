@@ -13,6 +13,7 @@
  * this file by rendering the component.
  */
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import TestRenderer, { act, ReactTestRenderer } from 'react-test-renderer';
 
 (global as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -120,5 +121,46 @@ describe('renderSummaryItem', () => {
     expect(withPayment.join(' ')).toContain('ada-l');
     // ...and no Pay button when the map has no entry for that name.
     expect(item(payout)).not.toContain('Pay');
+  });
+});
+
+/** Flattened style of the OUTERMOST styled node — depth-first, so it is the root. */
+const outerStyle = (it: SummaryListItem): Record<string, any> => {
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(renderSummaryItem(it, deps())); });
+  const [outer] = tree.root.findAll((n) => !!n.props?.style);
+  return StyleSheet.flatten(outer.props.style) ?? {};
+};
+
+describe('the gap above FINAL BALANCES is 32 from every predecessor', () => {
+  /**
+   * Yoga does NOT collapse adjacent margins, so the rendered gap above the section
+   * header is `listSectionHeader.marginTop` PLUS whatever the item above it carries.
+   * buildSummaryListData can put three different things there — a settlement card, a
+   * banker payout row, or the empty state — and the summary screens' 32pt section gap
+   * only holds if all three contribute the same 8.
+   *
+   * The empty state carries none of its own (summaryStyles.emptyState is padding, not
+   * margin); summaryStyles.emptyGap in SummaryView is what supplies it. Without that
+   * wrapper the gap renders 24 on a balanced table and on the shared screen's chip
+   * filter "nothing to settle" path, and 32 everywhere else — a difference tsc cannot
+   * see and no other test in this repo touches.
+   */
+  const SECTION_GAP = 32;
+
+  const cases: Array<[string, () => SummaryListItem]> = [
+    ['a settlement card', () => listOf([grp('Ada', 30)], [], false)[0]],
+    ['a banker payout row', () => listOf([grp('Ada', 30)], [], true)[0]],
+    ['the empty state', () => listOf([], [], false)[0]],
+  ];
+
+  it.each(cases)('%s', (_label, makePredecessor) => {
+    const predecessor = makePredecessor();
+    const header = listOf([], [], false).find((i) => i.type === 'sectionHeader')!;
+    // Both halves asserted, not just the sum: a compensating pair of wrong numbers
+    // would still add to 32.
+    expect(outerStyle(header).marginTop).toBe(24);
+    expect(outerStyle(predecessor).marginBottom).toBe(8);
+    expect(outerStyle(header).marginTop + outerStyle(predecessor).marginBottom).toBe(SECTION_GAP);
   });
 });
