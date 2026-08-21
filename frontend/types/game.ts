@@ -6,11 +6,26 @@ export interface PreferredPayment {
   handle?: string;
 }
 
+/**
+ * Bare payment handles keyed by method. A key present with '' means the method is
+ * selected with no handle — a real, reachable state that shareMessage.ts renders as
+ * a label with no handle ("label when it informs").
+ */
+export type PaymentHandles = Partial<Record<PaymentMethod, string>>;
+
+/** The two payment fields carried by both Player and SavedPlayer. */
+export interface PaymentCarrier {
+  methods?: PaymentHandles;
+  defaultMethod?: PaymentMethod;
+}
+
 export interface Player {
   id: string;
   name: string;
   completedAt?: Date;
   preferredPayment?: PreferredPayment;
+  methods?: PaymentHandles;
+  defaultMethod?: PaymentMethod;
   /** The saved-pool entry (by id) that seeded this player, so mid-game payment edits
    *  write back to the right saved player. Undefined for players typed with no match. */
   savedPlayerId?: string;
