@@ -4,10 +4,17 @@
  * in task 8 of the multiple-payment-methods spec:
  *
  * 1. The "+N" payment-method-count badge. Each card shows the resolved DEFAULT
- *    method's label/handle, plus a "+N" suffix counting the OTHER filled
- *    methods (filledMethods(player).length - 1). A regression that always
- *    renders 0 extra methods, or never renders the suffix at all, would be
- *    invisible to every other suite in this repo.
+ *    method's label/handle, plus a "+N" suffix counting the FILLED methods
+ *    OTHER than the default:
+ *      filledMethods(player).filter(m => m !== pref.method).length
+ *    This is NOT the same as `filledMethods(player).length - 1` — the two only
+ *    agree when the default itself is filled. They diverge whenever the default
+ *    is a label-only entry (no handle) with another method filled: filledMethods()
+ *    then excludes the default entirely, so its .length already IS the "other
+ *    methods" count, and subtracting 1 from it undercounts by one. See
+ *    `labelOnlyDefaultWithOtherFilled` below, which pins exactly this case. A
+ *    regression that always renders 0 extra methods, or never renders the
+ *    suffix at all, would be invisible to every other suite in this repo.
  *
  * 2. The memo comparators (PlayerCardActive/PlayerCardCompleted only —
  *    SavedPlayerCard's was already fixed in task 3) now compare
@@ -116,12 +123,37 @@ const twoMethodPlayer: Player = {
   defaultMethod: 'venmo',
 };
 
-// One filled method only -> zero "other" methods, no +N suffix expected.
+// Cash-only, default = cash. filledMethods() here is EMPTY (cash never has a handle,
+// so it never satisfies filledMethods' non-empty-handle filter) — the "other methods"
+// filter has nothing to remove, so this shape never exercises the filter's actual work.
+// See singleFilledDefaultPlayer below for the shape where the filter does something.
 const oneMethodPlayer: Player = {
   id: 'p2',
   name: 'Bob',
   methods: { cash: '' },
   defaultMethod: 'cash',
+};
+
+// Exactly one FILLED method, and it IS the default. filledMethods() returns ['venmo'],
+// so the filter has to actively drop the default out of a non-empty list to reach 0 —
+// the shape oneMethodPlayer above cannot exercise, since its filledMethods() is already
+// empty before the filter runs.
+const singleFilledDefaultPlayer: Player = {
+  id: 'p3',
+  name: 'Cara',
+  methods: { venmo: 'v1' },
+  defaultMethod: 'venmo',
+};
+
+// Label-only default (no handle) with ONE other filled method. filledMethods() excludes
+// the unfilled default and returns only ['zelle'], so filledMethods().length is already 1
+// — the count of OTHER filled methods. `filledMethods().length - 1` would wrongly read this
+// as 0: the formula that only agrees with the real one when the default itself is filled.
+const labelOnlyDefaultWithOtherFilled: Player = {
+  id: 'p4',
+  name: 'Dee',
+  methods: { venmo: '', zelle: 'dee@x.com' },
+  defaultMethod: 'venmo',
 };
 
 const noop = () => {};
@@ -140,7 +172,20 @@ describe('PlayerCardActive — payment badge +N count', () => {
     expect(texts(tree).join('')).toContain('+1');
   });
 
-  it('shows no +N suffix when the player has exactly one filled method', async () => {
+  it('shows +1 when the default is label-only (no handle) and one other method is filled', async () => {
+    const tree = await renderWithCurrency(
+      <PlayerCardActive
+        player={labelOnlyDefaultWithOtherFilled}
+        balance={undefined}
+        onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
+        onRename={noop} onEditPayment={noop}
+        reduceMotion={true}
+      />
+    );
+    expect(texts(tree).join('')).toContain('+1');
+  });
+
+  it('shows no +N suffix when the player has no filled methods at all (cash-only default)', async () => {
     const tree = await renderWithCurrency(
       <PlayerCardActive
         player={oneMethodPlayer}
@@ -150,7 +195,20 @@ describe('PlayerCardActive — payment badge +N count', () => {
         reduceMotion={true}
       />
     );
-    expect(texts(tree).join('')).not.toContain('+1');
+    expect(texts(tree).join('')).not.toMatch(/\+\d/);
+  });
+
+  it('shows no +N suffix when the one filled method is the default itself', async () => {
+    const tree = await renderWithCurrency(
+      <PlayerCardActive
+        player={singleFilledDefaultPlayer}
+        balance={undefined}
+        onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
+        onRename={noop} onEditPayment={noop}
+        reduceMotion={true}
+      />
+    );
+    expect(texts(tree).join('')).not.toMatch(/\+\d/);
   });
 });
 
@@ -167,7 +225,19 @@ describe('PlayerCardCompleted — payment badge +N count', () => {
     expect(texts(tree).join('')).toContain('+1');
   });
 
-  it('shows no +N suffix when the player has exactly one filled method', async () => {
+  it('shows +1 when the default is label-only (no handle) and one other method is filled', async () => {
+    const tree = await renderWithCurrency(
+      <PlayerCardCompleted
+        player={labelOnlyDefaultWithOtherFilled}
+        balance={undefined}
+        onReactivate={noop} onDelete={noop}
+        reduceMotion={true}
+      />
+    );
+    expect(texts(tree).join('')).toContain('+1');
+  });
+
+  it('shows no +N suffix when the player has no filled methods at all (cash-only default)', async () => {
     const tree = await renderWithCurrency(
       <PlayerCardCompleted
         player={oneMethodPlayer}
@@ -176,7 +246,19 @@ describe('PlayerCardCompleted — payment badge +N count', () => {
         reduceMotion={true}
       />
     );
-    expect(texts(tree).join('')).not.toContain('+1');
+    expect(texts(tree).join('')).not.toMatch(/\+\d/);
+  });
+
+  it('shows no +N suffix when the one filled method is the default itself', async () => {
+    const tree = await renderWithCurrency(
+      <PlayerCardCompleted
+        player={singleFilledDefaultPlayer}
+        balance={undefined}
+        onReactivate={noop} onDelete={noop}
+        reduceMotion={true}
+      />
+    );
+    expect(texts(tree).join('')).not.toMatch(/\+\d/);
   });
 });
 
@@ -187,11 +269,23 @@ describe('SavedPlayerCard — payment badge +N count', () => {
     methods: twoMethodPlayer.methods,
     defaultMethod: twoMethodPlayer.defaultMethod,
   };
+  const labelOnlyDefaultSaved: SavedPlayer = {
+    id: 'sp4',
+    name: 'Dee',
+    methods: labelOnlyDefaultWithOtherFilled.methods,
+    defaultMethod: labelOnlyDefaultWithOtherFilled.defaultMethod,
+  };
   const oneMethodSaved: SavedPlayer = {
     id: 'sp2',
     name: 'Bob',
     methods: oneMethodPlayer.methods,
     defaultMethod: oneMethodPlayer.defaultMethod,
+  };
+  const singleFilledDefaultSaved: SavedPlayer = {
+    id: 'sp3',
+    name: 'Cara',
+    methods: singleFilledDefaultPlayer.methods,
+    defaultMethod: singleFilledDefaultPlayer.defaultMethod,
   };
 
   it('shows +1 when the player has one filled method beyond the default', () => {
@@ -205,7 +299,18 @@ describe('SavedPlayerCard — payment badge +N count', () => {
     expect(texts(tree).join('')).toContain('+1');
   });
 
-  it('shows no +N suffix when the player has exactly one filled method', () => {
+  it('shows +1 when the default is label-only (no handle) and one other method is filled', () => {
+    const tree = render(
+      <SavedPlayerCard
+        player={labelOnlyDefaultSaved}
+        onRename={noop} onEditPayment={noop} onDelete={noop}
+        reduceMotion={true}
+      />
+    );
+    expect(texts(tree).join('')).toContain('+1');
+  });
+
+  it('shows no +N suffix when the player has no filled methods at all (cash-only default)', () => {
     const tree = render(
       <SavedPlayerCard
         player={oneMethodSaved}
@@ -213,7 +318,18 @@ describe('SavedPlayerCard — payment badge +N count', () => {
         reduceMotion={true}
       />
     );
-    expect(texts(tree).join('')).not.toContain('+1');
+    expect(texts(tree).join('')).not.toMatch(/\+\d/);
+  });
+
+  it('shows no +N suffix when the one filled method is the default itself', () => {
+    const tree = render(
+      <SavedPlayerCard
+        player={singleFilledDefaultSaved}
+        onRename={noop} onEditPayment={noop} onDelete={noop}
+        reduceMotion={true}
+      />
+    );
+    expect(texts(tree).join('')).not.toMatch(/\+\d/);
   });
 });
 
