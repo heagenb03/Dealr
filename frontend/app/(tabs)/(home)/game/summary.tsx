@@ -22,6 +22,7 @@ import { computeRoundingDistortion } from '@/utils/roundingUtils';
 import { resolveCashUnit } from '@/constants/CashUnits';
 import { resolveTolerance } from '@/constants/Tolerances';
 import { PreferredPayment } from '@/types/game';
+import { resolvePayment } from '@/utils/paymentMethods';
 import { buildShareMessage } from '@/utils/shareMessage';
 import { useNetwork } from '@/contexts/NetworkContext';
 import { publishSharedGame, mintShareId, shareExpiryFrom } from '@/services/sharedGameService';
@@ -416,7 +417,8 @@ setSettlementResult(cachedResult);
   const paymentByName = useMemo(() => {
     const map = new Map<string, PreferredPayment>();
     summary?.game.players.forEach(p => {
-      if (p.preferredPayment) map.set(p.name, p.preferredPayment);
+      const pref = resolvePayment(p);
+      if (pref) map.set(p.name, pref);
     });
     return map;
     // Dep is the summary object, NOT summary.game.players — the players array is

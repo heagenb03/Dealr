@@ -19,6 +19,7 @@ import {
   SUPPORTED_CURRENCIES,
 } from '@/constants/Currencies';
 import { GameService } from '@/services/gameService';
+import { resolvePayment } from '@/utils/paymentMethods';
 
 /**
  * Bumped only for a snapshot shape that older INSTALLED builds cannot render.
@@ -79,7 +80,9 @@ export function buildSharedGameSnapshot(params: {
 
   const payments: Record<string, PreferredPayment> = {};
   for (const player of game.players) {
-    const pref = player.preferredPayment;
+    // Default only leaves the device (spec §"Why default-only"). The published wire format
+    // is unchanged, so firestore.rules needs no edit and already-published docs keep parsing.
+    const pref = resolvePayment(player);
     if (!pref) continue;
     // Build the entry field-by-field so an undefined handle is ABSENT rather
     // than present-and-undefined — Firestore rejects undefined values.

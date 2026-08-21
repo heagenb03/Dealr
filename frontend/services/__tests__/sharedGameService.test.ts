@@ -61,7 +61,7 @@ const game: Game = {
   status: 'completed',
   createdAt: NOW,
   currency: 'USD',
-  players: [{ id: 'p1', name: 'Ada', preferredPayment: { method: 'venmo', handle: 'ada-l' } }],
+  players: [{ id: 'p1', name: 'Ada', methods: { venmo: 'ada-l' }, defaultMethod: 'venmo' }],
   transactions: [],
 };
 

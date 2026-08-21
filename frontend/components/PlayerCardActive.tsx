@@ -9,6 +9,7 @@ import { Player, PlayerBalance } from '@/types/game';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
+import { resolvePayment, filledMethods, paymentSignature } from '@/utils/paymentMethods';
 
 interface PlayerCardActiveProps {
   player: Player;
@@ -123,14 +124,18 @@ const PlayerCardActive: React.FC<PlayerCardActiveProps> = ({
               )}
             </RNTouchableOpacity>
             <RNTouchableOpacity onPress={() => onEditPayment(player)} style={styles.paymentBadge}>
-              {player.preferredPayment ? (
-                <Text style={styles.paymentBadgeText} numberOfLines={1}>
-                  {getPaymentMethodMeta(player.preferredPayment.method).label}
-                  {player.preferredPayment.handle ? ` · ${formatHandleForDisplay(player.preferredPayment.method, player.preferredPayment.handle)}` : ''}
-                </Text>
-              ) : (
-                <Text style={styles.paymentBadgeAdd}>+ Payment</Text>
-              )}
+              {(() => {
+                const pref = resolvePayment(player);
+                if (!pref) return <Text style={styles.paymentBadgeAdd}>+ Payment</Text>;
+                const extra = filledMethods(player).filter(m => m !== pref.method).length;
+                return (
+                  <Text style={styles.paymentBadgeText} numberOfLines={1}>
+                    {getPaymentMethodMeta(pref.method).label}
+                    {pref.handle ? ` · ${formatHandleForDisplay(pref.method, pref.handle)}` : ''}
+                    {extra > 0 ? ` +${extra}` : ''}
+                  </Text>
+                );
+              })()}
             </RNTouchableOpacity>
           </View>
 
@@ -276,8 +281,7 @@ export default React.memo(PlayerCardActive, (prevProps, nextProps) => {
     prevProps.player.name === nextProps.player.name &&
     prevProps.balance?.totalBuyins === nextProps.balance?.totalBuyins &&
     prevProps.balance?.totalCashouts === nextProps.balance?.totalCashouts &&
-    prevProps.player.preferredPayment?.method === nextProps.player.preferredPayment?.method &&
-    prevProps.player.preferredPayment?.handle === nextProps.player.preferredPayment?.handle &&
+    paymentSignature(prevProps.player) === paymentSignature(nextProps.player) &&
     prevProps.isBanker === nextProps.isBanker &&
     prevProps.reduceMotion === nextProps.reduceMotion
   );

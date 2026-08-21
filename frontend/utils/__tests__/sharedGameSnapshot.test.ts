@@ -21,8 +21,8 @@ function makeGame(overrides: Partial<Game> = {}): Game {
     createdAt: new Date('2026-08-19T00:00:00.000Z'),
     currency: 'EUR',
     players: [
-      { id: 'p1', name: 'Ada', preferredPayment: { method: 'venmo', handle: 'ada-l' }, savedPlayerId: 'saved-1' },
-      { id: 'p2', name: 'Bob', preferredPayment: { method: 'cash' } },
+      { id: 'p1', name: 'Ada', methods: { venmo: 'ada-l' }, defaultMethod: 'venmo', savedPlayerId: 'saved-1' },
+      { id: 'p2', name: 'Bob', methods: { cash: '' }, defaultMethod: 'cash' },
     ],
     transactions: [
       { id: 't1', playerId: 'p1', type: 'buyin', amount: 100, timestamp: new Date() },
@@ -70,7 +70,7 @@ describe('buildSharedGameSnapshot — what it carries', () => {
 
   it('drops an undefined handle instead of writing the key', () => {
     const game = makeGame({
-      players: [{ id: 'p1', name: 'Ada', preferredPayment: { method: 'cash', handle: undefined } }],
+      players: [{ id: 'p1', name: 'Ada', methods: { cash: '' }, defaultMethod: 'cash' }],
     });
     const snap = buildSharedGameSnapshot({ game, ...inputs });
     expect(snap.payments.Ada).toEqual({ method: 'cash' });
@@ -198,5 +198,36 @@ describe('buildSharedGameSnapshot — frozen (no aliasing of caller-owned state)
 describe('SHARED_GAME_SCHEMA', () => {
   it('is 1', () => {
     expect(SHARED_GAME_SCHEMA).toBe(1);
+  });
+});
+
+describe('buildSharedGameSnapshot — publishes the default of the new methods/defaultMethod carrier', () => {
+  it('publishes only the default method, in the unchanged wire format', () => {
+    const game = makeGame({
+      players: [
+        { id: 'p1', name: 'Ada', methods: { venmo: 'ada-l', zelle: 'ada@x.com' }, defaultMethod: 'zelle' },
+      ],
+    });
+    const snap = buildSharedGameSnapshot({ game, ...inputs });
+    expect(snap.payments).toEqual({ Ada: { method: 'zelle', handle: 'ada@x.com' } });
+  });
+
+  it('emits a label-only entry with no handle key at all (Firestore rejects undefined)', () => {
+    const game = makeGame({
+      players: [{ id: 'p1', name: 'Ada', methods: { venmo: '' }, defaultMethod: 'venmo' }],
+    });
+    const snap = buildSharedGameSnapshot({ game, ...inputs });
+    expect(snap.payments).toEqual({ Ada: { method: 'venmo' } });
+    expect('handle' in snap.payments.Ada).toBe(false);
+  });
+
+  it('is byte-identical to the legacy single-method output', () => {
+    const game = makeGame({
+      players: [{ id: 'p1', name: 'Ada', methods: { venmo: 'ada-l' }, defaultMethod: 'venmo' }],
+    });
+    const viaMethods = buildSharedGameSnapshot({ game, ...inputs });
+    // The exact JSON a pre-change build wrote for the same player. If this ever differs,
+    // firestore.rules and every already-published /g/ document are implicated.
+    expect(JSON.stringify(viaMethods.payments)).toBe('{"Ada":{"method":"venmo","handle":"ada-l"}}');
   });
 });
