@@ -23,6 +23,7 @@ import { getSettlements, calculateBankerSettlements } from '@/services/settlemen
 import { Player, PlayerBalance, Validation, PaymentCarrier } from '@/types/game';
 import { incrementProfileStats } from '@/services/firebaseService';
 import { isValidNumericInput } from '@/utils/validationUtils';
+import { stepBuyInTotal } from '@/utils/buyInStep';
 import { loadSavedPlayers, SavedPlayer, savedCapFor, canAddMoreSavedPlayers, getSavedPlayersByName, getSavedPlayerById, createSavedPlayer, updateSavedPlayer } from '@/services/savedPlayersService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PlayerCardActive from '@/components/PlayerCardActive';
@@ -1296,6 +1297,14 @@ export default function ActiveGameScreen() {
   const buyInSummaryLabel =
     gameDefaultBuyIn > 0 ? `Buy-in ${formatAmount(gameDefaultBuyIn)}` : undefined;
 
+  // The Buy-in modal's field holds a CUMULATIVE total, so one tap is one rebuy
+  // on or off that total. Edits the field only — Confirm still commits, matching
+  // every other path through this modal.
+  const showBuyInStepper = transactionType === 'buyin' && gameDefaultBuyIn > 0;
+  const stepBuyIn = (direction: 1 | -1) => {
+    setTransactionAmount(current => stepBuyInTotal(current, gameDefaultBuyIn, direction));
+  };
+
   const resolvedTolerance = resolveTolerance(activeGame.imbalanceTolerance, currency);
   // Expanded-row value (always shown, plain like the Rounding value).
   const toleranceValueLabel =
@@ -2037,15 +2046,47 @@ export default function ActiveGameScreen() {
         onClose={() => setShowAddTransaction(false)}
         contentStyle={appModalStyles.centeredContent}
       >
-        <TextInput
-          style={styles.input}
-          value={transactionAmount}
-          onChangeText={setTransactionAmount}
-          placeholder="Amount"
-          placeholderTextColor="#666"
-          keyboardType="decimal-pad"
-          autoFocus
-        />
+        {showBuyInStepper ? (
+          // AppModal's body ScrollView already sets keyboardShouldPersistTaps="handled",
+          // so these register on the first tap without dismissing the keyboard.
+          <View style={styles.stepperRow}>
+            <TouchableOpacity
+              style={styles.stepperButton}
+              onPress={() => stepBuyIn(-1)}
+              accessibilityRole="button"
+              accessibilityLabel={`Subtract ${defaultBuyInLabel}`}
+            >
+              <Text style={styles.stepperButtonText}>−</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, styles.stepperInput]}
+              value={transactionAmount}
+              onChangeText={setTransactionAmount}
+              placeholder="Amount"
+              placeholderTextColor="#666"
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+            <TouchableOpacity
+              style={styles.stepperButton}
+              onPress={() => stepBuyIn(1)}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${defaultBuyInLabel}`}
+            >
+              <Text style={styles.stepperButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TextInput
+            style={styles.input}
+            value={transactionAmount}
+            onChangeText={setTransactionAmount}
+            placeholder="Amount"
+            placeholderTextColor="#666"
+            keyboardType="decimal-pad"
+            autoFocus
+          />
+        )}
         <View style={styles.modalButtons}>
           <ModalButton
             variant="cancel"
@@ -2573,6 +2614,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2A2A2A',
     marginBottom: 20,
+  },
+  // Buy-in stepper: [−] [amount] [+] on one line. `alignItems: 'stretch'` makes the
+  // buttons match the input's ~54pt height, which clears the 44pt touch minimum
+  // without hardcoding a height that would drift if `input` padding changes.
+  // backgroundColor transparent because View here is Themed, which paints its own.
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+    width: '100%',
+    marginBottom: 20,
+    backgroundColor: 'transparent',
+  },
+  // `width: 'auto'` is load-bearing, not decoration: RN merges style arrays by key,
+  // so without it `input`'s `width: '100%'` survives into a row that also holds two
+  // 48pt buttons and 24pt of gap. Restating the Yoga default is what cancels it.
+  // marginBottom moves to the row. paddingHorizontal drops to 8 because the text is
+  // centred, and those spare 16pt matter: on a 320pt screen this field is only ~80pt.
+  stepperInput: {
+    flex: 1,
+    width: 'auto',
+    marginBottom: 0,
+    paddingHorizontal: 8,
+    textAlign: 'center',
+  },
+  stepperButton: {
+    width: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0A0A0A',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+  },
+  stepperButtonText: {
+    fontSize: 24,
+    lineHeight: 28,
+    color: '#B072BB',
+    backgroundColor: 'transparent',
   },
   modalButtons: {
     flexDirection: 'row',
