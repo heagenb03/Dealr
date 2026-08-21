@@ -104,7 +104,9 @@ describe('deserializeFirestoreGame', () => {
     });
     expect(game.players[0].methods).toEqual({ venmo: '@alice' });
     expect(game.players[0].defaultMethod).toBe('venmo');
-    expect(game.players[0].preferredPayment).toBeUndefined();
+    // Player no longer has this field at all (Task 9); cast to check withSynthesizedMethods
+    // actually strips it at runtime rather than relying on the type system alone.
+    expect((game.players[0] as any).preferredPayment).toBeUndefined();
   });
 
   it('synthesizes a preferredPayment with no handle (e.g. cash) without inventing one', () => {
@@ -118,7 +120,7 @@ describe('deserializeFirestoreGame', () => {
 
   it('leaves preferredPayment undefined when absent on the player', () => {
     const game = deserializeFirestoreGame(baseDoc);
-    expect(game.players[0].preferredPayment).toBeUndefined();
+    expect((game.players[0] as any).preferredPayment).toBeUndefined();
   });
 
   it('round-trips Player.savedPlayerId (must be in the deserialize whitelist)', () => {

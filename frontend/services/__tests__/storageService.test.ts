@@ -61,10 +61,11 @@ describe('StorageService.loadGames — player field fidelity', () => {
     await StorageService.saveGames([game]);
     const [loaded] = await StorageService.loadGames();
 
-    // preferredPayment itself no longer lives on the in-memory object.
+    // preferredPayment itself no longer lives on the in-memory object — Player has no
+    // such field to check via the type system, so cast to prove it at runtime too.
     expect(loaded.players[0].methods).toEqual({ venmo: 'alice-h' });
     expect(loaded.players[0].defaultMethod).toBe('venmo');
-    expect(loaded.players[0].preferredPayment).toBeUndefined();
+    expect((loaded.players[0] as any).preferredPayment).toBeUndefined();
     expect(loaded.players[0].savedPlayerId).toBe('sp_alice');
 
     // The legacy field IS still on the raw store, derived from methods, for a
@@ -110,7 +111,7 @@ describe('StorageService.loadGames — player field fidelity', () => {
   it('survives repeated load/save cycles — the user-reported "gone after the 2nd close"', async () => {
     const game = makeGame({
       players: [
-        { id: 'p1', name: 'Alice', preferredPayment: { method: 'cashapp', handle: 'alice-c' } },
+        { id: 'p1', name: 'Alice', methods: { cashapp: 'alice-c' }, defaultMethod: 'cashapp' },
       ],
     });
     await StorageService.saveGames([game]);
@@ -135,7 +136,7 @@ describe('StorageService.loadGames — player field fidelity', () => {
     // lossy read damages every *untouched* game in the same write.
     const gameA = makeGame({
       id: 'gameA',
-      players: [{ id: 'p1', name: 'Alice', preferredPayment: { method: 'venmo', handle: 'a-h' } }],
+      players: [{ id: 'p1', name: 'Alice', methods: { venmo: 'a-h' }, defaultMethod: 'venmo' }],
     });
     const gameB = makeGame({ id: 'gameB', players: [{ id: 'p2', name: 'Bob' }] });
     await StorageService.saveGames([gameA, gameB]);

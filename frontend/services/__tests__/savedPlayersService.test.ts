@@ -172,11 +172,11 @@ describe('unionMerge keyed by id', () => {
 
   it('dedups same-id entries by greater updatedAt', () => {
     const merged = unionMerge(
-      [{ id: 'sp_1', name: 'Mike', preferredPayment: { method: 'venmo', handle: 'old' }, updatedAt: 1 }],
-      [{ id: 'sp_1', name: 'Mike', preferredPayment: { method: 'cashapp', handle: 'new' }, updatedAt: 9 }],
+      [{ id: 'sp_1', name: 'Mike', methods: { venmo: 'old' }, defaultMethod: 'venmo', updatedAt: 1 }],
+      [{ id: 'sp_1', name: 'Mike', methods: { cashapp: 'new' }, defaultMethod: 'cashapp', updatedAt: 9 }],
     );
     expect(merged).toHaveLength(1);
-    expect(merged[0].preferredPayment).toEqual({ method: 'cashapp', handle: 'new' });
+    expect(resolvePayment(merged[0])).toEqual({ method: 'cashapp', handle: 'new' });
   });
 });
 
@@ -223,7 +223,7 @@ describe('addSavedPlayers', () => {
       A,
       [
         { name: 'Bob' },
-        { name: 'alice', preferredPayment: { method: 'cashapp', handle: 'aliceC' } },
+        { name: 'alice', methods: { cashapp: 'aliceC' }, defaultMethod: 'cashapp' },
       ],
       { limit: PRO_SAVED_CAP },
     );
@@ -240,6 +240,22 @@ describe('addSavedPlayers', () => {
     const res = await addSavedPlayers(A, [{ name: 'C' }, { name: 'D' }], { limit: 2 });
     expect(res).toEqual({ added: 0, updated: 0, skippedFull: 2 });
     expect((await getSavedPlayers(A)).length).toBe(2);
+  });
+
+  it('a same-name update does not destroy an existing methods map (R-20)', async () => {
+    // R-20: addSavedPlayers used to rebuild the matched entry as
+    // {id, name, preferredPayment, updatedAt} — a shape with no methods field at all — so
+    // any existing methods map (venmo here) was silently destroyed rather than replaced.
+    await savePlayer(A, 'Alice', { methods: { venmo: 'alice-v' }, defaultMethod: 'venmo' });
+    const res = await addSavedPlayers(
+      A,
+      [{ name: 'Alice', methods: { cashapp: 'alice-c' }, defaultMethod: 'cashapp' }],
+      { limit: PRO_SAVED_CAP },
+    );
+    expect(res).toEqual({ added: 0, updated: 1, skippedFull: 0 });
+    const saved = await getSavedPlayer(A, 'Alice');
+    expect(saved?.methods).toEqual({ cashapp: 'alice-c' });
+    expect(resolvePayment(saved)).toEqual({ method: 'cashapp', handle: 'alice-c' });
   });
 });
 

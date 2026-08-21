@@ -385,12 +385,17 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
   // strict `remoteTime > localTime`, so the stripped local copy won and the
   // handle was gone for good.
   it('keeps a handle across two launches even once local syncedAt ties remote', async () => {
+    const GAMES_KEY = '@cashcage:games';
     const REMOTE_SYNCED = new Date('2026-07-02T00:00:00Z');
-    // Local storage still models a legacy-only on-disk record: the UI (active.tsx et al.)
-    // has not yet been migrated to write methods/defaultMethod (that's Tasks 5-8), so a
-    // preferredPayment-only local record is exactly what saveGame leaves today.
-    const withHandle = (syncedAt: Date): Game => ({
-      ...makeGame([{ id: 'A', name: 'Alice' }]),
+    // Local storage models a genuine legacy on-disk record: seeded as raw JSON, never
+    // through the typed Player API (which post-Task 9 has no field to hold this shape —
+    // preferredPayment cannot live on an in-memory Player at all). This is exactly what a
+    // device that wrote this game before methods/defaultMethod existed still has on disk.
+    const rawLegacyGame = (syncedAt: string) => ({
+      id: 'game1',
+      name: 'Friday Night',
+      date: '2026-07-01T00:00:00.000Z',
+      status: 'active',
       players: [
         {
           id: 'A',
@@ -399,6 +404,8 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
           savedPlayerId: 'sp_alice',
         },
       ],
+      transactions: [],
+      createdAt: '2026-07-01T00:00:00.000Z',
       syncedAt,
     });
     // Remote, in contrast, can NEVER be legacy-only shaped: fetchGamesFromFirestore always
@@ -413,7 +420,7 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
     });
 
     // Local lags remote by one write, exactly as saveGame leaves it.
-    await StorageService.saveGames([withHandle(new Date('2026-07-01T00:00:00Z'))]);
+    await AsyncStorage.setItem(GAMES_KEY, JSON.stringify([rawLegacyGame('2026-07-01T00:00:00.000Z')]));
     (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([remoteWithHandle(REMOTE_SYNCED)]);
 
     // ---- Launch 1: remote is newer, so it wins and stamps REMOTE_SYNCED locally.
@@ -447,7 +454,7 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
       ...makeGame([{ id: 'A', name: 'Alice' }]),
       id: 'gameA',
       players: [
-        { id: 'A', name: 'Alice', preferredPayment: { method: 'cashapp', handle: 'alice-c' } },
+        { id: 'A', name: 'Alice', methods: { cashapp: 'alice-c' }, defaultMethod: 'cashapp' },
       ],
     };
     const otherGame: Game = { ...makeGame([{ id: 'B', name: 'Bob' }]), id: 'gameB' };
@@ -467,64 +474,56 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
 describe('unionRecoverablePlayerFields — recovering handles the old whitelist stripped', () => {
   const local = (players: any[]): Game => ({ ...makeGame([]), players } as Game);
 
-  it('adopts remote preferredPayment and savedPlayerId when local lost them', () => {
+  it('adopts remote methods/defaultMethod and savedPlayerId when local lost them', () => {
     const result = unionRecoverablePlayerFields(
       local([{ id: 'A', name: 'Alice' }]),
       local([
-        {
-          id: 'A',
-          name: 'Alice',
-          preferredPayment: { method: 'venmo', handle: 'alice-h' },
-          savedPlayerId: 'sp_alice',
-        },
+        { id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo', savedPlayerId: 'sp_alice' },
       ]),
     );
 
-    expect(result.players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
+    expect(result.players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(result.players[0].defaultMethod).toBe('venmo');
     expect(result.players[0].savedPlayerId).toBe('sp_alice');
   });
 
   it('never overwrites a payment the local copy already has', () => {
     const result = unionRecoverablePlayerFields(
-      local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'cash' } }]),
-      local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'venmo', handle: 'stale' } }]),
+      local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]),
+      local([{ id: 'A', name: 'Alice', methods: { venmo: 'stale' }, defaultMethod: 'venmo' }]),
     );
 
-    expect(result.players[0].preferredPayment).toEqual({ method: 'cash' });
+    expect(result.players[0].methods).toEqual({ cash: '' });
+    expect(result.players[0].defaultMethod).toBe('cash');
   });
 
   it('does NOT resurrect a payment onto a RENAMED player (deliberate unbind)', () => {
-    // active.tsx drops preferredPayment + savedPlayerId on rename when the new
+    // active.tsx drops methods/defaultMethod + savedPlayerId on rename when the new
     // name matches 0 or 2+ saved entries, so a later edit cannot write back to
     // the wrong saved entry. If that rename is made offline, remote still holds
     // the OLD person's handle — adopting it would show the wrong payee.
     const result = unionRecoverablePlayerFields(
       local([{ id: 'A', name: 'Bob' }]),
       local([
-        {
-          id: 'A',
-          name: 'Alice',
-          preferredPayment: { method: 'venmo', handle: 'alice-h' },
-          savedPlayerId: 'sp_alice',
-        },
+        { id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo', savedPlayerId: 'sp_alice' },
       ]),
     );
 
-    expect(result.players[0].preferredPayment).toBeUndefined();
+    expect(result.players[0].methods).toBeUndefined();
     expect(result.players[0].savedPlayerId).toBeUndefined();
   });
 
   it('leaves players absent from remote untouched', () => {
     const input = local([{ id: 'Z', name: 'Zoe' }]);
     const result = unionRecoverablePlayerFields(input, local([]));
-    expect(result.players[0].preferredPayment).toBeUndefined();
+    expect(result.players[0].methods).toBeUndefined();
   });
 
   it('returns the SAME object when nothing is recoverable (no identity churn)', () => {
-    const input = local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'cash' } }]);
+    const input = local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]);
     const result = unionRecoverablePlayerFields(
       input,
-      local([{ id: 'A', name: 'Alice', preferredPayment: { method: 'cash' } }]),
+      local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]),
     );
     expect(result).toBe(input);
   });

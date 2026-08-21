@@ -50,7 +50,6 @@ export function canAddMoreSavedPlayers(count: number, isPro: boolean): boolean {
 export interface SavedPlayer {
   id: string;
   name: string;
-  preferredPayment?: PreferredPayment;
   methods?: PaymentHandles;
   defaultMethod?: PaymentMethod;
   /** Epoch ms of the last edit; tie-breaker for cross-device union merge. */
@@ -83,7 +82,10 @@ function coerce(entry: unknown): SavedPlayer | null {
       defaultMethod?: PaymentMethod;
       updatedAt?: number;
     };
-    const out: SavedPlayer = {
+    // Raw storage/Firestore shape, not SavedPlayer: it may still carry the legacy
+    // preferredPayment field (2.0.2 write, or this app's own dual-write). withSynthesizedMethods
+    // strips it below, deriving methods/defaultMethod when the record predates that field.
+    const out: SavedPlayer & { preferredPayment?: PreferredPayment } = {
       id: typeof e.id === 'string' && e.id ? e.id : legacyIdFor(e.name),
       name: e.name,
     };
@@ -516,11 +518,16 @@ export async function addSavedPlayers(
       const lower = name.toLowerCase();
       const idx = result.findIndex(p => p.name.toLowerCase() === lower);
       if (idx !== -1) {
-        if (entry.preferredPayment) {
+        // Whole-map replace (spec §4 convention), not a per-key union — but the replacement
+        // must carry the SUPPLIED map forward, not drop it. R-20: this used to rebuild the
+        // entry as {id, name, preferredPayment, updatedAt}, silently destroying an existing
+        // methods/defaultMethod map whenever this branch fired.
+        if (entry.methods) {
           result[idx] = {
             id: result[idx].id,
             name: result[idx].name,
-            preferredPayment: entry.preferredPayment,
+            methods: entry.methods,
+            defaultMethod: entry.defaultMethod,
             updatedAt: now,
           };
           tombstones = clearTombstone(tombstones, result[idx].id);
@@ -533,7 +540,10 @@ export async function addSavedPlayers(
         continue;
       }
       const fresh: SavedPlayer = { id: legacyIdFor(name), name, updatedAt: now };
-      if (entry.preferredPayment) fresh.preferredPayment = entry.preferredPayment;
+      if (entry.methods) {
+        fresh.methods = entry.methods;
+        fresh.defaultMethod = entry.defaultMethod;
+      }
       result.unshift(fresh);
       tombstones = clearTombstone(tombstones, fresh.id);
       added++;

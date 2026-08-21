@@ -509,10 +509,13 @@ export default function ActiveGameScreen() {
     if (!paymentPlayer || !activeGame) return;
     const idx = activeGame.players.findIndex(p => p.id === paymentPlayer.id);
     if (idx !== -1) {
-      // Drop any stray legacy field — preferredPayment is derived only at the storage
-      // serialize boundary, never carried in memory (see paymentMethods.ts).
-      const { preferredPayment: _drop, ...rest } = activeGame.players[idx];
-      activeGame.players[idx] = { ...rest, methods: payment.methods, defaultMethod: payment.defaultMethod };
+      // preferredPayment is derived only at the storage serialize boundary, never carried
+      // in memory (see paymentMethods.ts) — Player has no such field to drop.
+      activeGame.players[idx] = {
+        ...activeGame.players[idx],
+        methods: payment.methods,
+        defaultMethod: payment.defaultMethod,
+      };
     }
     await updateGame(activeGame);
 
@@ -1447,10 +1450,10 @@ export default function ActiveGameScreen() {
       const i = activeGame!.players.findIndex(p => p.id === selectedPlayer.id);
       if (i !== -1) {
         // Drop the OLD name's binding and payment wholesale — preferredPayment is derived
-        // only at the storage serialize boundary (never carried in memory), and methods/
-        // defaultMethod/savedPlayerId all belong to whichever saved entry the NEW name
-        // resolves to, not the old one.
-        const { preferredPayment, methods: _oldMethods, defaultMethod: _oldDefault, savedPlayerId, ...rest } =
+        // only at the storage serialize boundary (never carried in memory, so there is no
+        // such field on Player to drop here), and methods/defaultMethod/savedPlayerId all
+        // belong to whichever saved entry the NEW name resolves to, not the old one.
+        const { methods: _oldMethods, defaultMethod: _oldDefault, savedPlayerId, ...rest } =
           activeGame!.players[i];
         // resolveDefaultMethod, not a bare `saved.methods` truthy check: an empty {} map
         // (no keys) must NOT reseed a hollow methods object onto the renamed player.

@@ -23,7 +23,6 @@ export interface Player {
   id: string;
   name: string;
   completedAt?: Date;
-  preferredPayment?: PreferredPayment;
   methods?: PaymentHandles;
   defaultMethod?: PaymentMethod;
   /** The saved-pool entry (by id) that seeded this player, so mid-game payment edits

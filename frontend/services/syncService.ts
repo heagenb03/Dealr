@@ -319,25 +319,20 @@ export function unionRecoverablePlayerFields(local: Game, remote: Game): Game {
     const rp = remoteById.get(lp.id);
     if (!rp || rp.name !== lp.name) return lp;
 
-    const preferredPayment = lp.preferredPayment ?? rp.preferredPayment;
     const savedPlayerId = lp.savedPlayerId ?? rp.savedPlayerId;
     // methods and defaultMethod are adopted together, from whichever side supplied
     // methods — see the doc comment above for why they can't be resolved independently.
+    // preferredPayment is not recovered here: it is derived from methods/defaultMethod at
+    // the serialize boundary (paymentMethods.ts), never carried on Player in memory.
     const methods = lp.methods ?? rp.methods;
     const defaultMethod = lp.methods ? lp.defaultMethod : rp.defaultMethod;
-    if (
-      preferredPayment === lp.preferredPayment &&
-      savedPlayerId === lp.savedPlayerId &&
-      methods === lp.methods &&
-      defaultMethod === lp.defaultMethod
-    ) {
+    if (savedPlayerId === lp.savedPlayerId && methods === lp.methods && defaultMethod === lp.defaultMethod) {
       return lp;
     }
 
     changed = true;
     return {
       ...lp,
-      ...(preferredPayment ? { preferredPayment } : {}),
       ...(savedPlayerId ? { savedPlayerId } : {}),
       ...(methods ? { methods, defaultMethod } : {}),
     };
