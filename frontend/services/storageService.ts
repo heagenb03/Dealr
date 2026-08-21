@@ -4,6 +4,23 @@ import { withLegacyPayment, withSynthesizedMethods } from '@/utils/paymentMethod
 
 const GAMES_KEY = '@cashcage:games';
 const ACTIVE_GAME_ID_KEY = '@cashcage:activeGameId';
+// Durable record of games whose Firestore write/delete had not been acknowledged.
+// SyncService keeps this in step with its in-memory maps; see the comment on
+// pendingSaves in syncService.ts for why the in-memory copy alone is not enough.
+const PENDING_MUTATIONS_KEY = '@cashcage:pendingMutations';
+
+/**
+ * Game ids with an unconfirmed local write (saves) or delete (deletes).
+ *
+ * uid stamps the owner. GameContext swallows a failed clearAll() on user switch, and
+ * these markers drive a Firestore PUSH — without the stamp, a swallowed failure would
+ * write the previous account's game into the next account's collection.
+ */
+export interface PendingMutations {
+  uid: string | null;
+  saves: string[];
+  deletes: string[];
+}
 
 export class StorageService {
   static async saveGames(games: Game[]): Promise<void> {
@@ -70,10 +87,46 @@ export class StorageService {
     }
   }
 
+  /**
+   * Read the durable pending-mutation markers. Returns empty lists rather than
+   * throwing: a missing or corrupt marker file must not stop the app loading, it
+   * just costs cross-restart protection for whatever it was tracking.
+   */
+  static async loadPendingMutations(): Promise<PendingMutations> {
+    try {
+      const jsonValue = await AsyncStorage.getItem(PENDING_MUTATIONS_KEY);
+      if (!jsonValue) return { uid: null, saves: [], deletes: [] };
+
+      const parsed = JSON.parse(jsonValue);
+      const ids = (v: any): string[] => (Array.isArray(v) ? v.filter(id => typeof id === 'string') : []);
+      return {
+        uid: typeof parsed?.uid === 'string' ? parsed.uid : null,
+        saves: ids(parsed?.saves),
+        deletes: ids(parsed?.deletes),
+      };
+    } catch (error) {
+      console.error('Error loading pending mutations:', error);
+      return { uid: null, saves: [], deletes: [] };
+    }
+  }
+
+  static async savePendingMutations(pending: PendingMutations): Promise<void> {
+    try {
+      await AsyncStorage.setItem(PENDING_MUTATIONS_KEY, JSON.stringify(pending));
+    } catch (error) {
+      console.error('Error saving pending mutations:', error);
+      throw error;
+    }
+  }
+
   static async clearAll(): Promise<void> {
     try {
       await AsyncStorage.removeItem(GAMES_KEY);
       await AsyncStorage.removeItem(ACTIVE_GAME_ID_KEY);
+      // Cleared here, NOT in SyncService.clearPendingMutations(): dropping the
+      // in-memory maps alone is what process death looks like, and that case must
+      // keep its markers. A user switch is the one place both halves go.
+      await AsyncStorage.removeItem(PENDING_MUTATIONS_KEY);
     } catch (error) {
       console.error('Error clearing storage:', error);
       throw error;

@@ -27,7 +27,8 @@ jest.mock('firebase/auth', () => ({
 }));
 jest.mock('firebase/firestore', () => ({
   initializeFirestore: jest.fn(() => ({})),
-  persistentLocalCache: jest.fn(() => ({})),
+  memoryLocalCache: jest.fn((opts) => ({ __cache: 'memory', opts })),
+  memoryEagerGarbageCollector: jest.fn(() => ({ __gc: 'eager' })),
   doc: jest.fn(),
   setDoc: jest.fn(),
   getDoc: jest.fn(),

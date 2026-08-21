@@ -78,7 +78,7 @@ jest.mock('react-native-purchases', () => ({
   LOG_LEVEL: { DEBUG: 'DEBUG' },
 }));
 // Neutralizes firebaseService.ts's module-load-time initializeApp()/initializeFirestore()
-// (persistentLocalCache() needs IndexedDB, unavailable under jest-expo/node) — mirrors
+// (neither is reachable under jest-expo/node without a firebase/firestore mock) — mirrors
 // services/__tests__/savedPlayersService.test.ts's mock, extended with the auth-side exports
 // AuthContext.tsx also destructures from this module.
 jest.mock('@/services/firebaseService', () => ({

@@ -57,7 +57,7 @@ function makeGame(players: { id: string; name: string }[]): Game {
 beforeEach(async () => {
   await AsyncStorage.clear();
   jest.clearAllMocks();
-  SyncService.clearPendingMutations();
+  SyncService.clearPendingMutations();   // AsyncStorage.clear() above drops the durable half
   (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([]);
   (saveGameToFirestore as jest.Mock).mockResolvedValue(undefined);
   (deleteGameFromFirestore as jest.Mock).mockResolvedValue(undefined);
@@ -189,7 +189,7 @@ describe('pending-mutations registry protects local edits (Limitation 1)', () =>
     expect(stored[0].players.map(p => p.id)).toEqual(['A', 'B', 'C']);   // remote won — protection released
   });
 
-  it('clearPendingMutations() drops protection immediately', async () => {
+  it('a user switch drops protection immediately (both halves cleared)', async () => {
     const T1 = new Date('2026-07-01T00:00:00Z');
     const T2 = new Date('2026-07-02T00:00:00Z');
     const original = { ...makeGame([{ id: 'A', name: 'Alice' }, { id: 'B', name: 'Bob' }]), syncedAt: T1 } as Game;
@@ -197,7 +197,11 @@ describe('pending-mutations registry protects local edits (Limitation 1)', () =>
 
     (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));   // stays pending
     await SyncService.saveGame(UID, { ...original, players: [{ id: 'A', name: 'Alice' }] } as Game);
+    // A user switch drops BOTH halves — GameContext calls clearPendingMutations() and
+    // StorageService.clearAll() on the same path. Clearing memory ALONE is process death,
+    // which deliberately keeps its markers; see the restart block at the end of this file.
     SyncService.clearPendingMutations();
+    await StorageService.savePendingMutations({ uid: null, saves: [], deletes: [] });
 
     let resolveFetch!: (games: Game[]) => void;
     (fetchGamesFromFirestore as jest.Mock).mockReturnValue(new Promise<Game[]>(res => { resolveFetch = res; }));
@@ -703,5 +707,257 @@ describe('deleteGame — the share document dies with the game', () => {
     await flush();
 
     expect(await StorageService.loadGames()).toHaveLength(0);
+  });
+});
+
+describe('process restart drops protection for an unpushed edit (the reported 2.0.2 bug)', () => {
+  const T1 = new Date('2026-07-01T00:00:00Z');
+  const T2 = new Date('2026-07-02T00:00:00Z');
+
+  const tx = (id: string, amount: number) => ({
+    id,
+    playerId: 'A',
+    type: 'buyin' as const,
+    amount,
+    timestamp: new Date('2026-07-01T12:00:00Z'),
+  });
+
+  const withTx = (transactions: ReturnType<typeof tx>[], syncedAt: Date): Game =>
+    ({ ...makeGame([{ id: 'A', name: 'Alice' }]), transactions, syncedAt } as Game);
+
+  it('keeps a buy-in whose Firestore write never acked before the app was reclaimed', async () => {
+    // --- Launch 1 ---------------------------------------------------------
+    // In sync with remote: one buy-in, stamped T1 by the server on the last write.
+    await StorageService.saveGames([withTx([tx('t1', 20)], T1)]);
+
+    // Edit 1 — add t2. The local Game still carries syncedAt T1: nothing writes the
+    // server stamp back (firebaseService.ts:401 strips syncedAt from the payload, :404
+    // replaces it with serverTimestamp(), saveGameToFirestore returns void). This write
+    // ACKS, so the server moves to T2 while local stays on T1 with identical content.
+    (saveGameToFirestore as jest.Mock).mockResolvedValue(undefined);
+    await SyncService.saveGame(UID, withTx([tx('t1', 20), tx('t2', 20)], T1));
+    await flush();   // the ack clears this game from pendingSaves
+
+    // Edit 2 — add t3. Reaches AsyncStorage, but its Firestore write never acks
+    // (phone locked / weak signal). Local content is now strictly ahead of remote
+    // while still carrying the STALE T1.
+    (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.saveGame(UID, withTx([tx('t1', 20), tx('t2', 20), tx('t3', 20)], T1));
+
+    // --- iOS reclaims the suspended app -----------------------------------
+    // Module state dies with the process: pendingSaves is empty on relaunch and the
+    // un-acked write goes with it. AsyncStorage survives. This stands in for process
+    // death — unlike the user-switch case the clearPendingMutations test above models,
+    // dropping protection here is what destroys data.
+    SyncService.clearPendingMutations();
+
+    // --- Launch 2 ---------------------------------------------------------
+    // The server still holds the edit-1 state stamped T2: OLDER content, NEWER
+    // timestamp. mergeGames (syncService.ts:251-256) takes it and t3 is destroyed.
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([
+      withTx([tx('t1', 20), tx('t2', 20)], T2),
+    ]);
+    const delivered: Game[][] = [];
+    await SyncService.loadGames(UID, merged => { delivered.push(merged); });
+    await flush();
+
+    const stored = await StorageService.loadGames();
+    expect(stored[0].transactions.map(t => t.id)).toEqual(['t1', 't2', 't3']);
+    expect(delivered[delivered.length - 1][0].transactions.map(t => t.id)).toEqual(['t1', 't2', 't3']);
+  });
+
+  // Control for the fix, not for the bug: this one passes TODAY and must keep passing.
+  // Without it, a fix could read "remote is a superset -> take remote, else keep local"
+  // and go green on the case above while silently reverting a real cross-device delete.
+  // Only a durable per-game dirty flag satisfies both.
+  it('still takes a genuinely newer remote when local has NO unpushed edit', async () => {
+    await StorageService.saveGames([withTx([tx('t1', 20)], T1)]);
+
+    // Every local write acked, so nothing is unpushed when the process dies.
+    (saveGameToFirestore as jest.Mock).mockResolvedValue(undefined);
+    await SyncService.saveGame(UID, withTx([tx('t1', 20), tx('t2', 20)], T1));
+    await flush();
+    SyncService.clearPendingMutations();   // process death, as above
+
+    // Another device removed t2 and added t4, stamped T2. That is a real edit and
+    // must win — local is stale here, not ahead.
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([
+      withTx([tx('t1', 20), tx('t4', 50)], T2),
+    ]);
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    const stored = await StorageService.loadGames();
+    expect(stored[0].transactions.map(t => t.id)).toEqual(['t1', 't4']);
+  });
+
+  it('does not resurrect a game whose delete never acked before the app was reclaimed', async () => {
+    await StorageService.saveGames([withTx([tx('t1', 20)], T1)]);
+
+    (deleteGameFromFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.deleteGame(UID, 'game1');
+
+    SyncService.clearPendingMutations();   // process death — durable markers survive
+
+    // mergeGames re-adds a remote-only game unconditionally (syncService.ts:246-248),
+    // so without a durable delete marker this comes straight back. No timestamp is
+    // involved: this half of the bug needs no stale syncedAt at all.
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([withTx([tx('t1', 20)], T2)]);
+    const delivered: Game[][] = [];
+    await SyncService.loadGames(UID, merged => { delivered.push(merged); });
+    await flush();
+
+    expect(await StorageService.loadGames()).toEqual([]);
+    expect(delivered[delivered.length - 1]).toEqual([]);
+  });
+
+  it('re-pushes the unacked write on the next launch and clears the marker on ack', async () => {
+    await StorageService.saveGames([withTx([tx('t1', 20)], T1)]);
+    (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.saveGame(UID, withTx([tx('t1', 20), tx('t2', 20)], T1));
+
+    SyncService.clearPendingMutations();   // process death
+    (saveGameToFirestore as jest.Mock).mockReset();
+    (saveGameToFirestore as jest.Mock).mockResolvedValue(undefined);   // network is back
+
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([withTx([tx('t1', 20)], T2)]);
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    // The push carries t2 — the transaction the server never received. Protection alone
+    // would have kept it on the device and never got it off there.
+    expect(saveGameToFirestore).toHaveBeenCalledTimes(1);
+    const pushed = (saveGameToFirestore as jest.Mock).mock.calls[0][1] as Game;
+    expect(pushed.transactions.map(t => t.id)).toEqual(['t1', 't2']);
+
+    // And the ack cleared the marker, so nothing stays protected.
+    expect(await StorageService.loadPendingMutations()).toEqual({ uid: UID, saves: [], deletes: [] });
+  });
+
+  it('lets a newer remote win on the launch after the re-push acked (no permanent lock)', async () => {
+    await StorageService.saveGames([withTx([tx('t1', 20)], T1)]);
+    (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.saveGame(UID, withTx([tx('t1', 20), tx('t2', 20)], T1));
+
+    SyncService.clearPendingMutations();   // process death
+    (saveGameToFirestore as jest.Mock).mockReset();
+    (saveGameToFirestore as jest.Mock).mockResolvedValue(undefined);
+
+    // Launch 2: re-push acks, marker clears.
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([withTx([tx('t1', 20)], T2)]);
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    // Launch 3: another device's newer state must now win — the game is no longer
+    // protected, which is the failure mode a protect-only fix would have shipped.
+    const T3 = new Date('2026-07-03T00:00:00Z');
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([
+      withTx([tx('t1', 20), tx('t2', 20), tx('t5', 99)], T3),
+    ]);
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    const stored = await StorageService.loadGames();
+    expect(stored[0].transactions.map(t => t.id)).toEqual(['t1', 't2', 't5']);
+  });
+
+  it('re-pushes a hydrated marker once even when loadGames runs again on reconnect', async () => {
+    await StorageService.saveGames([withTx([tx('t1', 20)], T1)]);
+    (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.saveGame(UID, withTx([tx('t1', 20), tx('t2', 20)], T1));
+
+    SyncService.clearPendingMutations();   // process death
+    (saveGameToFirestore as jest.Mock).mockReset();
+    // Still stuck, so the marker is NOT cleared between the two loads — the only thing
+    // stopping a second push is the hydratedIds drain, not the ack.
+    (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([withTx([tx('t1', 20)], T2)]);
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+    await SyncService.loadGames(UID, () => {});   // NetworkContext reconnect re-sync
+    await flush();
+
+    expect(saveGameToFirestore).toHaveBeenCalledTimes(1);
+    // Still marked, so the edit is still protected across both loads.
+    expect(await StorageService.loadPendingMutations()).toEqual({ uid: UID, saves: ['game1'], deletes: [] });
+    expect((await StorageService.loadGames())[0].transactions.map(t => t.id)).toEqual(['t1', 't2']);
+  });
+
+  it('discards markers left behind by another account instead of pushing them', async () => {
+    // GameContext swallows a failed StorageService.clearAll() on user switch, so this
+    // state is reachable: the previous account's games AND markers both survive. The
+    // outbox is a PUSH path, so hydrating these would write user1's game into user2's
+    // Firestore collection.
+    await StorageService.saveGames([withTx([tx('t1', 20), tx('t2', 20)], T1)]);
+    await StorageService.savePendingMutations({ uid: UID, saves: ['game1'], deletes: [] });
+
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([]);
+    await SyncService.loadGames('a-different-user', () => {});
+    await flush();
+
+    expect(saveGameToFirestore).not.toHaveBeenCalled();
+    expect(deleteGameFromFirestore).not.toHaveBeenCalled();
+    // Dropped and restamped, so they cannot be picked up on a later launch either.
+    expect(await StorageService.loadPendingMutations()).toEqual({
+      uid: 'a-different-user', saves: [], deletes: [],
+    });
+  });
+
+  it('carries a full payment method set through the re-push, not just the default', async () => {
+    // The outbox pushes a game read back through StorageService.loadGames (which runs
+    // withSynthesizedMethods) and out through saveGameToFirestore (which runs
+    // withLegacyPayment). None of the tests above exercise a payment handle on that
+    // round-trip, and a non-default method lost here would be silent.
+    const paid = {
+      ...withTx([tx('t1', 20)], T1),
+      players: [{
+        id: 'A',
+        name: 'Alice',
+        methods: { venmo: '@alice', zelle: 'alice@example.com' },
+        defaultMethod: 'zelle',
+      }],
+    } as unknown as Game;
+    await StorageService.saveGames([paid]);
+
+    (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.saveGame(UID, { ...paid, transactions: [tx('t1', 20), tx('t2', 20)] } as Game);
+
+    SyncService.clearPendingMutations();   // process death
+    (saveGameToFirestore as jest.Mock).mockReset();
+    (saveGameToFirestore as jest.Mock).mockResolvedValue(undefined);
+
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([]);
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    expect(saveGameToFirestore).toHaveBeenCalledTimes(1);
+    const pushed = (saveGameToFirestore as jest.Mock).mock.calls[0][1] as Game;
+    expect(pushed.transactions.map(t => t.id)).toEqual(['t1', 't2']);
+    // Both methods survive, and the default is still the default.
+    expect(pushed.players[0].methods).toEqual({ venmo: '@alice', zelle: 'alice@example.com' });
+    expect(pushed.players[0].defaultMethod).toBe('zelle');
+  });
+
+  it('hydrates once per uid, so a reconnect re-sync does not wait on the storage lock', async () => {
+    await StorageService.saveGames([withTx([tx('t1', 20)], T1)]);
+    (saveGameToFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.saveGame(UID, withTx([tx('t1', 20), tx('t2', 20)], T1));
+    SyncService.clearPendingMutations();   // process death
+
+    const spy = jest.spyOn(StorageService, 'loadPendingMutations');
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([]);
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+    await SyncService.loadGames(UID, () => {});   // NetworkContext reconnect re-sync
+    await flush();
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    // A uid CHANGE must still re-check, or another account's markers go unexamined.
+    await SyncService.loadGames('a-different-user', () => {});
+    await flush();
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
   });
 });

@@ -471,11 +471,12 @@ setSettlementResult(cachedResult);
     // Publish first, so the message can carry the link. Every failure mode here
     // degrades to the pre-existing text share rather than blocking or alerting.
     //
-    // ⚠️ OFFLINE DOES NOT REJECT. firebaseService.ts configures Firestore with
-    // persistentLocalCache, and setDoc resolves only when the BACKEND
+    // ⚠️ OFFLINE DOES NOT REJECT. setDoc resolves only when the BACKEND
     // acknowledges the write — offline it stays pending indefinitely rather
-    // than throwing. A bare `await` here would hang handleShare forever: no
-    // share sheet, no error, no catch. So the publish is BOTH skipped when
+    // than throwing. That is true of any local cache, so it does not change
+    // with firebaseService.ts's memoryLocalCache; what the memory cache adds is
+    // that a pending write also dies with the process. A bare `await` here
+    // would hang handleShare forever: no share sheet, no error, no catch. So the publish is BOTH skipped when
     // NetworkContext says we are offline AND raced against a timeout, because
     // isOnline can be stale and "connected to a captive portal" is still a hang.
     //

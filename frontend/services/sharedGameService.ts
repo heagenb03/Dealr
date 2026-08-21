@@ -178,11 +178,13 @@ export function mintShareId(): string {
  * Does NOT persist the id back onto the Game — the caller owns that, because it
  * holds the GameContext updater. See Task 13.
  *
- * OFFLINE CONTRACT: firebaseService.ts configures persistentLocalCache, so
- * this write does NOT reject when offline — the returned Promise resolves
- * only on BACKEND ack and otherwise stays pending indefinitely (queued, not
- * written). This function does not swallow that distinction or race it
- * against a timeout itself: it is a plain async wrapper around setDoc. Any
+ * OFFLINE CONTRACT: this write does NOT reject when offline — the returned
+ * Promise resolves only on BACKEND ack and otherwise stays pending
+ * indefinitely (queued, not written). firebaseService.ts configures
+ * memoryLocalCache, so that queue is also lost if the process is killed while
+ * the write is still pending. This function does not swallow that distinction
+ * or race it against a timeout itself: it is a plain async wrapper around
+ * setDoc. Any
  * caller awaiting this inside a user interaction (Task 13's share button)
  * MUST guard with an online check and/or race it against a timeout, or the
  * interaction hangs with no error and no catch.

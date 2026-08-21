@@ -25,7 +25,8 @@ import { getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   initializeFirestore,
-  persistentLocalCache,
+  memoryLocalCache,
+  memoryEagerGarbageCollector,
   doc,
   setDoc,
   getDoc,
@@ -81,9 +82,38 @@ export const auth = (() => {
   }
 })();
 
-// Firestore — enable offline persistence with the modular localCache API
+// Firestore — IN-MEMORY cache, stated explicitly.
+//
+// This asked for persistentLocalCache() until 2026-08-21 and, ON THE PLATFORM THAT
+// SHIPS, never got it. The SDK gates IndexedDb persistence on isIndexedDBAvailable(),
+// which is literally `typeof indexedDB === 'object'`; React Native has no such global
+// and this app ships no polyfill, so IndexedDbPersistence threw UNIMPLEMENTED on the
+// FIRST Firestore operation after launch (the offline components initialise lazily,
+// not at boot), the SDK caught it, swapped in a memory cache, and logged "Error using
+// user provided cache. Falling back to memory cache" — which the console.warn filter
+// below does NOT suppress. Verified by driving the same dist/index.rn.js bundle Metro
+// loads, with no indexedDB global.
+//
+// `expo start --web` is the exception and DID get IndexedDb persistence: Metro resolves
+// firebase/firestore through the browser condition there, and a browser has indexedDB.
+// This change takes that away from the web dev target. Deliberate: there is no shipped
+// web build (firebase.json hosting serves public/, four static files, no Expo export),
+// and durability is AsyncStorage's job on every platform anyway. Do NOT reintroduce it
+// as a Platform.OS branch — under jest-expo/node Platform.OS is 'web', so the tests
+// would pin the branch that does not ship and leave the one that does unpinned.
+//
+// memoryLocalCache({ garbageCollector: memoryEagerGarbageCollector() }) IS that
+// fallback, requested up front: identical MemoryOfflineComponentProvider +
+// MemoryEagerDelegate + no gcScheduler. On React Native, runtime behaviour is
+// therefore unchanged; the warning and the false claim are gone. Do NOT simplify to a bare memoryLocalCache() — its
+// default collector is LRU (40MB), a different provider and a different cache.
+//
+// Consequence, and it is deliberate: Firestore keeps NO write queue across a process
+// restart. Offline durability is the app's own job — AsyncStorage is the source of
+// truth and syncService re-pushes unacked writes on launch. Real Firestore persistence
+// on React Native would mean migrating to @react-native-firebase/firestore.
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache(),
+  localCache: memoryLocalCache({ garbageCollector: memoryEagerGarbageCollector() }),
 });
 
 // Suppress the raw Firebase offline warning — the app handles offline state

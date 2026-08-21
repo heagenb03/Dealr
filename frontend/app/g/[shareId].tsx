@@ -265,10 +265,10 @@ export default function SharedGameScreen() {
 // caller wraps this in it. That exit matters most on exactly this state:
 // fetchSharedGame -> getDoc has no timeout, and this repo's own
 // sharedGameService docstring documents indefinite-pending as REAL behaviour
-// under persistentLocalCache when offline/flaky, so a tapped link can land here
-// and never resolve on its own. Deliberately not a fetch timeout: that changes
-// behaviour, and any fixed budget short enough to matter would misclassify a
-// merely slow connection as an error. The exit is the fix, not a race.
+// when offline/flaky, so a tapped link can land here and never resolve on its
+// own. Deliberately not a fetch timeout: that changes behaviour, and any fixed
+// budget short enough to matter would misclassify a merely slow connection as
+// an error. The exit is the fix, not a race.
 //
 // The label is the second half of that: a bare spinner on black tells a viewer
 // who just tapped a link nothing about what is being waited on.

@@ -25,6 +25,10 @@ jest.mock('firebase/auth', () => ({
 }));
 jest.mock('firebase/firestore', () => ({
   initializeFirestore: jest.fn(() => ({})),
+  memoryLocalCache: jest.fn((opts?: unknown) => ({ __cache: 'memory', opts })),
+  memoryEagerGarbageCollector: jest.fn(() => ({ __gc: 'eager' })),
+  // Deliberately still mocked although firebaseService.ts no longer imports it:
+  // this is the tripwire for re-adding a cache React Native cannot provide.
   persistentLocalCache: jest.fn(() => ({})),
   doc: jest.fn(),
   setDoc: jest.fn(),
@@ -55,9 +59,48 @@ import {
   linkGoogleCredential,
   linkAppleCredential,
 } from '@/services/firebaseService';
-import { getDoc, setDoc, runTransaction, increment, updateDoc } from 'firebase/firestore';
+import {
+  getDoc,
+  setDoc,
+  runTransaction,
+  increment,
+  updateDoc,
+  initializeFirestore,
+  persistentLocalCache,
+  memoryLocalCache,
+  memoryEagerGarbageCollector,
+} from 'firebase/firestore';
 import { sendEmailVerification, signInWithCredential, linkWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { Game } from '@/types/game';
+
+describe('Firestore cache configuration', () => {
+  // firebaseService.ts used to pass persistentLocalCache(). React Native has no
+  // indexedDB global and this app ships no polyfill, so isIndexedDBAvailable()
+  // is false, IndexedDbPersistence's constructor throws UNIMPLEMENTED, and the SDK
+  // quietly swaps in a memory cache while logging 'Error using user provided cache.
+  // Falling back to memory cache' — a warning the console.warn filter in
+  // firebaseService.ts does not suppress. These pin the fallback as the stated config.
+  it('never asks for the persistent cache', () => {
+    expect(persistentLocalCache).not.toHaveBeenCalled();
+  });
+
+  it('asks for the in-memory cache with the EAGER collector', () => {
+    // Not a bare memoryLocalCache(): its default is the LRU collector (40MB cap),
+    // which is a different provider (LruGcMemoryOfflineComponentProvider +
+    // MemoryLruDelegate + LruScheduler) than the fallback this replaces
+    // (MemoryOfflineComponentProvider + MemoryEagerDelegate + no scheduler).
+    expect(memoryEagerGarbageCollector).toHaveBeenCalled();
+    expect(memoryLocalCache).toHaveBeenCalledWith({
+      garbageCollector: (memoryEagerGarbageCollector as jest.Mock).mock.results[0].value,
+    });
+  });
+
+  it('hands that cache to initializeFirestore', () => {
+    expect(initializeFirestore).toHaveBeenCalledWith(expect.anything(), {
+      localCache: (memoryLocalCache as jest.Mock).mock.results[0].value,
+    });
+  });
+});
 
 describe('deserializeFirestoreGame', () => {
   const baseDoc = {
