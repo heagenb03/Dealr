@@ -97,10 +97,10 @@
       // When Android ships, this branch becomes the Play Store handoff.
       if (isAndroid) {
         document.getElementById('lede').textContent =
-          'Cash Cage is on iPhone today — the Android app isn’t out yet.';
+          'Cash Cage is iOS only';
         var badge = document.createElement('div');
         badge.className = 'cta cta--off';
-        badge.textContent = 'iOS only';
+        badge.textContent = 'Play Store coming soon';
         cta.parentNode.replaceChild(badge, cta);
         // The note reads "Already have it? Tap or hold down the original link
         // again" -- a loop instruction for someone who cannot install the app
