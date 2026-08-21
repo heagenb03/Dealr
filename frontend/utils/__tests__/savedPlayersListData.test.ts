@@ -30,7 +30,7 @@ describe('buildSavedPlayersListData', () => {
   });
 
   it('carries the caller\u2019s player object through untouched', () => {
-    const rich = { id: 's1', name: 'Ada', preferredPayment: { method: 'venmo', handle: '@ada' } };
+    const rich = { id: 's1', name: 'Ada', methods: { venmo: '@ada' }, defaultMethod: 'venmo' };
     const items = buildSavedPlayersListData([rich]);
     expect((items[0] as any).player).toBe(rich);
   });

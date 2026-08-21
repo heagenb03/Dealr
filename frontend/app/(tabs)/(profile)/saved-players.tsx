@@ -31,10 +31,10 @@ import {
   canAddMoreSavedPlayers,
   SavedPlayer,
 } from '@/services/savedPlayersService';
-import { PreferredPayment, Player } from '@/types/game';
+import { PaymentCarrier, Player } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, fromLegacyPayment } from '@/utils/paymentMethods';
+import { resolvePayment, paymentWriteBackPatch } from '@/utils/paymentMethods';
 import { savedCapCounter, savedCapPaywallMessage } from '@/utils/capCopy';
 import { buildSavedPlayersListData, SavedPlayersListItem } from '@/utils/savedPlayersListData';
 
@@ -90,7 +90,7 @@ export default function SavedPlayersScreen() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
-  const [addPayment, setAddPayment] = useState<PreferredPayment | undefined>(undefined);
+  const [addPayment, setAddPayment] = useState<PaymentCarrier | undefined>(undefined);
   const [adding, setAdding] = useState(false);
   const addingRef = useRef(false);
   // Separate guard for doCreate, reentered internally (e.g. rapid double-submit of handleAdd).
@@ -209,7 +209,7 @@ export default function SavedPlayersScreen() {
   // same-name entry that exists only remotely (other device / pre-sync) reconciles by id on the
   // next merge instead of duplicating. handleAdd guarantees the name is not already used locally.
   const doCreate = useCallback(
-    async (name: string, payment?: PreferredPayment) => {
+    async (name: string, payment?: PaymentCarrier) => {
       if (!uid) return;
       if (creatingRef.current) return;
       creatingRef.current = true;
@@ -220,7 +220,14 @@ export default function SavedPlayersScreen() {
           setShowAdd(false);
           return;
         }
-        await savePlayer(uid, name, fromLegacyPayment(payment), cap);
+        // savePlayer's merge is `payment?.methods ?? existing?.methods`, which would
+        // silently restore a stale map if `payment` were a cleared carrier (`{}`, no
+        // `methods` key) AND an `existing` same-name entry were found. Neither can happen
+        // here: handleAdd already rejected any name that matches an existing saved player
+        // before calling doCreate, so `existing` inside savePlayer is always undefined —
+        // there is nothing for the fallback to (wrongly) restore. No paymentWriteBackPatch
+        // needed at this call site.
+        await savePlayer(uid, name, payment, cap);
         setShowAdd(false);
         reload();
       } catch {
@@ -260,35 +267,57 @@ export default function SavedPlayersScreen() {
     }
   }, [uid, addName, addPayment, doCreate]);
 
-  // Shared PaymentEditorModal target → synthetic Player (its player prop is init-only).
-  // useMemo keyed on paymentTarget gives a STABLE reference: PaymentEditorModal re-seeds
-  // its fields on [visible, player], so a fresh object each render (e.g. from AuthContext's
-  // trial-timer re-render) would wipe what the user is typing. The snapshot is captured at
-  // open time, which is exactly what a re-seed-on-open editor wants.
+  // Shared PaymentEditorModal/PaymentEditorContent target — a synthetic carrier-bearing
+  // object (its `player` prop is init-only: PaymentEditorContent's re-seed effect keys on
+  // [visible, player], so a FRESH object literal built on every render — e.g. from
+  // AuthContext's trial-timer re-render, or from the user typing in the add-name field
+  // while the 'add' overlay is open — would re-fire that effect and wipe whatever the user
+  // is mid-typing into the payment rows). useMemo keyed on paymentTarget alone (not on
+  // addName/addPayment — see the eslint-disable below) gives a STABLE reference across
+  // those re-renders: paymentTarget itself only changes identity when setPaymentTarget is
+  // actually called (i.e. when the editor opens/closes), never as a side effect of some
+  // other state changing. The snapshot is captured once, at open time, which is exactly
+  // what a re-seed-on-open editor wants.
   const paymentPlayer: Player | null = useMemo(() => {
     if (!paymentTarget) return null;
     if (paymentTarget.kind === 'edit') {
       const p = paymentTarget.player;
-      // p.preferredPayment is always undefined (derived-only field) — resolve through
-      // methods/defaultMethod so the editor opens seeded with the player's actual payment
-      // instead of empty (which would silently overwrite it with whatever the user types).
-      return { id: p.name, name: p.name, preferredPayment: resolvePayment(p) };
+      // p carries methods/defaultMethod directly (preferredPayment is a derived-only field,
+      // always undefined in memory) — pass them straight through so the editor opens seeded
+      // with the player's FULL method set, not just the resolved default.
+      return { id: p.name, name: p.name, methods: p.methods, defaultMethod: p.defaultMethod };
     }
-    // kind === 'add' — snapshot the add form at open time.
-    return { id: 'add', name: addName || 'Player', preferredPayment: addPayment };
+    // kind === 'add' — snapshot the add form's payment-so-far at open time.
+    return { id: 'add', name: addName || 'Player', methods: addPayment?.methods, defaultMethod: addPayment?.defaultMethod };
     // addName/addPayment intentionally omitted: capture at open time only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentTarget]);
   const handlePaymentSave = useCallback(
-    (pref: PreferredPayment) => {
+    (payment: PaymentCarrier) => {
       if (!paymentTarget) return;
       if (paymentTarget.kind === 'edit') {
-        if (uid) updateSavedPlayer(uid, paymentTarget.player.id, fromLegacyPayment(pref)).then(() => {
+        // updateSavedPlayer's whole-map-replace treats an ABSENT `methods` key as "don't
+        // touch payment" (its own recency-bump convention, updateSavedPlayer(uid, sid, {})).
+        // A bare {} (no `methods` key) is what a fully-cleared editor result looks like too —
+        // applyPaymentInvariant only produces it when the target had NO resolvable default to
+        // begin with, which for THIS call site (editor target and write-back target are the
+        // same saved player, by id) means the stored entry had none either — so passing the
+        // bare {} straight through would be a same-session no-op, not a real "restore".
+        // The one case it is NOT a no-op: updateSavedPlayer re-reads the entry FRESH from
+        // storage at save time rather than from the snapshot the editor was seeded with, so a
+        // background sync landing between open and Save could leave a non-empty entry in
+        // storage while the editor still (correctly, from the user's view) saves {}. Wrapping
+        // with paymentWriteBackPatch closes that narrow race by turning the bare {} into an
+        // explicit {methods: {}}, so an intentional clear always wins over a stale restore
+        // (mirrors active.tsx's handleSavePayment write-back, which needs this for a more
+        // common reason: there, the editor target and the write-back target are genuinely
+        // different objects — a live game player vs. its bound saved player).
+        if (uid) updateSavedPlayer(uid, paymentTarget.player.id, paymentWriteBackPatch(payment)).then(() => {
           setPaymentTarget(null);
           reload();
         });
       } else {
-        setAddPayment(pref);
+        setAddPayment(payment);
         setPaymentTarget(null);
       }
     },
@@ -296,6 +325,9 @@ export default function SavedPlayersScreen() {
   );
 
   const counterText = savedCapCounter(players.length, isPro);
+  // "+ Payment" button label — shows only the resolved default method (matches badgeText's
+  // single-line style below); a full multi-method summary is Task 8's concern.
+  const addPaymentResolved = resolvePayment(addPayment);
 
   // selectMode / selected are deliberately NOT in the item objects: putting them there
   // would rebuild the entire data array on every checkbox tap. Keeping them out gives the
@@ -460,7 +492,7 @@ export default function SavedPlayersScreen() {
             onPress={() => setPaymentTarget({ kind: 'add' })}
           >
             <Text style={styles.rowPayText} numberOfLines={1}>
-              {addPayment ? getPaymentMethodMeta(addPayment.method).label : '+ Payment'}
+              {addPaymentResolved ? getPaymentMethodMeta(addPaymentResolved.method).label : '+ Payment'}
             </Text>
           </TouchableOpacity>
         </View>
