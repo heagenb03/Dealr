@@ -1,4 +1,4 @@
-import { PaymentCarrier, PaymentHandles, PaymentMethod, PreferredPayment } from '@/types/game';
+import { Game, PaymentCarrier, PaymentHandles, PaymentMethod, Player, PreferredPayment } from '@/types/game';
 import { PAYMENT_METHODS } from '@/constants/PaymentMethods';
 
 const ORDER: PaymentMethod[] = PAYMENT_METHODS.map(m => m.key);
@@ -81,4 +81,39 @@ export function samePaymentSet(a: PaymentCarrier | undefined, b: PaymentCarrier 
 export function filledMethods(c: PaymentCarrier | undefined): PaymentMethod[] {
   const methods = c?.methods ?? {};
   return ORDER.filter(k => (methods[k] ?? '') !== '');
+}
+
+/**
+ * Attach the derived legacy `preferredPayment` to every player on the way OUT to storage.
+ *
+ * Dual-write rule (spec §2): the legacy field is DERIVED at the serialize boundary, never
+ * stored in memory. Shipped 2.0.2 reads game docs through a whitelist that drops methods/
+ * defaultMethod, so without this a 2.0.2 device sees no payment data at all.
+ */
+export function withLegacyPayment(game: Game): Game {
+  return {
+    ...game,
+    players: game.players.map((p: Player) => {
+      const legacy = resolvePayment(p);
+      return legacy ? { ...p, preferredPayment: legacy } : p;
+    }),
+  };
+}
+
+/**
+ * Fill in methods/defaultMethod on the way IN, for a record written before this feature
+ * (or by a 2.0.2 device, which strips the new fields on write). Stored methods win: a
+ * legacy field written by an old client is by definition not newer information.
+ *
+ * The legacy field is DROPPED from the returned object. That is what keeps the "nothing in
+ * memory carries preferredPayment" constraint true at the read boundary, rather than relying
+ * on every downstream caller to ignore it.
+ */
+export function withSynthesizedMethods<T extends PaymentCarrier & { preferredPayment?: PreferredPayment }>(
+  p: T,
+): Omit<T, 'preferredPayment'> {
+  const { preferredPayment, ...rest } = p;
+  if (rest.methods) return rest;
+  const lifted = fromLegacyPayment(preferredPayment);
+  return lifted.methods ? { ...rest, ...lifted } : rest;
 }

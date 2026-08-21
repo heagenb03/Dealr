@@ -3,6 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Game } from '@/types/game';
 import { StorageService } from '@/services/storageService';
 
+// Not exported from storageService.ts — mirrors the literal at storageService.ts:4.
+const GAMES_KEY = '@cashcage:games';
+
 // ---------------------------------------------------------------------------
 // StorageService round-trip fidelity.
 //
@@ -11,6 +14,14 @@ import { StorageService } from '@/services/storageService';
 // savedPlayerId on every read. Because the stripped result is written back —
 // by the background sync merge, and by every saveGame's read-modify-write —
 // the loss propagated to Firestore and became permanent.
+//
+// Post-2.0.3, preferredPayment itself is derive-on-write only (see
+// withLegacyPayment/withSynthesizedMethods in utils/paymentMethods.ts) — it is
+// written to storage for a shipped 2.0.2 reader, but never carried in the
+// in-memory Game returned by loadGames. The tests below that predate this
+// change now assert the field on `methods`/`defaultMethod` instead, and check
+// the raw AsyncStorage record where they need to prove the legacy field is
+// still being written.
 // ---------------------------------------------------------------------------
 
 function makeGame(overrides: Partial<Game> = {}): Game {
@@ -46,8 +57,16 @@ describe('StorageService.loadGames — player field fidelity', () => {
     await StorageService.saveGames([game]);
     const [loaded] = await StorageService.loadGames();
 
-    expect(loaded.players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
+    // A legacy-only player is synthesized into methods/defaultMethod, and
+    // preferredPayment itself no longer lives on the in-memory object.
+    expect(loaded.players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(loaded.players[0].defaultMethod).toBe('venmo');
+    expect(loaded.players[0].preferredPayment).toBeUndefined();
     expect(loaded.players[0].savedPlayerId).toBe('sp_alice');
+
+    // But the legacy field IS still on the raw store, for a shipped 2.0.2 reader.
+    const raw = JSON.parse((await AsyncStorage.getItem(GAMES_KEY)) as string);
+    expect(raw[0].players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
   });
 
   it('round-trips a preferredPayment with no handle (e.g. cash)', async () => {
@@ -58,7 +77,11 @@ describe('StorageService.loadGames — player field fidelity', () => {
     await StorageService.saveGames([game]);
     const [loaded] = await StorageService.loadGames();
 
-    expect(loaded.players[0].preferredPayment).toEqual({ method: 'cash' });
+    expect(loaded.players[0].methods).toEqual({ cash: '' });
+    expect(loaded.players[0].defaultMethod).toBe('cash');
+
+    const raw = JSON.parse((await AsyncStorage.getItem(GAMES_KEY)) as string);
+    expect(raw[0].players[0].preferredPayment).toEqual({ method: 'cash' });
   });
 
   it('still deserializes completedAt into a Date and leaves it undefined when absent', async () => {
@@ -92,7 +115,12 @@ describe('StorageService.loadGames — player field fidelity', () => {
     }
 
     const [final] = await StorageService.loadGames();
-    expect(final.players[0].preferredPayment).toEqual({ method: 'cashapp', handle: 'alice-c' });
+    expect(final.players[0].methods).toEqual({ cashapp: 'alice-c' });
+    expect(final.players[0].defaultMethod).toBe('cashapp');
+
+    // The re-derived legacy field must not decay across cycles either.
+    const raw = JSON.parse((await AsyncStorage.getItem(GAMES_KEY)) as string);
+    expect(raw[0].players[0].preferredPayment).toEqual({ method: 'cashapp', handle: 'alice-c' });
   });
 
   it('does not strip other games when storage is read and written back', async () => {
@@ -110,7 +138,8 @@ describe('StorageService.loadGames — player field fidelity', () => {
     await StorageService.saveGames(current.map(g => (g.id === 'gameB' ? editedB : g)));
 
     const loadedA = (await StorageService.loadGames()).find(g => g.id === 'gameA')!;
-    expect(loadedA.players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'a-h' });
+    expect(loadedA.players[0].methods).toEqual({ venmo: 'a-h' });
+    expect(loadedA.players[0].defaultMethod).toBe('venmo');
   });
 });
 
@@ -124,5 +153,67 @@ describe('StorageService.loadGames — game field fidelity', () => {
 
     expect(loaded.find(g => g.id === 'g1')?.defaultBuyIn).toBe(20);
     expect(loaded.find(g => g.id === 'g2')?.defaultBuyIn).toBe(0);
+  });
+});
+
+describe('StorageService — methods/defaultMethod persistence and legacy dual-write', () => {
+  it('round-trips methods and defaultMethod on a player', async () => {
+    const game: any = {
+      id: 'g1', name: 'G', date: new Date(), createdAt: new Date(), status: 'active',
+      players: [{ id: 'p1', name: 'Alice', methods: { venmo: 'alice-h', zelle: 'a@x.com' }, defaultMethod: 'zelle' }],
+      transactions: [],
+    };
+    await StorageService.saveGames([game]);
+    const loaded = (await StorageService.loadGames())[0];
+    expect(loaded.players[0].methods).toEqual({ venmo: 'alice-h', zelle: 'a@x.com' });
+    expect(loaded.players[0].defaultMethod).toBe('zelle');
+  });
+
+  it('writes a derived legacy preferredPayment for a 2.0.2 reader', async () => {
+    const game: any = {
+      id: 'g1', name: 'G', date: new Date(), createdAt: new Date(), status: 'active',
+      players: [{ id: 'p1', name: 'Alice', methods: { venmo: 'alice-h', zelle: 'a@x.com' }, defaultMethod: 'zelle' }],
+      transactions: [],
+    };
+    await StorageService.saveGames([game]);
+    const raw = JSON.parse((await AsyncStorage.getItem(GAMES_KEY)) as string);
+    expect(raw[0].players[0].preferredPayment).toEqual({ method: 'zelle', handle: 'a@x.com' });
+  });
+
+  it('synthesizes methods from a legacy-only stored record', async () => {
+    await AsyncStorage.setItem(GAMES_KEY, JSON.stringify([{
+      id: 'g1', name: 'G', date: new Date().toISOString(), createdAt: new Date().toISOString(), status: 'active',
+      players: [{ id: 'p1', name: 'Alice', preferredPayment: { method: 'venmo', handle: 'alice-h' } }],
+      transactions: [],
+    }]));
+    const loaded = (await StorageService.loadGames())[0];
+    expect(loaded.players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(loaded.players[0].defaultMethod).toBe('venmo');
+  });
+
+  it('synthesizes a label-only legacy record without inventing a handle', async () => {
+    await AsyncStorage.setItem(GAMES_KEY, JSON.stringify([{
+      id: 'g1', name: 'G', date: new Date().toISOString(), createdAt: new Date().toISOString(), status: 'active',
+      players: [{ id: 'p1', name: 'Alice', preferredPayment: { method: 'venmo' } }],
+      transactions: [],
+    }]));
+    const loaded = (await StorageService.loadGames())[0];
+    expect(loaded.players[0].methods).toEqual({ venmo: '' });
+    expect(loaded.players[0].defaultMethod).toBe('venmo');
+  });
+
+  it('prefers stored methods over a stale legacy field when both are present', async () => {
+    await AsyncStorage.setItem(GAMES_KEY, JSON.stringify([{
+      id: 'g1', name: 'G', date: new Date().toISOString(), createdAt: new Date().toISOString(), status: 'active',
+      players: [{
+        id: 'p1', name: 'Alice',
+        preferredPayment: { method: 'venmo', handle: 'stale' },
+        methods: { cashapp: 'fresh' }, defaultMethod: 'cashapp',
+      }],
+      transactions: [],
+    }]));
+    const loaded = (await StorageService.loadGames())[0];
+    expect(loaded.players[0].methods).toEqual({ cashapp: 'fresh' });
+    expect(loaded.players[0].defaultMethod).toBe('cashapp');
   });
 });

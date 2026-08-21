@@ -407,28 +407,26 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
     await SyncService.loadGames(UID, () => {});
     await flush();
 
+    // Post-2.0.3, StorageService.loadGames() synthesizes methods/defaultMethod
+    // from a legacy-only record and drops preferredPayment from the in-memory
+    // object (see utils/paymentMethods.ts withSynthesizedMethods). The handle
+    // itself must still survive — just carried on the new fields.
     const afterFirst = await StorageService.loadGames();
-    expect(afterFirst[0].players[0].preferredPayment).toEqual({
-      method: 'venmo',
-      handle: 'alice-h',
-    });
+    expect(afterFirst[0].players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(afterFirst[0].players[0].defaultMethod).toBe('venmo');
 
     // ---- Launch 2: local syncedAt now ties remote, so the LOCAL copy wins the
     // merge. It must still carry the handle — that is the whole bug.
     const secondLaunch = await SyncService.loadGames(UID, () => {});
     await flush();
 
-    expect(secondLaunch[0].players[0].preferredPayment).toEqual({
-      method: 'venmo',
-      handle: 'alice-h',
-    });
+    expect(secondLaunch[0].players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(secondLaunch[0].players[0].defaultMethod).toBe('venmo');
     expect(secondLaunch[0].players[0].savedPlayerId).toBe('sp_alice');
 
     const afterSecond = await StorageService.loadGames();
-    expect(afterSecond[0].players[0].preferredPayment).toEqual({
-      method: 'venmo',
-      handle: 'alice-h',
-    });
+    expect(afterSecond[0].players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(afterSecond[0].players[0].defaultMethod).toBe('venmo');
   });
 
   it('saving one game does not strip a handle off another game', async () => {
@@ -448,10 +446,8 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
 
     const stored = await StorageService.loadGames();
     const reloadedA = stored.find(g => g.id === 'gameA')!;
-    expect(reloadedA.players[0].preferredPayment).toEqual({
-      method: 'cashapp',
-      handle: 'alice-c',
-    });
+    expect(reloadedA.players[0].methods).toEqual({ cashapp: 'alice-c' });
+    expect(reloadedA.players[0].defaultMethod).toBe('cashapp');
   });
 });
 
@@ -546,7 +542,8 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
     await flush();
 
     const stored = await StorageService.loadGames();
-    expect(stored[0].players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
+    expect(stored[0].players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(stored[0].players[0].defaultMethod).toBe('venmo');
     expect(stored[0].players[0].savedPlayerId).toBe('sp_alice');
   });
 });

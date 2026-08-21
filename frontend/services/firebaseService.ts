@@ -38,6 +38,7 @@ import {
   runTransaction,
 } from 'firebase/firestore';
 import { Game } from '@/types/game';
+import { withLegacyPayment, withSynthesizedMethods } from '@/utils/paymentMethods';
 import type { SavedPlayer } from '@/services/savedPlayersService';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { TRIAL_DURATION_DAYS } from '@/utils/trialUtils';
@@ -400,7 +401,7 @@ export async function saveGameToFirestore(uid: string, game: Game): Promise<void
   const { cachedSettlements, transactionHash, syncedAt: _syncedAt, ...gameData } = game;
   // Firestore rejects `undefined` values — strip them recursively
   // (e.g. completedAt on active games/players, optional fields on new objects)
-  await setDoc(gameRef, { ...stripUndefined(gameData), syncedAt: serverTimestamp() }, { merge: true });
+  await setDoc(gameRef, { ...stripUndefined(withLegacyPayment(gameData)), syncedAt: serverTimestamp() }, { merge: true });
 }
 
 /** Recursively remove keys with `undefined` values from an object/array. */
@@ -448,11 +449,13 @@ export function deserializeFirestoreGame(data: Record<string, any>): Game {
     name: data.name,
     date: toDate(data.date),
     status: data.status,
-    players: (data.players ?? []).map((p: any) => ({
+    players: (data.players ?? []).map((p: any) => withSynthesizedMethods({
       id: p.id,
       name: p.name,
       completedAt: toOptDate(p.completedAt),
       preferredPayment: p.preferredPayment,
+      methods: p.methods,
+      defaultMethod: p.defaultMethod,
       savedPlayerId: p.savedPlayerId,
     })),
     transactions: (data.transactions ?? []).map((t: any) => ({

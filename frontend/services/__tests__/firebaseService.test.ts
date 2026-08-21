@@ -92,20 +92,26 @@ describe('deserializeFirestoreGame', () => {
     expect(game.currency).toBeUndefined();
   });
 
-  it('preserves a player preferredPayment so it does not reset after a sync', () => {
+  it('synthesizes a player preferredPayment into methods so it does not reset after a sync', () => {
+    // Post-2.0.3, preferredPayment is derive-on-write only and never lives in memory —
+    // see withSynthesizedMethods in utils/paymentMethods.ts. A legacy-only document still
+    // round-trips through methods/defaultMethod, which is what every read site now uses.
     const game = deserializeFirestoreGame({
       ...baseDoc,
       players: [{ id: 'p1', name: 'Alice', preferredPayment: { method: 'venmo', handle: '@alice' } }],
     });
-    expect(game.players[0].preferredPayment).toEqual({ method: 'venmo', handle: '@alice' });
+    expect(game.players[0].methods).toEqual({ venmo: '@alice' });
+    expect(game.players[0].defaultMethod).toBe('venmo');
+    expect(game.players[0].preferredPayment).toBeUndefined();
   });
 
-  it('preserves a preferredPayment with no handle (e.g. cash)', () => {
+  it('synthesizes a preferredPayment with no handle (e.g. cash) without inventing one', () => {
     const game = deserializeFirestoreGame({
       ...baseDoc,
       players: [{ id: 'p1', name: 'Alice', preferredPayment: { method: 'cash' } }],
     });
-    expect(game.players[0].preferredPayment).toEqual({ method: 'cash' });
+    expect(game.players[0].methods).toEqual({ cash: '' });
+    expect(game.players[0].defaultMethod).toBe('cash');
   });
 
   it('leaves preferredPayment undefined when absent on the player', () => {
@@ -164,6 +170,30 @@ describe('deserializeFirestoreGame', () => {
   it('leaves defaultBuyIn undefined when absent', () => {
     const game = deserializeFirestoreGame(baseDoc);
     expect(game.defaultBuyIn).toBeUndefined();
+  });
+
+  it('preserves methods and defaultMethod through the Firestore whitelist', () => {
+    const game = deserializeFirestoreGame({
+      ...baseDoc,
+      players: [{ id: 'p1', name: 'Alice', methods: { venmo: 'a', zelle: 'b' }, defaultMethod: 'zelle' }],
+    });
+    expect(game.players[0].methods).toEqual({ venmo: 'a', zelle: 'b' });
+    expect(game.players[0].defaultMethod).toBe('zelle');
+  });
+
+  it('synthesizes methods from a legacy-only Firestore player', () => {
+    const game = deserializeFirestoreGame({
+      ...baseDoc,
+      players: [{ id: 'p1', name: 'Alice', preferredPayment: { method: 'venmo', handle: 'alice-h' } }],
+    });
+    expect(game.players[0].methods).toEqual({ venmo: 'alice-h' });
+    expect(game.players[0].defaultMethod).toBe('venmo');
+  });
+
+  it('leaves both fields undefined when the player has no payment at all', () => {
+    const game = deserializeFirestoreGame({ ...baseDoc, players: [{ id: 'p1', name: 'Alice' }] });
+    expect(game.players[0].methods).toBeUndefined();
+    expect(game.players[0].defaultMethod).toBeUndefined();
   });
 });
 

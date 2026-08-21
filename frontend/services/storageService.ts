@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Game } from '@/types/game';
+import { withLegacyPayment, withSynthesizedMethods } from '@/utils/paymentMethods';
 
 const GAMES_KEY = '@cashcage:games';
 const ACTIVE_GAME_ID_KEY = '@cashcage:activeGameId';
@@ -7,7 +8,10 @@ const ACTIVE_GAME_ID_KEY = '@cashcage:activeGameId';
 export class StorageService {
   static async saveGames(games: Game[]): Promise<void> {
     try {
-      await AsyncStorage.setItem(GAMES_KEY, JSON.stringify(games));
+      // Dual-write the derived legacy preferredPayment so a shipped 2.0.2 client reading
+      // this same store still sees the player's default method. Derived here, never stored
+      // in memory — see spec §2.
+      await AsyncStorage.setItem(GAMES_KEY, JSON.stringify(games.map(withLegacyPayment)));
     } catch (error) {
       console.error('Error saving games:', error);
       throw error;
@@ -29,7 +33,7 @@ export class StorageService {
         // Spread, don't whitelist. A field-by-field rebuild silently drops any
         // Player field added later (preferredPayment, savedPlayerId), and the
         // stripped result gets written straight back to storage and Firestore.
-        players: game.players.map((p: any) => ({
+        players: game.players.map((p: any) => withSynthesizedMethods({
           ...p,
           completedAt: p.completedAt ? new Date(p.completedAt) : undefined,
         })),
