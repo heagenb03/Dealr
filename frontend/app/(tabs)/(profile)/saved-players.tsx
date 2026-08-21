@@ -289,7 +289,9 @@ export default function SavedPlayersScreen() {
     }
     // kind === 'add' — snapshot the add form's payment-so-far at open time.
     return { id: 'add', name: addName || 'Player', methods: addPayment?.methods, defaultMethod: addPayment?.defaultMethod };
-    // addName/addPayment intentionally omitted: capture at open time only.
+    // addName/addPayment intentionally omitted: capture at open time only. Widening this
+    // array reintroduces the bug __tests__/saved-players-payment-editor.test.tsx's first
+    // describe block mutation-tests against — that test WILL fail if you do this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentTarget]);
   const handlePaymentSave = useCallback(
