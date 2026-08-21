@@ -43,6 +43,14 @@ describe('paymentWriteBackAction', () => {
     expect(paymentWriteBackAction({}, {})).toBe('skip');
   });
 
+  it('confirms when the edit clears a saved payment entirely', () => {
+    // The clear path's own verdict, and the input paymentWriteBackPatch exists to rescue:
+    // the editor emptied every row, so `next` is the bare `{}` applyPaymentInvariant returns.
+    // Every saved key counts as removed, so this must be a CONFIRM — wiping the saved
+    // player's payment is exactly the kind of loss the silent path is not allowed to cause.
+    expect(paymentWriteBackAction(V, {})).toBe('confirm');
+  });
+
   it('does not confirm when the saved entry has no explicit default matching the fallback', () => {
     // A saved player coerced from storage can carry `methods` with no `defaultMethod`.
     // Both sides must resolve through the PAYMENT_METHODS-order fallback, or every mid-game

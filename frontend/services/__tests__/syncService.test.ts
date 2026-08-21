@@ -30,6 +30,7 @@ import {
   deleteGameFromFirestore,
 } from '@/services/firebaseService';
 import { deleteSharedGame } from '@/services/sharedGameService';
+import { withSynthesizedMethods } from '@/utils/paymentMethods';
 
 const UID = 'user1';
 
@@ -471,6 +472,63 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
   });
 });
 
+describe('2.0.2 interop: a stripped remote write wins the merge outright', () => {
+  // This pins a DELIBERATE TRADE-OFF, not a bug. Spec §6 originally asked for a test where
+  // "local has methods, remote lost them, remote is newer, methods survive" — they do not,
+  // and cannot: unionRecoverablePlayerFields only ever fills LOCAL from REMOTE, and a 2.0.2
+  // write makes remote the impoverished side. Its write also carries a newer syncedAt, so
+  // mergeGames takes the remote copy wholesale by last-write-wins and the union never runs.
+  // What survives is the DEFAULT method, carried by the dual-written preferredPayment that
+  // 2.0.2 preserves verbatim and this app re-synthesizes into `methods` on read. The
+  // non-default methods 2.0.2 could not represent are lost — the same accepted cost spec §4
+  // states for the saved pool (a payment set is replaced as a unit, never unioned per key).
+  // See the doc comment on unionRecoverablePlayerFields. Spec §2/§6 now say the same.
+  it('keeps the default method and drops the non-default ones (accepted cost)', async () => {
+    const LOCAL_SYNCED = new Date('2026-07-02T00:00:00Z');
+    // Strictly newer: the 2.0.2 device edited the game last, so remote wins outright.
+    const REMOTE_SYNCED = new Date('2026-07-03T00:00:00Z');
+
+    const localWithBoth: Game = {
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      players: [
+        { id: 'A', name: 'Alice', methods: { venmo: 'a', zelle: 'z' }, defaultMethod: 'venmo' },
+      ],
+      syncedAt: LOCAL_SYNCED,
+    };
+
+    // The 2.0.2 wire shape: its firebaseService deserializer whitelists players down to
+    // preferredPayment + savedPlayerId, so a game it edits goes back to Firestore carrying
+    // only preferredPayment. Build the remote Game by running the REAL withSynthesizedMethods
+    // over that raw player — the same function deserializeFirestoreGame applies per player —
+    // rather than hand-writing the post-deserialize shape, so this stays bound to the
+    // production read boundary. (@/services/firebaseService itself is mocked at the top of
+    // this file, and requireActual would drag firebase/firestore in.)
+    const remoteFrom202: Game = {
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      players: [
+        withSynthesizedMethods({
+          id: 'A',
+          name: 'Alice',
+          preferredPayment: { method: 'venmo' as const, handle: 'a' },
+        }),
+      ],
+      syncedAt: REMOTE_SYNCED,
+    };
+
+    await StorageService.saveGames([localWithBoth]);
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([remoteFrom202]);
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    const stored = await StorageService.loadGames();
+    // toEqual on the WHOLE map, so zelle's absence is structural rather than a
+    // separate assertion that could be deleted on its own.
+    expect(stored[0].players[0].methods).toEqual({ venmo: 'a' });
+    expect(stored[0].players[0].defaultMethod).toBe('venmo');
+  });
+});
+
 describe('unionRecoverablePlayerFields — recovering handles the old whitelist stripped', () => {
   const local = (players: any[]): Game => ({ ...makeGame([]), players } as Game);
 
@@ -485,16 +543,6 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
     expect(result.players[0].methods).toEqual({ venmo: 'alice-h' });
     expect(result.players[0].defaultMethod).toBe('venmo');
     expect(result.players[0].savedPlayerId).toBe('sp_alice');
-  });
-
-  it('never overwrites a payment the local copy already has', () => {
-    const result = unionRecoverablePlayerFields(
-      local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]),
-      local([{ id: 'A', name: 'Alice', methods: { venmo: 'stale' }, defaultMethod: 'venmo' }]),
-    );
-
-    expect(result.players[0].methods).toEqual({ cash: '' });
-    expect(result.players[0].defaultMethod).toBe('cash');
   });
 
   it('does NOT resurrect a payment onto a RENAMED player (deliberate unbind)', () => {
@@ -557,15 +605,6 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
     expect(stored[0].players[0].savedPlayerId).toBe('sp_alice');
   });
 
-  it('adopts remote methods and defaultMethod when local lost them', () => {
-    const result = unionRecoverablePlayerFields(
-      local([{ id: 'A', name: 'Alice' }]),
-      local([{ id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo' }]),
-    );
-    expect(result.players[0].methods).toEqual({ venmo: 'alice-h' });
-    expect(result.players[0].defaultMethod).toBe('venmo');
-  });
-
   it('never overwrites a live local map with a stale remote one', () => {
     const input = local([{ id: 'A', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }]);
     const result = unionRecoverablePlayerFields(
@@ -592,14 +631,6 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
     );
     expect(result.players[0].methods).toEqual({ venmo: 'v' });
     expect(result.players[0].defaultMethod).toBeUndefined();
-  });
-
-  it('does not adopt across a rename (the deliberate-drop guard)', () => {
-    const result = unionRecoverablePlayerFields(
-      local([{ id: 'A', name: 'Alicia' }]),
-      local([{ id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo' }]),
-    );
-    expect(result.players[0].methods).toBeUndefined();
   });
 });
 

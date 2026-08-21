@@ -694,6 +694,28 @@ describe('payment carrier persistence (Task 3)', () => {
     expect(p?.methods).toEqual({ venmo: 'm' });
   });
 
+  it('an EXPLICIT empty methods map clears the saved payment', async () => {
+    // The receiving end of the `{}`-means-don't-touch convention. An ABSENT `methods` key
+    // is a recency bump (the test directly above); an explicitly EMPTY one is a real clear.
+    // That empty map is exactly what paymentWriteBackPatch emits for a carrier the editor
+    // emptied out; the producing end is pinned separately in
+    // utils/__tests__/paymentWriteBack.test.ts, and no unit test covers the active.tsx /
+    // saved-players.tsx wiring between the two.
+    //
+    // The revert this pins: turning `patch.methods ?? prev.methods` into a key-count test
+    // (`Object.keys(patch.methods).length ? patch.methods : prev.methods`), which reads as a
+    // harmless tightening but makes an empty patch fall through to the PREVIOUS map — the
+    // "clearing a payment does not clear the saved write-back" defect bfc18e8 fixed. No
+    // other test in this suite passes updateSavedPlayer an empty methods map, so nothing
+    // else goes red on that change.
+    const res = await createSavedPlayer(A, 'Mike', { methods: { venmo: 'm', zelle: 'z' }, defaultMethod: 'venmo' });
+    const id = (res as { ok: true; id: string }).id;
+    await updateSavedPlayer(A, id, { methods: {} });
+    const p = await getSavedPlayer(A, 'Mike');
+    expect(p?.methods).toEqual({});
+    expect(p?.defaultMethod).toBeUndefined();
+  });
+
   it('stores a derived legacy preferredPayment for a 2.0.2 reader', async () => {
     await createSavedPlayer(A, 'Mike', { methods: { venmo: 'm', zelle: 'z' }, defaultMethod: 'zelle' });
     const raw = JSON.parse((await AsyncStorage.getItem(`saved_player_names:${A}`)) as string);

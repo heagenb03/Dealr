@@ -1,6 +1,7 @@
 /**
- * Two regression tests for saved-players.tsx's payment-editor wiring (task 7 of the
- * multiple-payment-methods spec).
+ * Regression tests for saved-players.tsx's payment-editor wiring (task 7 of the
+ * multiple-payment-methods spec), plus its select-mode badge (see the third block's own
+ * header, at the bottom of this file).
  *
  * 1. R-23 (reference stability) imports `usePaymentEditorTarget` and `PaymentTarget`
  *    DIRECTLY from saved-players.tsx (not a hand-copied reproduction) and drives them from a
@@ -100,7 +101,8 @@ jest.mock('@/contexts/AuthContext', () => ({
 import { PaymentEditorContent } from '@/components/PaymentEditorModal';
 import { PaymentCarrier } from '@/types/game';
 import { paymentWriteBackPatch } from '@/utils/paymentMethods';
-import { usePaymentEditorTarget, PaymentTarget } from '@/app/(tabs)/(profile)/saved-players';
+import { usePaymentEditorTarget, PaymentTarget, badgeText } from '@/app/(tabs)/(profile)/saved-players';
+import { SavedPlayer } from '@/services/savedPlayersService';
 
 /**
  * Probe component: drives the REAL `usePaymentEditorTarget` (imported from saved-players.tsx
@@ -214,5 +216,45 @@ describe('saved-players edit-flow write-back (carry-forward: clear vs. don’t-t
     // A bare {} would be indistinguishable from updateSavedPlayer's own "don't touch
     // payment" recency-bump convention (updateSavedPlayer(uid, sid, {})).
     expect(onPatch).toHaveBeenCalledWith({ methods: {} });
+  });
+});
+
+/**
+ * `badgeText` is saved-players.tsx's SELECT-MODE row badge — a FOURTH payment-badge renderer
+ * alongside the three components covered by components/__tests__/paymentBadgeCount.test.tsx
+ * (PlayerCardActive, PlayerCardCompleted, SavedPlayerCard). Task 8's brief named only those
+ * three, so this one shipped without the `+N` suffix: the exact same rows showed the count in
+ * normal mode (via SavedPlayerCard) and lost it the moment the user tapped Select.
+ *
+ * These assert the string directly rather than through a render: <SavedPlayersScreen>'s
+ * top-level FlatList never returns under jest-expo/node, so the only way to reach this
+ * function is to call it. The `+N` count is "filled methods OTHER than the default", NOT
+ * `filledMethods().length - 1` — see paymentBadgeCount.test.tsx's header for why the two
+ * formulas diverge on a label-only default, and the label-only case below.
+ */
+describe('saved-players select-mode badge (badgeText) — matches SavedPlayerCard', () => {
+  const saved = (methods: SavedPlayer['methods'], defaultMethod: SavedPlayer['defaultMethod']): SavedPlayer =>
+    ({ id: 'sp1', name: 'Ada', methods, defaultMethod });
+
+  it('appends +N for filled methods beyond the default', () => {
+    expect(badgeText(saved({ venmo: 'ada-l', zelle: 'ada@x.com' }, 'venmo'))).toBe('Venmo · @ada-l +1');
+  });
+
+  it('appends +N when the default is label-only and another method is filled', () => {
+    // filledMethods() excludes the unfilled default, so its length is ALREADY the
+    // "other methods" count — `length - 1` would wrongly render no suffix here.
+    expect(badgeText(saved({ venmo: '', zelle: 'dee@x.com' }, 'venmo'))).toBe('Venmo +1');
+  });
+
+  it('appends no suffix when the only filled method IS the default', () => {
+    expect(badgeText(saved({ venmo: 'v1' }, 'venmo'))).toBe('Venmo · @v1');
+  });
+
+  it('appends no suffix for a cash-only default (no filled methods at all)', () => {
+    expect(badgeText(saved({ cash: '' }, 'cash'))).toBe('Cash');
+  });
+
+  it('returns null when the player has no payment at all', () => {
+    expect(badgeText({ id: 'sp2', name: 'Bob' })).toBeNull();
   });
 });

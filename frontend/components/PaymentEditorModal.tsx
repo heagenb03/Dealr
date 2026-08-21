@@ -70,7 +70,14 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
     setHandles(prev => ({ ...prev, [key]: raw }));
     // Auto-default: the first handle typed becomes the default, so the common case
     // (one player, one Venmo) needs no second tap.
-    setDefaultMethod(prev => (prev === undefined && raw.trim() !== '' ? key : prev));
+    //
+    // Gated on the NORMALIZED value, not the raw text. Raw text that normalizes to ''
+    // (a bare affix — '@' typed out of habit in the Venmo field) saves no handle, yet
+    // the default is sticky: it is only ever assigned while `prev === undefined`, and
+    // the per-row dot can move it but never unset it. Claiming the default for a row
+    // that then saves nothing sends the wrong method out everywhere the default is
+    // read — the card badge, the share message and the published /g/ snapshot.
+    setDefaultMethod(prev => (prev === undefined && normalizeHandle(key, raw) !== '' ? key : prev));
   };
 
   const handleSave = () => {

@@ -34,7 +34,7 @@ import {
 import { PaymentCarrier, Player } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, paymentWriteBackPatch } from '@/utils/paymentMethods';
+import { resolvePayment, filledMethods, paymentWriteBackPatch } from '@/utils/paymentMethods';
 import { savedCapCounter, savedCapPaywallMessage } from '@/utils/capCopy';
 import { buildSavedPlayersListData, SavedPlayersListItem } from '@/utils/savedPlayersListData';
 
@@ -88,12 +88,24 @@ export function usePaymentEditorTarget(
 // SavedPlayer no longer carries preferredPayment in memory (it's derived only at the
 // storage/Firestore serialize boundary — see savedPlayersService.ts) — read the resolved
 // default through resolvePayment instead of the field directly.
-function badgeText(p: SavedPlayer): string | null {
+//
+// Select mode's rows are the ONLY consumer of this (normal mode renders SavedPlayerCard).
+// It must produce the same string SavedPlayerCard does, `+N` included, or the count
+// vanishes the moment the user taps Select on the very same list. The `+N` count is
+// "filled methods OTHER than the default" — deliberately not `filledMethods().length - 1`,
+// which is wrong whenever the default is a label-only entry (see
+// components/__tests__/paymentBadgeCount.test.tsx).
+// Exported for __tests__/saved-players-payment-editor.test.tsx. <SavedPlayersScreen> itself
+// cannot be rendered in a test (its top-level FlatList never returns under jest-expo/node),
+// so this string builder is unreachable through the component and has to be tested directly.
+export function badgeText(p: SavedPlayer): string | null {
   const legacy = resolvePayment(p);
   if (!legacy) return null;
   const { method, handle } = legacy;
   const label = getPaymentMethodMeta(method).label;
-  return handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
+  const extra = filledMethods(p).filter(m => m !== method).length;
+  const base = handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
+  return extra > 0 ? `${base} +${extra}` : base;
 }
 
 const  BULK_PAYWALL_MESSAGE = 'Upgrade to Pro to bulk-manage your saved players.';
@@ -349,8 +361,10 @@ export default function SavedPlayersScreen() {
   );
 
   const counterText = savedCapCounter(players.length, isPro);
-  // "+ Payment" button label — shows only the resolved default method (matches badgeText's
-  // single-line style below); a full multi-method summary is Task 8's concern.
+  // "+ Payment" button label inside the Add-player overlay — deliberately just the resolved
+  // default method's label, with no handle and no `+N`. It is a compact button caption for a
+  // player being composed, not a summary of a saved row: badgeText above and SavedPlayerCard
+  // are the two places that render the full `label · handle +N` badge.
   const addPaymentResolved = resolvePayment(addPayment);
 
   // selectMode / selected are deliberately NOT in the item objects: putting them there

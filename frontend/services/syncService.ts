@@ -278,18 +278,42 @@ function deserializeSyncedAt(game: Game & { syncedAt?: any }): Game {
 /**
  * Fill in player fields that the local copy is missing but remote still has.
  *
- * Recovery for two separate write-back defects, both of which strand an intact
- * copy on remote while local `syncedAt` ties it — and mergeGames' strict `>`
- * hands every tie to local, so without this union the intact remote copy would
- * stay unreachable:
- *   1. The whitelist bug in StorageService.loadGames(), which dropped
- *      preferredPayment and savedPlayerId on every read. That loss only ever
- *      reached AsyncStorage on the launch path (the background merge writes
- *      locally, never to Firestore), so remote frequently still holds the handle.
- *   2. A shipped 2.0.2 client, which never learned about methods/defaultMethod
- *      and writes players back through its own field whitelist — so a device
- *      still running 2.0.2 silently strips those two fields on every save,
- *      while a device that has since updated keeps writing them to remote.
+ * Recovery for ONE defect: the old whitelist bug in StorageService.loadGames(),
+ * which dropped preferredPayment and savedPlayerId on every read. It strands an
+ * intact copy on remote while local `syncedAt` ties it — and mergeGames' strict
+ * `>` hands every tie to local, so without this union the intact remote copy
+ * would stay unreachable. That loss only ever reached AsyncStorage on the launch
+ * path (the background merge writes locally, never to Firestore), so remote
+ * frequently still holds the handle.
+ *
+ * This does NOT recover a shipped 2.0.2 client's writes, and structurally cannot:
+ * it only ever fills local from remote, and that scenario makes REMOTE the
+ * impoverished side. What actually happens there, stated so no future reader
+ * expects a rescue that isn't here:
+ *   - 2.0.2 reads game documents through a deserializer whose player whitelist has
+ *     no methods/defaultMethod (its firebaseService keeps only preferredPayment +
+ *     savedPlayerId), so its in-memory copy carries just the derived
+ *     preferredPayment. Editing that game writes the stripped copy back with a
+ *     fresh serverTimestamp — a strictly NEWER syncedAt.
+ *   - mergeGames therefore takes that remote copy wholesale (last-write-wins) and
+ *     never reaches this function at all.
+ *   - The DEFAULT method still survives, via the derived preferredPayment: this
+ *     app dual-writes it on the way out, 2.0.2 preserves it verbatim, and
+ *     deserializeFirestoreGame runs withSynthesizedMethods on the way back in,
+ *     rebuilding a one-key methods map from it. The non-default methods 2.0.2
+ *     could not carry are lost.
+ *   - That loss is the accepted cost spec §4 already states for the saved pool,
+ *     applied to the game document: a payment set is replaced as a unit by the
+ *     newer write, never unioned per key.
+ *   - A PASSIVE 2.0.2 device — one that loads and merges but never edits — never
+ *     causes it. Its background merge writes only to AsyncStorage; verified at
+ *     14846e6:frontend/services/syncService.ts, whose loadGames sync block ends in
+ *     StorageService.saveGames with no Firestore write.
+ *
+ * One consequence of withSynthesizedMethods running on every remote read: a remote
+ * player that carries any payment at all reaches this function with a methods map
+ * already built, never as a bare preferredPayment. That is why nothing below reads
+ * preferredPayment — there is no legacy-only shape left to read.
  *
  * Only fills fields local LACKS, so a live local value is never overwritten.
  *

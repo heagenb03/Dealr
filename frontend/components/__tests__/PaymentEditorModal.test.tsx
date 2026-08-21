@@ -186,6 +186,23 @@ describe('PaymentEditorContent', () => {
     expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
   });
 
+  it('does not let an affix-only keystroke claim the default', () => {
+    // The user taps the Venmo field, types '@' out of habit, changes their mind, and
+    // enters their real handle in Zelle. normalizeHandle('venmo', '@') is '', so Venmo
+    // saves no handle at all — if that keystroke had claimed the default (the auto-default
+    // is sticky: assigned only while prev === undefined, and the per-row dot can move it
+    // but never unset it), applyPaymentInvariant would honour the explicit 'venmo' default
+    // and the handle the user actually entered would NOT be the one that leaves the device:
+    // the badge would read "Venmo +1", the share message " (Venmo)" with no handle, and the
+    // published /g/ snapshot {"method":"venmo"}.
+    const onSave = jest.fn();
+    const tree = renderEditor({ onSave });
+    act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('@'); });
+    act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+  });
+
   it('saves an empty carrier when nothing is filled', () => {
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });

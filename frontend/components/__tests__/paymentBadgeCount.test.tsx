@@ -35,6 +35,14 @@
  * construction guards are exactly the "cannot fail" failure mode this branch
  * has repeatedly shipped; this file exists so the failure is actually red.
  *
+ * A FOURTH badge renderer exists and is NOT covered here: saved-players.tsx's
+ * select-mode row builds its own string via `badgeText`, not a card component.
+ * It cannot be reached by rendering (<SavedPlayersScreen>'s top-level FlatList
+ * never returns under jest-expo/node), so it is tested by calling that function
+ * directly, in app/(tabs)/(profile)/__tests__/saved-players-payment-editor.test.tsx.
+ * Task 8's brief named only the three components above, which is exactly how that
+ * renderer shipped without the +N suffix.
+ *
  * Swipeable/Reanimated/GestureHandler/Ionicons are inert under jest-expo/node
  * (no web implementation worth rendering) and are mocked to pass-throughs —
  * same recipe as summaryCards.test.tsx and saved-players-payment-editor.test.tsx.
