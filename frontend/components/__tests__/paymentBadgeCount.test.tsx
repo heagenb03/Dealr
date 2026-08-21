@@ -1,15 +1,32 @@
 /**
- * Mutation guard for the "+N" payment-method-count badge added to the three
- * player card display sites (PlayerCardActive, PlayerCardCompleted,
- * SavedPlayerCard) in task 8 of the multiple-payment-methods spec.
+ * Mutation guards for the two payment-display changes made to the three player
+ * card display sites (PlayerCardActive, PlayerCardCompleted, SavedPlayerCard)
+ * in task 8 of the multiple-payment-methods spec:
  *
- * Each card shows the resolved DEFAULT method's label/handle, plus a "+N"
- * suffix counting the OTHER filled methods (filledMethods(player).length - 1).
- * A regression that always renders 0 extra methods, or never renders the
- * suffix at all, would be invisible to every other suite in this repo — no
- * other test renders these three components. This file exists so that
- * regression is actually red, not just eyeballed (per the branch's repeated
- * "guard that cannot fail" lesson).
+ * 1. The "+N" payment-method-count badge. Each card shows the resolved DEFAULT
+ *    method's label/handle, plus a "+N" suffix counting the OTHER filled
+ *    methods (filledMethods(player).length - 1). A regression that always
+ *    renders 0 extra methods, or never renders the suffix at all, would be
+ *    invisible to every other suite in this repo.
+ *
+ * 2. The memo comparators (PlayerCardActive/PlayerCardCompleted only —
+ *    SavedPlayerCard's was already fixed in task 3) now compare
+ *    paymentSignature(prevProps.player) === paymentSignature(nextProps.player)
+ *    instead of the two now-permanently-undefined preferredPayment?.method /
+ *    .handle scalar fields. The banned alternative — comparing
+ *    prev.player.methods === next.player.methods by REFERENCE — would also
+ *    slip past a naive test: this file constructs the one case that
+ *    discriminates it, a defaultMethod move where the methods map object is
+ *    reused BY REFERENCE across renders (a legitimate shape: active.tsx can
+ *    change which method is default without touching the handles map).
+ *    Reference comparison sees the same methods object and wrongly bails;
+ *    paymentSignature's signature string embeds the resolved default, so it
+ *    correctly differs and forces a re-render.
+ *
+ * No other test in this repo renders these three components at all, so
+ * without this file both regressions would be invisible — invisible-by-
+ * construction guards are exactly the "cannot fail" failure mode this branch
+ * has repeatedly shipped; this file exists so the failure is actually red.
  *
  * Swipeable/Reanimated/GestureHandler/Ionicons are inert under jest-expo/node
  * (no web implementation worth rendering) and are mocked to pass-throughs —
@@ -197,5 +214,111 @@ describe('SavedPlayerCard — payment badge +N count', () => {
       />
     );
     expect(texts(tree).join('')).not.toContain('+1');
+  });
+});
+
+// A methods map object reused BY REFERENCE across renders, only the player's
+// defaultMethod field differing. `prev.player.methods === next.player.methods`
+// would see the same reference and wrongly bail out (stale badge); paymentSignature
+// embeds the resolved default in its output, so it correctly forces a re-render.
+const sharedMethods = { venmo: 'ada-v', zelle: 'ada-z' };
+const defaultingVenmo: Player = { id: 'p1', name: 'Ada', methods: sharedMethods, defaultMethod: 'venmo' };
+const defaultingZelle: Player = { id: 'p1', name: 'Ada', methods: sharedMethods, defaultMethod: 'zelle' };
+
+describe('PlayerCardActive — memo comparator catches a default-method move behind a shared methods reference', () => {
+  it('re-renders the badge when defaultMethod changes even though methods is the same object', async () => {
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <CurrencyProvider>
+          <PlayerCardActive
+            player={defaultingVenmo}
+            balance={undefined}
+            onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
+            onRename={noop} onEditPayment={noop}
+            reduceMotion={true}
+          />
+        </CurrencyProvider>
+      );
+    });
+    expect(texts(tree.toJSON()).join('')).toContain('Venmo');
+
+    await act(async () => {
+      tree.update(
+        <CurrencyProvider>
+          <PlayerCardActive
+            player={defaultingZelle}
+            balance={undefined}
+            onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
+            onRename={noop} onEditPayment={noop}
+            reduceMotion={true}
+          />
+        </CurrencyProvider>
+      );
+    });
+    expect(texts(tree.toJSON()).join('')).toContain('Zelle');
+  });
+});
+
+describe('PlayerCardCompleted — memo comparator catches a default-method move behind a shared methods reference', () => {
+  it('re-renders the badge when defaultMethod changes even though methods is the same object', async () => {
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <CurrencyProvider>
+          <PlayerCardCompleted
+            player={defaultingVenmo}
+            balance={undefined}
+            onReactivate={noop} onDelete={noop}
+            reduceMotion={true}
+          />
+        </CurrencyProvider>
+      );
+    });
+    expect(texts(tree.toJSON()).join('')).toContain('Venmo');
+
+    await act(async () => {
+      tree.update(
+        <CurrencyProvider>
+          <PlayerCardCompleted
+            player={defaultingZelle}
+            balance={undefined}
+            onReactivate={noop} onDelete={noop}
+            reduceMotion={true}
+          />
+        </CurrencyProvider>
+      );
+    });
+    expect(texts(tree.toJSON()).join('')).toContain('Zelle');
+  });
+});
+
+describe('SavedPlayerCard — memo comparator catches a default-method move behind a shared methods reference', () => {
+  it('re-renders the badge when defaultMethod changes even though methods is the same object', () => {
+    const savedVenmo: SavedPlayer = { id: 'sp1', name: 'Ada', methods: sharedMethods, defaultMethod: 'venmo' };
+    const savedZelle: SavedPlayer = { id: 'sp1', name: 'Ada', methods: sharedMethods, defaultMethod: 'zelle' };
+
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <SavedPlayerCard
+          player={savedVenmo}
+          onRename={noop} onEditPayment={noop} onDelete={noop}
+          reduceMotion={true}
+        />
+      );
+    });
+    expect(texts(tree.toJSON()).join('')).toContain('Venmo');
+
+    act(() => {
+      tree.update(
+        <SavedPlayerCard
+          player={savedZelle}
+          onRename={noop} onEditPayment={noop} onDelete={noop}
+          reduceMotion={true}
+        />
+      );
+    });
+    expect(texts(tree.toJSON()).join('')).toContain('Zelle');
   });
 });
