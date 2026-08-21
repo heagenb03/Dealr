@@ -15,6 +15,11 @@ declare module 'react-test-renderer' {
     // (e.g. matching on accessibilityRole/accessibilityLabel) rather than by
     // element type.
     findAll(predicate: (node: TestInstance) => boolean): TestInstance[];
+    // Additive: needed by tests that query host nodes by testID (or any other
+    // prop) rather than by element type — e.g. PaymentEditorModal.test.tsx's
+    // per-row TextInput/TouchableOpacity instances, which have no distinct type
+    // to search by.
+    findAllByProps(props: Record<string, unknown>): TestInstance[];
     // Additive: `any` mirrors @types/react-test-renderer's own typing of props
     // (host + composite components have arbitrary prop shapes).
     props: any;

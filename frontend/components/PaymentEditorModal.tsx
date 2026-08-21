@@ -1,23 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Player, PreferredPayment, PaymentMethod } from '@/types/game';
-import { PAYMENT_METHODS, getPaymentMethodMeta } from '@/constants/PaymentMethods';
+import { PaymentCarrier, PaymentHandles, PaymentMethod } from '@/types/game';
+import { PAYMENT_METHODS } from '@/constants/PaymentMethods';
 import { normalizeHandle } from '@/utils/paymentLinks';
+import { applyPaymentInvariant, resolveDefaultMethod } from '@/utils/paymentMethods';
 import { AppModalCard } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { modalLayoutStyles } from '@/styles/modal';
 
+/**
+ * The editor's target: a real carrier-bearing entity (Player or SavedPlayer), OR a
+ * synthetic not-yet-created one (saved-players.tsx's "Add player" flow, which has no
+ * id/name yet). id/name are optional and unused here — the editor only reads methods/
+ * defaultMethod — but kept on the type so callers can pass their real object as-is.
+ */
+type EditorTarget = (PaymentCarrier & { id?: string; name?: string }) | null;
+
 interface PaymentEditorModalProps {
   visible: boolean;
-  player: Player | null;
-  onSave: (pref: PreferredPayment) => void;
+  player: EditorTarget;
+  onSave: (payment: PaymentCarrier) => void;
   onClose: () => void;
 }
 
 interface PaymentEditorContentProps {
-  player: Player | null;
-  onSave: (pref: PreferredPayment) => void;
+  player: EditorTarget;
+  onSave: (payment: PaymentCarrier) => void;
   onClose: () => void;
   /**
    * Whether the editor is being presented. Drives the re-seed effect.
@@ -43,79 +52,84 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
   onClose,
   visible = true,
 }) => {
-  const initialMethod = player?.preferredPayment?.method ?? 'cash';
-  const [method, setMethod] = useState<PaymentMethod>(initialMethod);
-  const [handle, setHandle] = useState(() =>
-    normalizeHandle(initialMethod, player?.preferredPayment?.handle ?? ''),
+  const [handles, setHandles] = useState<PaymentHandles>(() => ({ ...(player?.methods ?? {}) }));
+  const [defaultMethod, setDefaultMethod] = useState<PaymentMethod | undefined>(
+    () => resolveDefaultMethod(player ?? undefined),
   );
 
-  // Re-seed local state from the player's saved preference each time the editor
-  // opens. normalizeHandle strips any legacy affix so the field shows the bare
-  // handle. (useState initializers above cover the mount-fresh-each-open case.)
+  // Re-seed local state from the target's saved methods each time the editor opens.
+  // (The useState initializers above cover the mount-fresh-each-open case; this covers
+  // the overlay that stays mounted across opens, e.g. saved-players.tsx's Add-player flow.)
   useEffect(() => {
     if (!visible) return;
-    const seedMethod = player?.preferredPayment?.method ?? 'cash';
-    setMethod(seedMethod);
-    setHandle(normalizeHandle(seedMethod, player?.preferredPayment?.handle ?? ''));
+    setHandles({ ...(player?.methods ?? {}) });
+    setDefaultMethod(resolveDefaultMethod(player ?? undefined));
   }, [visible, player]);
 
-  const meta = getPaymentMethodMeta(method);
+  const setHandle = (key: PaymentMethod, raw: string) => {
+    setHandles(prev => ({ ...prev, [key]: raw }));
+    // Auto-default: the first handle typed becomes the default, so the common case
+    // (one player, one Venmo) needs no second tap.
+    setDefaultMethod(prev => (prev === undefined && raw.trim() !== '' ? key : prev));
+  };
 
   const handleSave = () => {
-    const pref: PreferredPayment = {
-      method,
-      handle: meta.takesHandle ? (normalizeHandle(method, handle) || undefined) : undefined,
-    };
-    onSave(pref);
+    const normalized: PaymentHandles = {};
+    for (const m of PAYMENT_METHODS) {
+      const raw = handles[m.key];
+      if (raw === undefined) continue;
+      normalized[m.key] = m.takesHandle ? normalizeHandle(m.key, raw) : '';
+    }
+    // applyPaymentInvariant is the single place that decides what survives: the default
+    // is always kept (handle or not), every other row only if it has a non-empty handle.
+    onSave(applyPaymentInvariant({ methods: normalized, defaultMethod }));
   };
 
   return (
     <AppModalCard onClose={onClose} cardStyle={styles.card}>
-      <Text style={styles.title}>Preferred payment</Text>
+      <Text style={styles.title}>Payment methods</Text>
 
-      <View style={styles.grid}>
+      {/* flexShrink is load-bearing: a ScrollView inside a maxHeight card does not
+          scroll on iOS without it, and the last rows are silently cut off. */}
+      <ScrollView style={styles.rows} contentContainerStyle={styles.rowsContent}>
         {PAYMENT_METHODS.map((m) => {
-          const selected = method === m.key;
-          const fullWidth = m.key === 'other';
+          const isDefault = defaultMethod === m.key;
           return (
-            <TouchableOpacity
-              key={m.key}
-              onPress={() => setMethod(m.key)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              style={[
-                styles.tile,
-                fullWidth ? styles.tileFull : styles.tileThird,
-                selected && styles.tileSelected,
-              ]}
-            >
-              <Text style={[styles.tileText, selected && styles.tileTextSelected]}>
+            <View key={m.key} style={styles.methodRow}>
+              <TouchableOpacity
+                testID={`payment-default-${m.key}`}
+                onPress={() => setDefaultMethod(m.key)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isDefault }}
+                style={[styles.defaultDot, isDefault && styles.defaultDotOn]}
+              />
+              <Text style={[styles.methodLabel, isDefault && styles.methodLabelDefault]}>
                 {m.label}
               </Text>
-            </TouchableOpacity>
+              {m.takesHandle ? (
+                <View style={styles.handleRow}>
+                  {m.affix ? (
+                    <View style={styles.affixBox}>
+                      <Text style={styles.affixText}>{m.affix}</Text>
+                    </View>
+                  ) : null}
+                  <TextInput
+                    testID={`payment-input-${m.key}`}
+                    value={handles[m.key] ?? ''}
+                    onChangeText={(t) => setHandle(m.key, t)}
+                    placeholder={m.handlePlaceholder}
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[styles.input, m.affix ? styles.inputWithAffix : styles.inputPlain]}
+                  />
+                </View>
+              ) : null}
+            </View>
           );
         })}
-      </View>
-
-      {meta.takesHandle && (
-        <View style={styles.handleRow}>
-          {meta.affix ? (
-            <View style={styles.affixBox}>
-              <Text style={styles.affixText}>{meta.affix}</Text>
-            </View>
-          ) : null}
-          <TextInput
-            value={handle}
-            onChangeText={setHandle}
-            placeholder={meta.handlePlaceholder}
-            placeholderTextColor="rgba(255,255,255,0.3)"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, meta.affix ? styles.inputWithAffix : styles.inputPlain]}
-          />
-        </View>
-      )}
+      </ScrollView>
 
       <View style={[modalLayoutStyles.modalButtons, styles.buttons]}>
         <ModalButton variant="cancel" title="Cancel" onPress={onClose} />
@@ -146,45 +160,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
   },
-  grid: {
+  rows: {
+    flexShrink: 1,
+  },
+  rowsContent: {
+    paddingBottom: 4,
+  },
+  methodRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 8,
-  },
-  tile: {
-    minHeight: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#0A0A0A',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
+    marginBottom: 10,
+    gap: 8,
   },
-  tileThird: {
-    width: '31.5%',
+  defaultDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
-  tileFull: {
-    width: '100%',
-  },
-  tileSelected: {
-    backgroundColor: '#49264F',
+  defaultDotOn: {
     borderColor: '#B072BB',
+    backgroundColor: '#B072BB',
   },
-  tileText: {
+  methodLabel: {
+    width: 78,
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
   },
-  tileTextSelected: {
+  methodLabelDefault: {
     color: '#FFFFFF',
+    fontWeight: '600',
   },
   handleRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginTop: 14,
   },
   affixBox: {
     justifyContent: 'center',
