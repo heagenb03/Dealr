@@ -43,12 +43,16 @@ beforeEach(async () => {
 
 describe('StorageService.loadGames — player field fidelity', () => {
   it('round-trips preferredPayment and savedPlayerId on a player', async () => {
+    // Source of truth is methods/defaultMethod, NOT preferredPayment — the player is
+    // never given one. That makes the raw-store check below prove real DERIVATION on
+    // write, rather than merely passing an already-present field through unchanged.
     const game = makeGame({
       players: [
         {
           id: 'p1',
           name: 'Alice',
-          preferredPayment: { method: 'venmo', handle: 'alice-h' },
+          methods: { venmo: 'alice-h' },
+          defaultMethod: 'venmo',
           savedPlayerId: 'sp_alice',
         },
       ],
@@ -57,21 +61,24 @@ describe('StorageService.loadGames — player field fidelity', () => {
     await StorageService.saveGames([game]);
     const [loaded] = await StorageService.loadGames();
 
-    // A legacy-only player is synthesized into methods/defaultMethod, and
     // preferredPayment itself no longer lives on the in-memory object.
     expect(loaded.players[0].methods).toEqual({ venmo: 'alice-h' });
     expect(loaded.players[0].defaultMethod).toBe('venmo');
     expect(loaded.players[0].preferredPayment).toBeUndefined();
     expect(loaded.players[0].savedPlayerId).toBe('sp_alice');
 
-    // But the legacy field IS still on the raw store, for a shipped 2.0.2 reader.
+    // The legacy field IS still on the raw store, derived from methods, for a
+    // shipped 2.0.2 reader.
     const raw = JSON.parse((await AsyncStorage.getItem(GAMES_KEY)) as string);
     expect(raw[0].players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
   });
 
   it('round-trips a preferredPayment with no handle (e.g. cash)', async () => {
+    // Again sourced from methods/defaultMethod (a label-only entry: present with no
+    // handle), not a pre-existing preferredPayment, so the raw-store check proves
+    // derivation rather than pass-through.
     const game = makeGame({
-      players: [{ id: 'p1', name: 'Alice', preferredPayment: { method: 'cash' } }],
+      players: [{ id: 'p1', name: 'Alice', methods: { cash: '' }, defaultMethod: 'cash' }],
     });
 
     await StorageService.saveGames([game]);

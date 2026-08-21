@@ -386,6 +386,9 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
   // handle was gone for good.
   it('keeps a handle across two launches even once local syncedAt ties remote', async () => {
     const REMOTE_SYNCED = new Date('2026-07-02T00:00:00Z');
+    // Local storage still models a legacy-only on-disk record: the UI (active.tsx et al.)
+    // has not yet been migrated to write methods/defaultMethod (that's Tasks 5-8), so a
+    // preferredPayment-only local record is exactly what saveGame leaves today.
     const withHandle = (syncedAt: Date): Game => ({
       ...makeGame([{ id: 'A', name: 'Alice' }]),
       players: [
@@ -398,10 +401,20 @@ describe('payment handles survive repeated app launches (the reported bug)', () 
       ],
       syncedAt,
     });
+    // Remote, in contrast, can NEVER be legacy-only shaped: fetchGamesFromFirestore always
+    // runs deserializeFirestoreGame, which synthesizes methods/defaultMethod and drops
+    // preferredPayment. Model that faithfully rather than a shape production can't produce.
+    const remoteWithHandle = (syncedAt: Date): Game => ({
+      ...makeGame([{ id: 'A', name: 'Alice' }]),
+      players: [
+        { id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo', savedPlayerId: 'sp_alice' },
+      ],
+      syncedAt,
+    });
 
     // Local lags remote by one write, exactly as saveGame leaves it.
     await StorageService.saveGames([withHandle(new Date('2026-07-01T00:00:00Z'))]);
-    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([withHandle(REMOTE_SYNCED)]);
+    (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([remoteWithHandle(REMOTE_SYNCED)]);
 
     // ---- Launch 1: remote is newer, so it wins and stamps REMOTE_SYNCED locally.
     await SyncService.loadGames(UID, () => {});
@@ -522,15 +535,13 @@ describe('unionRecoverablePlayerFields — recovering handles the old whitelist 
       ...makeGame([{ id: 'A', name: 'Alice' }]),
       syncedAt: TIE,
     };
+    // Remote is shaped as fetchGamesFromFirestore actually emits it — via
+    // deserializeFirestoreGame, which synthesizes methods/defaultMethod and never
+    // carries preferredPayment. A preferredPayment-shaped remote mock cannot occur.
     const remoteIntact: Game = {
       ...makeGame([{ id: 'A', name: 'Alice' }]),
       players: [
-        {
-          id: 'A',
-          name: 'Alice',
-          preferredPayment: { method: 'venmo', handle: 'alice-h' },
-          savedPlayerId: 'sp_alice',
-        },
+        { id: 'A', name: 'Alice', methods: { venmo: 'alice-h' }, defaultMethod: 'venmo', savedPlayerId: 'sp_alice' },
       ],
       syncedAt: TIE,
     };

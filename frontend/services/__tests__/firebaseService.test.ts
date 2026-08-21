@@ -48,6 +48,7 @@ import {
   fetchSavedPlayersFromFirestore,
   incrementProfileStats,
   reverseProfileStats,
+  saveGameToFirestore,
   sendVerificationEmail,
   signInWithGoogleCredential,
   signInWithAppleCredential,
@@ -56,6 +57,7 @@ import {
 } from '@/services/firebaseService';
 import { getDoc, setDoc, runTransaction, increment, updateDoc } from 'firebase/firestore';
 import { sendEmailVerification, signInWithCredential, linkWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { Game } from '@/types/game';
 
 describe('deserializeFirestoreGame', () => {
   const baseDoc = {
@@ -194,6 +196,46 @@ describe('deserializeFirestoreGame', () => {
     const game = deserializeFirestoreGame({ ...baseDoc, players: [{ id: 'p1', name: 'Alice' }] });
     expect(game.players[0].methods).toBeUndefined();
     expect(game.players[0].defaultMethod).toBeUndefined();
+  });
+});
+
+// The ONLY path a derived preferredPayment takes to a shipped 2.0.2 device is Firestore —
+// AsyncStorage is device-local. So this is the leg that actually delivers the dual-write
+// safety net; unlike the local round-trip, nothing else pins it.
+describe('saveGameToFirestore — outbound legacy dual-write', () => {
+  beforeEach(() => {
+    (setDoc as jest.Mock).mockClear();
+    (setDoc as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  function makeGame(players: any[]): Game {
+    return {
+      id: 'g1',
+      name: 'G',
+      date: new Date('2026-07-01T00:00:00Z'),
+      status: 'active',
+      players,
+      transactions: [],
+      createdAt: new Date('2026-07-01T00:00:00Z'),
+    } as Game;
+  }
+
+  it('derives preferredPayment onto the Firestore write payload', async () => {
+    await saveGameToFirestore('uid1', makeGame([
+      { id: 'p1', name: 'Alice', methods: { venmo: 'v', zelle: 'z' }, defaultMethod: 'zelle' },
+    ]));
+    expect(setDoc as jest.Mock).toHaveBeenCalledTimes(1);
+    const payload = (setDoc as jest.Mock).mock.calls[0][1];
+    expect(payload.players[0].preferredPayment).toEqual({ method: 'zelle', handle: 'z' });
+  });
+
+  it('derives a label-only preferredPayment with no handle key present (Firestore rejects undefined)', async () => {
+    await saveGameToFirestore('uid1', makeGame([
+      { id: 'p1', name: 'Alice', methods: { venmo: '' }, defaultMethod: 'venmo' },
+    ]));
+    const payload = (setDoc as jest.Mock).mock.calls[0][1];
+    expect(payload.players[0].preferredPayment).toEqual({ method: 'venmo' });
+    expect('handle' in payload.players[0].preferredPayment).toBe(false);
   });
 });
 
