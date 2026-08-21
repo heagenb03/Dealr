@@ -133,3 +133,29 @@ export function withSynthesizedMethods<T extends PaymentCarrier & { preferredPay
   const lifted = fromLegacyPayment(preferredPayment);
   return lifted.methods ? { ...rest, ...lifted } : rest;
 }
+
+/**
+ * Whether a mid-game payment edit should be pushed to the bound saved player silently,
+ * behind a confirm, or not at all (spec §4).
+ *
+ * "Silent" is reserved for cases where nothing the user previously entered is lost:
+ * the saved entry was blank, or the edit only ADDS methods without touching an existing
+ * handle or moving the default.
+ */
+export function paymentWriteBackAction(
+  saved: PaymentCarrier | undefined,
+  next: PaymentCarrier,
+): 'skip' | 'silent' | 'confirm' {
+  if (samePaymentSet(saved, next)) return 'skip';
+
+  const savedMethods = saved?.methods ?? {};
+  const savedKeys = Object.keys(savedMethods) as PaymentMethod[];
+  if (savedKeys.length === 0) return 'silent';
+
+  const nextMethods = next.methods ?? {};
+  const removed = savedKeys.some(k => !(k in nextMethods));
+  const changed = savedKeys.some(k => k in nextMethods && savedMethods[k] !== nextMethods[k]);
+  const defaultMoved = resolveDefaultMethod(saved) !== resolveDefaultMethod(next);
+
+  return removed || changed || defaultMoved ? 'confirm' : 'silent';
+}

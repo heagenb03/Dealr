@@ -20,7 +20,7 @@ import HelpHint from '@/components/HelpHint';
 import { ACTIVE_GAME_TOPIC_IDS, getTopicsByIds } from '@/constants/helpTopics';
 import { GameService } from '@/services/gameService';
 import { getSettlements, calculateBankerSettlements } from '@/services/settlementService';
-import { Player, PlayerBalance, Validation, PreferredPayment } from '@/types/game';
+import { Player, PlayerBalance, Validation, PaymentCarrier } from '@/types/game';
 import { incrementProfileStats } from '@/services/firebaseService';
 import { isValidNumericInput } from '@/utils/validationUtils';
 import { loadSavedPlayers, SavedPlayer, savedCapFor, canAddMoreSavedPlayers, getSavedPlayersByName, getSavedPlayerById, createSavedPlayer, updateSavedPlayer } from '@/services/savedPlayersService';
@@ -44,7 +44,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, fromLegacyPayment } from '@/utils/paymentMethods';
+import { resolvePayment, resolveDefaultMethod, paymentWriteBackAction } from '@/utils/paymentMethods';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo, postAddFocusTarget, addedConfirmationPlacement } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 import { addPlayerCardMaxHeight } from '@/utils/modalCardHeight';
@@ -490,9 +490,6 @@ export default function ActiveGameScreen() {
   const [showPaymentEditor, setShowPaymentEditor] = useState(false);
   const [paymentPlayer, setPaymentPlayer] = useState<Player | null>(null);
 
-  const samePayment = (a: PreferredPayment, b: PreferredPayment): boolean =>
-    a.method === b.method && (a.handle ?? '') === (b.handle ?? '');
-
   const handleCreateNewGame = async () => {
     try {
       await createGame(DEFAULT_GAME_NAME);
@@ -508,31 +505,33 @@ export default function ActiveGameScreen() {
     setShowPaymentEditor(true);
   }, []);
 
-  const handleSavePayment = async (pref: PreferredPayment) => {
+  const handleSavePayment = async (payment: PaymentCarrier) => {
     if (!paymentPlayer || !activeGame) return;
     const idx = activeGame.players.findIndex(p => p.id === paymentPlayer.id);
-    if (idx !== -1) activeGame.players[idx] = { ...activeGame.players[idx], preferredPayment: pref };
+    if (idx !== -1) {
+      // Drop any stray legacy field — preferredPayment is derived only at the storage
+      // serialize boundary, never carried in memory (see paymentMethods.ts).
+      const { preferredPayment: _drop, ...rest } = activeGame.players[idx];
+      activeGame.players[idx] = { ...rest, methods: payment.methods, defaultMethod: payment.defaultMethod };
+    }
     await updateGame(activeGame);
 
     // Write back to the SAVED list only through an explicit binding (savedPlayerId) — never
-    // guess by name. Fill an empty saved payment silently; confirm before overwriting a set one.
+    // guess by name. paymentWriteBackAction decides silent vs confirm vs skip (spec §4).
     const sid = (idx !== -1 ? activeGame.players[idx]?.savedPlayerId : undefined) ?? paymentPlayer.savedPlayerId;
     if (uid && sid) {
       const saved = await getSavedPlayerById(uid, sid);
       if (saved) {
-        // saved.preferredPayment is always undefined now (derived only at the storage
-        // serialize boundary — see savedPlayersService.ts) — resolve through methods/
-        // defaultMethod for the "already has a payment set" check.
-        const savedPref = resolvePayment(saved);
-        if (!savedPref) {
-          updateSavedPlayer(uid, sid, fromLegacyPayment(pref)).catch(() => {});
-        } else if (!samePayment(savedPref, pref)) {
+        const action = paymentWriteBackAction(saved, payment);
+        if (action === 'silent') {
+          updateSavedPlayer(uid, sid, payment).catch(() => {});
+        } else if (action === 'confirm') {
           Alert.alert(
             'Update saved player?',
             `Also update ${saved.name}'s saved payment for next time?`,
             [
               { text: 'Just this game', style: 'cancel' },
-              { text: 'Update saved', onPress: () => { updateSavedPlayer(uid, sid, fromLegacyPayment(pref)).catch(() => {}); } },
+              { text: 'Update saved', onPress: () => { updateSavedPlayer(uid, sid, payment).catch(() => {}); } },
             ],
           );
         }
@@ -1019,9 +1018,14 @@ export default function ActiveGameScreen() {
 
       let savedId: string | undefined = bound?.id;
       // bound.preferredPayment is always undefined (derived only at the storage serialize
-      // boundary) — resolve through methods/defaultMethod so a saved player's payment still
-      // carries over onto the new in-game player.
-      const payment = resolvePayment(bound);
+      // boundary) — carry the whole methods map/defaultMethod over onto the new in-game
+      // player, not just the resolved single default, so every method the saved player has
+      // survives the seed (not only the one the Pay button would use).
+      const methods = bound?.methods;
+      const defaultMethod = bound?.defaultMethod;
+      // resolveDefaultMethod, not a bare `methods` truthy check: an empty {} map (no keys)
+      // must NOT seed a hollow methods object onto the new player.
+      const hasPayment = !!resolveDefaultMethod(bound);
 
       if (uid) {
         if (bound) {
@@ -1032,12 +1036,12 @@ export default function ActiveGameScreen() {
         }
       }
 
-      if (savedId || payment) {
+      if (savedId || hasPayment) {
         const i = activeGame.players.findIndex(p => p.id === player.id);
         if (i !== -1) {
           activeGame.players[i] = {
             ...activeGame.players[i],
-            ...(payment ? { preferredPayment: payment } : {}),
+            ...(hasPayment ? { methods, defaultMethod } : {}),
             ...(savedId ? { savedPlayerId: savedId } : {}),
           };
         }
@@ -1436,15 +1440,20 @@ export default function ActiveGameScreen() {
       const saved = matches.length === 1 ? matches[0] : undefined;
       const i = activeGame!.players.findIndex(p => p.id === selectedPlayer.id);
       if (i !== -1) {
-        const { preferredPayment, savedPlayerId, ...rest } = activeGame!.players[i];
-        // saved.preferredPayment is always undefined (derived only at the storage serialize
-        // boundary) — resolve through methods/defaultMethod.
-        const savedPref = resolvePayment(saved);
+        // Drop the OLD name's binding and payment wholesale — preferredPayment is derived
+        // only at the storage serialize boundary (never carried in memory), and methods/
+        // defaultMethod/savedPlayerId all belong to whichever saved entry the NEW name
+        // resolves to, not the old one.
+        const { preferredPayment, methods: _oldMethods, defaultMethod: _oldDefault, savedPlayerId, ...rest } =
+          activeGame!.players[i];
+        // resolveDefaultMethod, not a bare `saved.methods` truthy check: an empty {} map
+        // (no keys) must NOT reseed a hollow methods object onto the renamed player.
+        const hasPayment = !!resolveDefaultMethod(saved);
         activeGame!.players[i] = saved
           ? {
               ...rest,
               savedPlayerId: saved.id,
-              ...(savedPref ? { preferredPayment: savedPref } : {}),
+              ...(hasPayment ? { methods: saved.methods, defaultMethod: saved.defaultMethod } : {}),
             }
           : rest;
       }
