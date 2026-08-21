@@ -1021,7 +1021,7 @@ export default function ActiveGameScreen() {
       // bound.preferredPayment is always undefined (derived only at the storage serialize
       // boundary) — resolve through methods/defaultMethod so a saved player's payment still
       // carries over onto the new in-game player.
-      const payment = resolvePayment(bound ?? undefined);
+      const payment = resolvePayment(bound);
 
       if (uid) {
         if (bound) {

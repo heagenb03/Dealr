@@ -705,5 +705,33 @@ describe('payment carrier persistence (Task 3)', () => {
       method: 'venmo',
       handle: 'm',
     });
+    // Same coverage for the Firestore push (pushRemote, savedPlayersService.ts:199) — a
+    // separate serialize point from writeLocal above. loadSavedPlayers fires pushRemote
+    // synchronously before resolving onRemoteUpdate (see loadSavedPlayers), so the mock's
+    // last call is already populated by the time the awaited promise above settles.
+    const pushedPlayers = (saveSavedPlayersToFirestore as jest.Mock).mock.calls.at(-1)![1];
+    expect(pushedPlayers.find((p: SavedPlayer) => p.id === 'sp_1').preferredPayment).toEqual({
+      method: 'venmo',
+      handle: 'm',
+    });
+  });
+
+  // R-4: the legacy-key migration write (readLocal, savedPlayersService.ts:151) is a THIRD
+  // distinct serialize point from writeLocal/pushRemote above — it used to be a direct
+  // AsyncStorage.setItem, now routed through writeLocal. None of the pre-existing
+  // legacy-migration tests carry a payment, so none of them would notice this line
+  // regressing back to a bare setItem. Fixture supplies methods/defaultMethod and NO
+  // preferredPayment so derivation must actually run.
+  it('derives a preferredPayment for a 2.0.2 reader when migrating a legacy-key entry that has methods', async () => {
+    await AsyncStorage.setItem(
+      LEGACY_KEY,
+      JSON.stringify([{ id: 'sp_1', name: 'Mike', methods: { venmo: 'm' }, defaultMethod: 'venmo' }]),
+    );
+    await getSavedPlayerNames(A); // triggers the one-time legacy-key migration
+    const raw = JSON.parse((await AsyncStorage.getItem(`saved_player_names:${A}`)) as string);
+    expect(raw.find((p: SavedPlayer) => p.id === 'sp_1').preferredPayment).toEqual({
+      method: 'venmo',
+      handle: 'm',
+    });
   });
 });

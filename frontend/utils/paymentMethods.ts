@@ -9,7 +9,7 @@ const ORDER: PaymentMethod[] = PAYMENT_METHODS.map(m => m.key);
  * present in the map; otherwise falls back to the first present key in PAYMENT_METHODS
  * declaration order, so a carrier that lost its default is never left with nothing.
  */
-export function resolveDefaultMethod(c: PaymentCarrier | undefined): PaymentMethod | undefined {
+export function resolveDefaultMethod(c: PaymentCarrier | null | undefined): PaymentMethod | undefined {
   const methods = c?.methods;
   if (!methods) return undefined;
   const explicit = c?.defaultMethod;
@@ -24,7 +24,7 @@ export function resolveDefaultMethod(c: PaymentCarrier | undefined): PaymentMeth
  * `handle` is omitted rather than set to undefined when empty: Firestore rejects undefined
  * values, and sharedGameSnapshot.ts builds its map the same way for the same reason.
  */
-export function resolvePayment(c: PaymentCarrier | undefined): PreferredPayment | undefined {
+export function resolvePayment(c: PaymentCarrier | null | undefined): PreferredPayment | undefined {
   const method = resolveDefaultMethod(c);
   if (!method) return undefined;
   const handle = c?.methods?.[method] ?? '';
