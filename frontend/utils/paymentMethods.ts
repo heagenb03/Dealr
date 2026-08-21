@@ -159,3 +159,18 @@ export function paymentWriteBackAction(
 
   return removed || changed || defaultMoved ? 'confirm' : 'silent';
 }
+
+/**
+ * The payload to actually persist for a 'silent' or 'confirm' write-back.
+ *
+ * `updateSavedPlayer`'s whole-map-replace patch treats an ABSENT `methods` key as "not
+ * patching payment at all" — that is its own recency-bump convention
+ * (`updateSavedPlayer(uid, sid, {})`), documented in savedPlayersService.ts. But when the
+ * editor's carrier was emptied out (every handle cleared, so `applyPaymentInvariant`
+ * returned `{}` with no `methods` key), a write-back means "clear the saved entry too",
+ * which needs an EXPLICIT empty map to actually replace what was there — passing the bare
+ * `{}` straight through would silently keep the saved player's old payment.
+ */
+export function paymentWriteBackPatch(payment: PaymentCarrier): PaymentCarrier {
+  return payment.methods ? payment : { methods: {} };
+}

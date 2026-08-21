@@ -1,4 +1,4 @@
-import { paymentWriteBackAction } from '@/utils/paymentMethods';
+import { paymentWriteBackAction, paymentWriteBackPatch } from '@/utils/paymentMethods';
 
 const V = { methods: { venmo: 'v' }, defaultMethod: 'venmo' as const };
 
@@ -50,5 +50,20 @@ describe('paymentWriteBackAction', () => {
     const saved = { methods: { venmo: 'v' } };
     const next = { methods: { venmo: 'v' }, defaultMethod: 'venmo' as const };
     expect(paymentWriteBackAction(saved, next)).toBe('skip');
+  });
+});
+
+describe('paymentWriteBackPatch', () => {
+  // updateSavedPlayer's whole-map-replace treats an ABSENT `methods` key as "not patching
+  // payment" (its own recency-bump convention: updateSavedPlayer(uid, sid, {})). A write-back
+  // whose carrier was emptied out by the editor (every handle cleared) must still turn into an
+  // explicit clear, not a silent no-op — see the note in active.tsx's handleSavePayment.
+
+  it('passes a non-empty carrier through unchanged', () => {
+    expect(paymentWriteBackPatch(V)).toEqual(V);
+  });
+
+  it('turns a fully-cleared carrier into an explicit empty methods map', () => {
+    expect(paymentWriteBackPatch({})).toEqual({ methods: {} });
   });
 });

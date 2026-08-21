@@ -44,7 +44,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, resolveDefaultMethod, paymentWriteBackAction } from '@/utils/paymentMethods';
+import { resolvePayment, resolveDefaultMethod, paymentWriteBackAction, paymentWriteBackPatch } from '@/utils/paymentMethods';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo, postAddFocusTarget, addedConfirmationPlacement } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 import { addPlayerCardMaxHeight } from '@/utils/modalCardHeight';
@@ -523,15 +523,21 @@ export default function ActiveGameScreen() {
       const saved = await getSavedPlayerById(uid, sid);
       if (saved) {
         const action = paymentWriteBackAction(saved, payment);
+        // updateSavedPlayer's whole-map-replace treats an ABSENT `methods` key as "don't
+        // touch payment" (its recency-bump convention) — so a fully-cleared editor result
+        // (payment = {}, no `methods` key) must NOT be passed through as-is, or a confirmed
+        // "clear the saved payment too" silently does nothing. paymentWriteBackPatch turns
+        // that case into an explicit empty map so the replace actually clears it.
+        const patch = paymentWriteBackPatch(payment);
         if (action === 'silent') {
-          updateSavedPlayer(uid, sid, payment).catch(() => {});
+          updateSavedPlayer(uid, sid, patch).catch(() => {});
         } else if (action === 'confirm') {
           Alert.alert(
             'Update saved player?',
             `Also update ${saved.name}'s saved payment for next time?`,
             [
               { text: 'Just this game', style: 'cancel' },
-              { text: 'Update saved', onPress: () => { updateSavedPlayer(uid, sid, payment).catch(() => {}); } },
+              { text: 'Update saved', onPress: () => { updateSavedPlayer(uid, sid, patch).catch(() => {}); } },
             ],
           );
         }
