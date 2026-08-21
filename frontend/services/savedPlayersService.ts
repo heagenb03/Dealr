@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PreferredPayment } from '@/types/game';
+import { PaymentCarrier, PaymentHandles, PaymentMethod, PreferredPayment } from '@/types/game';
+import { withLegacyPaymentList, withSynthesizedMethods } from '@/utils/paymentMethods';
 import {
   saveSavedPlayersToFirestore,
   fetchSavedPlayersFromFirestore,
@@ -50,6 +51,8 @@ export interface SavedPlayer {
   id: string;
   name: string;
   preferredPayment?: PreferredPayment;
+  methods?: PaymentHandles;
+  defaultMethod?: PaymentMethod;
   /** Epoch ms of the last edit; tie-breaker for cross-device union merge. */
   updatedAt?: number;
 }
@@ -72,14 +75,23 @@ export function legacyIdFor(name: string): string {
 function coerce(entry: unknown): SavedPlayer | null {
   if (typeof entry === 'string') return { id: legacyIdFor(entry), name: entry };
   if (entry && typeof entry === 'object' && typeof (entry as any).name === 'string') {
-    const e = entry as { id?: string; name: string; preferredPayment?: PreferredPayment; updatedAt?: number };
+    const e = entry as {
+      id?: string;
+      name: string;
+      preferredPayment?: PreferredPayment;
+      methods?: PaymentHandles;
+      defaultMethod?: PaymentMethod;
+      updatedAt?: number;
+    };
     const out: SavedPlayer = {
       id: typeof e.id === 'string' && e.id ? e.id : legacyIdFor(e.name),
       name: e.name,
     };
     if (e.preferredPayment) out.preferredPayment = e.preferredPayment;
+    if (e.methods) out.methods = e.methods;
+    if (e.defaultMethod) out.defaultMethod = e.defaultMethod;
     if (typeof e.updatedAt === 'number') out.updatedAt = e.updatedAt;
-    return out;
+    return withSynthesizedMethods(out);
   }
   return null;
 }
@@ -133,13 +145,21 @@ async function readLocal(uid: string): Promise<SavedPlayer[]> {
 
   const now = Date.now();
   const migrated = parseList(legacy).map(p => (p.updatedAt ? p : { ...p, updatedAt: now }));
-  await AsyncStorage.setItem(keyFor(uid), JSON.stringify(migrated));
+  // Route through writeLocal (not a direct setItem) so the migrated list gets the same
+  // derived-preferredPayment dual-write every other local write gets (spec §2) — `migrated`
+  // came from parseList -> coerce, which already stripped the legacy field on the way in.
+  await writeLocal(uid, migrated);
   await AsyncStorage.removeItem(LEGACY_KEY);
   return migrated;
 }
 
+/**
+ * Attaches the derived legacy `preferredPayment` to each entry before it hits storage (spec
+ * §2's dual-write, applied at the serialize boundary rather than inside whichever function
+ * built the entry — every local write funnels through here, so no write path can forget it).
+ */
 async function writeLocal(uid: string, players: SavedPlayer[]): Promise<void> {
-  await AsyncStorage.setItem(keyFor(uid), JSON.stringify(players));
+  await AsyncStorage.setItem(keyFor(uid), JSON.stringify(withLegacyPaymentList(players)));
 }
 
 /** Read the uid-scoped tombstone map ({} when absent or malformed). */
@@ -176,7 +196,7 @@ async function commit(uid: string, players: SavedPlayer[], tombstones: Tombstone
 
 /** Push the full list + tombstones to Firestore (fire-and-forget; offline is swallowed). */
 function pushRemote(uid: string, players: SavedPlayer[], tombstones: Tombstones): void {
-  saveSavedPlayersToFirestore(uid, players, tombstones).catch(err => {
+  saveSavedPlayersToFirestore(uid, withLegacyPaymentList(players), tombstones).catch(err => {
     if (isFirestoreOfflineError(err)) {
       console.debug('savedPlayers: skipping Firestore save — device offline');
       return;
@@ -298,7 +318,7 @@ export async function getSavedPlayersByName(uid: string, name: string): Promise<
 export async function createSavedPlayer(
   uid: string,
   name: string,
-  preferredPayment?: PreferredPayment,
+  payment?: PaymentCarrier,
   limit: number = PRO_SAVED_CAP,
 ): Promise<{ ok: true; id: string } | { ok: false; reason: 'full' | 'empty' | 'duplicate' }> {
   const trimmed = name.trim();
@@ -314,7 +334,14 @@ export async function createSavedPlayer(
     }
     if (current.length >= limit) return { ok: false, reason: 'full' } as const;
     const entry: SavedPlayer = { id: newSavedPlayerId(), name: trimmed, updatedAt: Date.now() };
-    if (preferredPayment) entry.preferredPayment = preferredPayment;
+    // preferredPayment is NOT assigned here — it is derived at the writeLocal/pushRemote
+    // serialize boundary (spec §2), never carried in memory. Assigning it here would leak:
+    // any write path that builds an entry a different way (there are none today, but the
+    // point is that a NEW one wouldn't have to remember this) would silently drop it.
+    if (payment?.methods) {
+      entry.methods = payment.methods;
+      entry.defaultMethod = payment.defaultMethod;
+    }
     const next = [entry, ...current];
     const tombstones = clearTombstone(await readTombstones(uid), entry.id);
     await commit(uid, next, tombstones);
@@ -326,7 +353,7 @@ export async function createSavedPlayer(
 export async function updateSavedPlayer(
   uid: string,
   id: string,
-  patch: { name?: string; preferredPayment?: PreferredPayment },
+  patch: { name?: string } & PaymentCarrier,
 ): Promise<boolean> {
   return enqueue(async () => {
     const current = await readLocal(uid);
@@ -344,8 +371,16 @@ export async function updateSavedPlayer(
       name: patch.name?.trim() ? patch.name.trim() : prev.name,
       updatedAt: Date.now(),
     };
-    const pay = patch.preferredPayment ?? prev.preferredPayment;
-    if (pay) updated.preferredPayment = pay;
+    // Whole-map replace, not a per-key union (spec §4). `patch.methods === undefined` means
+    // "not patching payment" — e.g. the recency-bump call updateSavedPlayer(uid, sid, {}).
+    // preferredPayment is derived at the serialize boundary (see writeLocal/pushRemote), not
+    // assigned here — see the note in createSavedPlayer.
+    const methods = patch.methods ?? prev.methods;
+    const defaultMethod = patch.methods ? patch.defaultMethod : prev.defaultMethod;
+    if (methods) {
+      updated.methods = methods;
+      updated.defaultMethod = defaultMethod;
+    }
     const next = current.map((p, i) => (i === idx ? updated : p));
     const tombstones = clearTombstone(await readTombstones(uid), id);
     await commit(uid, next, tombstones);
@@ -384,7 +419,7 @@ export async function deleteSavedPlayersByIds(uid: string, ids: string[]): Promi
 export async function savePlayer(
   uid: string,
   name: string,
-  preferredPayment?: PreferredPayment,
+  payment?: PaymentCarrier,
   limit: number = PRO_SAVED_CAP,
   opts?: { updateOnly?: boolean },
 ): Promise<void> {
@@ -395,8 +430,14 @@ export async function savePlayer(
     if (!existing && opts?.updateOnly) return; // update-only: never create an entry
     if (!existing && current.length >= limit) return; // list full — do not add a new name
     const merged: SavedPlayer = { id: existing?.id ?? legacyIdFor(name), name, updatedAt: Date.now() };
-    const pay = preferredPayment ?? existing?.preferredPayment;
-    if (pay) merged.preferredPayment = pay;
+    // Whole-map replace, not a per-key union (spec §4); preferredPayment is derived at the
+    // serialize boundary, not assigned here — see the note in createSavedPlayer.
+    const methods = payment?.methods ?? existing?.methods;
+    const defaultMethod = payment?.methods ? payment.defaultMethod : existing?.defaultMethod;
+    if (methods) {
+      merged.methods = methods;
+      merged.defaultMethod = defaultMethod;
+    }
     const deduped = [merged, ...current.filter(p => p.name.toLowerCase() !== lower)];
     const tombstones = clearTombstone(await readTombstones(uid), merged.id);
     await commit(uid, deduped, tombstones);

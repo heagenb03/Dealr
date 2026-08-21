@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SavedPlayer } from '@/services/savedPlayersService';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
+import { resolvePayment, paymentSignature } from '@/utils/paymentMethods';
 
 interface SavedPlayerCardProps {
   player: SavedPlayer;
@@ -51,11 +52,12 @@ const SavedPlayerCard: React.FC<SavedPlayerCardProps> = ({
     </TouchableOpacity>
   ), [player, onDelete]);
 
-  const badge = player.preferredPayment
-    ? `${getPaymentMethodMeta(player.preferredPayment.method).label}${
-        player.preferredPayment.handle
-          ? ` · ${formatHandleForDisplay(player.preferredPayment.method, player.preferredPayment.handle)}`
-          : ''
+  // player.preferredPayment is always undefined (derived only at the storage serialize
+  // boundary — see savedPlayersService.ts) — resolve the badge from methods/defaultMethod.
+  const legacy = resolvePayment(player);
+  const badge = legacy
+    ? `${getPaymentMethodMeta(legacy.method).label}${
+        legacy.handle ? ` · ${formatHandleForDisplay(legacy.method, legacy.handle)}` : ''
       }`
     : null;
 
@@ -167,7 +169,9 @@ const styles = StyleSheet.create({
 
 export default React.memo(SavedPlayerCard, (prev, next) =>
   prev.player.name === next.player.name &&
-  prev.player.preferredPayment?.method === next.player.preferredPayment?.method &&
-  prev.player.preferredPayment?.handle === next.player.preferredPayment?.handle &&
+  // player.preferredPayment is always undefined now (derived only at the storage serialize
+  // boundary), so comparing it directly would always read equal and mask a payment change —
+  // paymentSignature compares the actual methods/defaultMethod map instead.
+  paymentSignature(prev.player) === paymentSignature(next.player) &&
   prev.reduceMotion === next.reduceMotion,
 );

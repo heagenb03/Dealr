@@ -101,6 +101,22 @@ export function withLegacyPayment(game: Game): Game {
 }
 
 /**
+ * List-level counterpart to withLegacyPayment for a flat array of payment carriers (e.g. the
+ * saved-players pool, which has no nested `players` array to map over). Same dual-write rule
+ * (spec §2): attach the derived legacy `preferredPayment` to each entry at the serialize
+ * boundary — never carry it in memory, and never assign it inside a function that builds an
+ * entry, or any write path that doesn't go through that function loses the legacy field.
+ */
+export function withLegacyPaymentList<T extends PaymentCarrier>(
+  list: T[],
+): (T & { preferredPayment?: PreferredPayment })[] {
+  return list.map(p => {
+    const legacy = resolvePayment(p);
+    return legacy ? { ...p, preferredPayment: legacy } : p;
+  });
+}
+
+/**
  * Fill in methods/defaultMethod on the way IN, for a record written before this feature
  * (or by a 2.0.2 device, which strips the new fields on write). Stored methods win: a
  * legacy field written by an old client is by definition not newer information.

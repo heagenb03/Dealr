@@ -34,6 +34,7 @@ import {
 import { PreferredPayment, Player } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
+import { resolvePayment, fromLegacyPayment } from '@/utils/paymentMethods';
 import { savedCapCounter, savedCapPaywallMessage } from '@/utils/capCopy';
 import { buildSavedPlayersListData, SavedPlayersListItem } from '@/utils/savedPlayersListData';
 
@@ -42,9 +43,13 @@ type PaymentTarget =
   | { kind: 'add' }
   | null;
 
+// SavedPlayer no longer carries preferredPayment in memory (it's derived only at the
+// storage/Firestore serialize boundary — see savedPlayersService.ts) — read the resolved
+// default through resolvePayment instead of the field directly.
 function badgeText(p: SavedPlayer): string | null {
-  if (!p.preferredPayment) return null;
-  const { method, handle } = p.preferredPayment;
+  const legacy = resolvePayment(p);
+  if (!legacy) return null;
+  const { method, handle } = legacy;
   const label = getPaymentMethodMeta(method).label;
   return handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
 }
@@ -215,7 +220,7 @@ export default function SavedPlayersScreen() {
           setShowAdd(false);
           return;
         }
-        await savePlayer(uid, name, payment, cap);
+        await savePlayer(uid, name, fromLegacyPayment(payment), cap);
         setShowAdd(false);
         reload();
       } catch {
@@ -264,7 +269,10 @@ export default function SavedPlayersScreen() {
     if (!paymentTarget) return null;
     if (paymentTarget.kind === 'edit') {
       const p = paymentTarget.player;
-      return { id: p.name, name: p.name, preferredPayment: p.preferredPayment };
+      // p.preferredPayment is always undefined (derived-only field) — resolve through
+      // methods/defaultMethod so the editor opens seeded with the player's actual payment
+      // instead of empty (which would silently overwrite it with whatever the user types).
+      return { id: p.name, name: p.name, preferredPayment: resolvePayment(p) };
     }
     // kind === 'add' — snapshot the add form at open time.
     return { id: 'add', name: addName || 'Player', preferredPayment: addPayment };
@@ -275,7 +283,7 @@ export default function SavedPlayersScreen() {
     (pref: PreferredPayment) => {
       if (!paymentTarget) return;
       if (paymentTarget.kind === 'edit') {
-        if (uid) updateSavedPlayer(uid, paymentTarget.player.id, { preferredPayment: pref }).then(() => {
+        if (uid) updateSavedPlayer(uid, paymentTarget.player.id, fromLegacyPayment(pref)).then(() => {
           setPaymentTarget(null);
           reload();
         });

@@ -44,6 +44,7 @@ import { EXACT_CASH_UNIT, resolveCashUnit } from '@/constants/CashUnits';
 import { computeRoundingDistortion, PlayerDistortion } from '@/utils/roundingUtils';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
+import { resolvePayment, fromLegacyPayment } from '@/utils/paymentMethods';
 import { isNameTakenInGame, matchSavedByExactName, filterSavedByQuery, formatAddedConfirmation, singleExactSavedMatch, shouldShowAddedConfirmation, sortSavedByName, findPlayerByName, isLosslessUndo, postAddFocusTarget, addedConfirmationPlacement } from '@/utils/addPlayer';
 import { formatSettingsSummary, toleranceCaption } from '@/utils/settingsSummary';
 import { addPlayerCardMaxHeight } from '@/utils/modalCardHeight';
@@ -67,8 +68,11 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 // render, which would put an unstable value in the picker useMemo's dep array and rebuild
 // the list data on every keystroke. The body closes over nothing but imports.
 const savedBadge = (p: SavedPlayer): string | null => {
-  if (!p.preferredPayment) return null;
-  const { method, handle } = p.preferredPayment;
+  // p.preferredPayment is always undefined (derived only at the storage serialize boundary —
+  // see savedPlayersService.ts) — resolve through methods/defaultMethod instead.
+  const legacy = resolvePayment(p);
+  if (!legacy) return null;
+  const { method, handle } = legacy;
   const label = getPaymentMethodMeta(method).label;
   return handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
 };
@@ -516,15 +520,19 @@ export default function ActiveGameScreen() {
     if (uid && sid) {
       const saved = await getSavedPlayerById(uid, sid);
       if (saved) {
-        if (!saved.preferredPayment) {
-          updateSavedPlayer(uid, sid, { preferredPayment: pref }).catch(() => {});
-        } else if (!samePayment(saved.preferredPayment, pref)) {
+        // saved.preferredPayment is always undefined now (derived only at the storage
+        // serialize boundary — see savedPlayersService.ts) — resolve through methods/
+        // defaultMethod for the "already has a payment set" check.
+        const savedPref = resolvePayment(saved);
+        if (!savedPref) {
+          updateSavedPlayer(uid, sid, fromLegacyPayment(pref)).catch(() => {});
+        } else if (!samePayment(savedPref, pref)) {
           Alert.alert(
             'Update saved player?',
             `Also update ${saved.name}'s saved payment for next time?`,
             [
               { text: 'Just this game', style: 'cancel' },
-              { text: 'Update saved', onPress: () => { updateSavedPlayer(uid, sid, { preferredPayment: pref }).catch(() => {}); } },
+              { text: 'Update saved', onPress: () => { updateSavedPlayer(uid, sid, fromLegacyPayment(pref)).catch(() => {}); } },
             ],
           );
         }
@@ -1010,7 +1018,10 @@ export default function ActiveGameScreen() {
       const player = GameService.addPlayer(activeGame, name);
 
       let savedId: string | undefined = bound?.id;
-      const payment = bound?.preferredPayment;
+      // bound.preferredPayment is always undefined (derived only at the storage serialize
+      // boundary) — resolve through methods/defaultMethod so a saved player's payment still
+      // carries over onto the new in-game player.
+      const payment = resolvePayment(bound ?? undefined);
 
       if (uid) {
         if (bound) {
@@ -1426,11 +1437,14 @@ export default function ActiveGameScreen() {
       const i = activeGame!.players.findIndex(p => p.id === selectedPlayer.id);
       if (i !== -1) {
         const { preferredPayment, savedPlayerId, ...rest } = activeGame!.players[i];
+        // saved.preferredPayment is always undefined (derived only at the storage serialize
+        // boundary) — resolve through methods/defaultMethod.
+        const savedPref = resolvePayment(saved);
         activeGame!.players[i] = saved
           ? {
               ...rest,
               savedPlayerId: saved.id,
-              ...(saved.preferredPayment ? { preferredPayment: saved.preferredPayment } : {}),
+              ...(savedPref ? { preferredPayment: savedPref } : {}),
             }
           : rest;
       }

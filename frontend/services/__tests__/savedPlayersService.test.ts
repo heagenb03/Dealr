@@ -40,6 +40,7 @@ import {
   newSavedPlayerId,
 } from '@/services/savedPlayersService';
 import { fetchSavedPlayersFromFirestore, saveSavedPlayersToFirestore } from '@/services/firebaseService';
+import { resolvePayment } from '@/utils/paymentMethods';
 
 const LEGACY_KEY = 'saved_player_names';
 const A = 'userA';
@@ -119,7 +120,7 @@ describe('coercion of stored entries', () => {
     );
     const players = await getSavedPlayers(A);
     expect(players[0]).toEqual({ id: 'legacy:alice', name: 'Alice' });
-    expect(players[1].preferredPayment?.handle).toBe('@bob');
+    expect(resolvePayment(players[1])?.handle).toBe('@bob');
   });
 });
 
@@ -181,15 +182,15 @@ describe('unionMerge keyed by id', () => {
 
 describe('savePlayer / getSavedPlayer', () => {
   it('persists a payment and finds it case-insensitively', async () => {
-    await savePlayer(A, 'Alice', { method: 'venmo', handle: '@alice' });
+    await savePlayer(A, 'Alice', { methods: { venmo: '@alice' }, defaultMethod: 'venmo' });
     const found = await getSavedPlayer(A, 'alice');
-    expect(found?.preferredPayment).toEqual({ method: 'venmo', handle: '@alice' });
+    expect(resolvePayment(found)).toEqual({ method: 'venmo', handle: '@alice' });
   });
 
   it('without a payment preserves an existing one', async () => {
-    await savePlayer(A, 'Alice', { method: 'venmo', handle: '@alice' });
+    await savePlayer(A, 'Alice', { methods: { venmo: '@alice' }, defaultMethod: 'venmo' });
     await savePlayer(A, 'Alice');
-    expect((await getSavedPlayer(A, 'Alice'))?.preferredPayment?.handle).toBe('@alice');
+    expect(resolvePayment(await getSavedPlayer(A, 'Alice'))?.handle).toBe('@alice');
   });
 
   it('stamps updatedAt on save', async () => {
@@ -217,7 +218,7 @@ describe('delete', () => {
 
 describe('addSavedPlayers', () => {
   it('adds new entries and merges duplicates (updating payment)', async () => {
-    await savePlayer(A, 'Alice', { method: 'venmo', handle: 'alice' });
+    await savePlayer(A, 'Alice', { methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
     const res = await addSavedPlayers(
       A,
       [
@@ -227,7 +228,7 @@ describe('addSavedPlayers', () => {
       { limit: PRO_SAVED_CAP },
     );
     expect(res).toEqual({ added: 1, updated: 1, skippedFull: 0 });
-    expect((await getSavedPlayer(A, 'Alice'))?.preferredPayment).toEqual({
+    expect(resolvePayment(await getSavedPlayer(A, 'Alice'))).toEqual({
       method: 'cashapp',
       handle: 'aliceC',
     });
@@ -252,13 +253,13 @@ describe('cap semantics', () => {
 
   it('savePlayer updates an existing entry even at/over the limit', async () => {
     await addSavedPlayers(A, [{ name: 'A' }, { name: 'B' }], { limit: 2 });
-    await savePlayer(A, 'A', { method: 'venmo', handle: 'a' }, 2);
-    expect((await getSavedPlayer(A, 'A'))?.preferredPayment).toEqual({ method: 'venmo', handle: 'a' });
+    await savePlayer(A, 'A', { methods: { venmo: 'a' }, defaultMethod: 'venmo' }, 2);
+    expect(resolvePayment(await getSavedPlayer(A, 'A'))).toEqual({ method: 'venmo', handle: 'a' });
   });
 
   it('never truncates existing entries above the limit', async () => {
     await addSavedPlayers(A, [{ name: 'A' }, { name: 'B' }, { name: 'C' }], { limit: PRO_SAVED_CAP });
-    await savePlayer(A, 'A', { method: 'venmo', handle: 'a' }, 2);
+    await savePlayer(A, 'A', { methods: { venmo: 'a' }, defaultMethod: 'venmo' }, 2);
     expect((await getSavedPlayers(A)).length).toBe(3);
   });
 
@@ -271,20 +272,20 @@ describe('cap semantics', () => {
 describe('savePlayer updateOnly (in-game payment editor path)', () => {
   it('updates an existing entry\'s payment', async () => {
     await savePlayer(A, 'Alice');
-    await savePlayer(A, 'Alice', { method: 'venmo', handle: '@alice' }, PRO_SAVED_CAP, { updateOnly: true });
-    expect((await getSavedPlayer(A, 'Alice'))?.preferredPayment?.handle).toBe('@alice');
+    await savePlayer(A, 'Alice', { methods: { venmo: '@alice' }, defaultMethod: 'venmo' }, PRO_SAVED_CAP, { updateOnly: true });
+    expect(resolvePayment(await getSavedPlayer(A, 'Alice'))?.handle).toBe('@alice');
   });
 
   it('never creates a new entry, even under the cap', async () => {
-    await savePlayer(A, 'Ghost', { method: 'venmo', handle: '@g' }, PRO_SAVED_CAP, { updateOnly: true });
+    await savePlayer(A, 'Ghost', { methods: { venmo: '@g' }, defaultMethod: 'venmo' }, PRO_SAVED_CAP, { updateOnly: true });
     expect(await getSavedPlayer(A, 'Ghost')).toBeUndefined();
     expect(await getSavedPlayers(A)).toEqual([]);
   });
 
   it('still updates an existing entry when the list is at the limit', async () => {
     await addSavedPlayers(A, [{ name: 'A' }, { name: 'B' }], { limit: 2 });
-    await savePlayer(A, 'A', { method: 'cashapp', handle: 'a' }, 2, { updateOnly: true });
-    expect((await getSavedPlayer(A, 'A'))?.preferredPayment).toEqual({ method: 'cashapp', handle: 'a' });
+    await savePlayer(A, 'A', { methods: { cashapp: 'a' }, defaultMethod: 'cashapp' }, 2, { updateOnly: true });
+    expect(resolvePayment(await getSavedPlayer(A, 'A'))).toEqual({ method: 'cashapp', handle: 'a' });
     expect((await getSavedPlayers(A)).length).toBe(2);
   });
 });
@@ -398,18 +399,18 @@ describe('duplicate-name regression (id-less remote / corrupted local)', () => {
 
 describe('id-addressed CRUD', () => {
   it('createSavedPlayer returns a new id and stores the entry', async () => {
-    const res = await createSavedPlayer(A, 'Mike', { method: 'venmo', handle: 'm' });
+    const res = await createSavedPlayer(A, 'Mike', { methods: { venmo: 'm' }, defaultMethod: 'venmo' });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const p = await getSavedPlayerById(A, res.id);
     expect(p?.name).toBe('Mike');
-    expect(p?.preferredPayment).toEqual({ method: 'venmo', handle: 'm' });
+    expect(resolvePayment(p)).toEqual({ method: 'venmo', handle: 'm' });
   });
 
   it('createSavedPlayer refuses a second saved player with the same name (case-insensitive)', async () => {
-    const a = await createSavedPlayer(A, 'Mike', { method: 'venmo', handle: 'v' });
+    const a = await createSavedPlayer(A, 'Mike', { methods: { venmo: 'v' }, defaultMethod: 'venmo' });
     expect(a.ok).toBe(true);
-    const b = await createSavedPlayer(A, 'mike', { method: 'cashapp', handle: 'c' });
+    const b = await createSavedPlayer(A, 'mike', { methods: { cashapp: 'c' }, defaultMethod: 'cashapp' });
     expect(b).toEqual({ ok: false, reason: 'duplicate' });
     expect((await getSavedPlayersByName(A, 'mike')).length).toBe(1);
   });
@@ -432,11 +433,11 @@ describe('id-addressed CRUD', () => {
   it('updateSavedPlayer patches name and payment by id, bumping updatedAt', async () => {
     const res = await createSavedPlayer(A, 'Mike');
     if (!res.ok) throw new Error('setup');
-    const ok = await updateSavedPlayer(A, res.id, { name: 'Michael', preferredPayment: { method: 'venmo', handle: 'm' } });
+    const ok = await updateSavedPlayer(A, res.id, { name: 'Michael', methods: { venmo: 'm' }, defaultMethod: 'venmo' });
     expect(ok).toBe(true);
     const p = await getSavedPlayerById(A, res.id);
     expect(p?.name).toBe('Michael');
-    expect(p?.preferredPayment).toEqual({ method: 'venmo', handle: 'm' });
+    expect(resolvePayment(p)).toEqual({ method: 'venmo', handle: 'm' });
     expect(typeof p?.updatedAt).toBe('number');
   });
 
@@ -572,13 +573,13 @@ describe('delete resurrection (tombstones)', () => {
 
 describe('renameSavedPlayer (id-based)', () => {
   it('renames by id, preserving id + payment and bumping updatedAt', async () => {
-    const res = await createSavedPlayer(A, 'Bob', { method: 'venmo', handle: '@bob' });
+    const res = await createSavedPlayer(A, 'Bob', { methods: { venmo: '@bob' }, defaultMethod: 'venmo' });
     if (!res.ok) throw new Error('setup');
     const before = (await getSavedPlayerById(A, res.id))!.updatedAt!;
     expect(await renameSavedPlayer(A, res.id, 'Bobby')).toEqual({ ok: true });
     const p = await getSavedPlayerById(A, res.id);
     expect(p?.name).toBe('Bobby');
-    expect(p?.preferredPayment).toEqual({ method: 'venmo', handle: '@bob' });
+    expect(resolvePayment(p)).toEqual({ method: 'venmo', handle: '@bob' });
     expect(p?.updatedAt).toBeGreaterThanOrEqual(before);
   });
 
@@ -627,5 +628,82 @@ describe('D1 grandfather: a downgrade never removes saved players', () => {
 
     const after = await getSavedPlayers(A);
     expect(after).toHaveLength(40);
+  });
+});
+
+describe('payment carrier persistence (Task 3)', () => {
+  it('round-trips methods and defaultMethod on a saved player', async () => {
+    const res = await createSavedPlayer(A, 'Mike', { methods: { venmo: 'm', zelle: 'm@x' }, defaultMethod: 'zelle' });
+    expect(res.ok).toBe(true);
+    const p = await getSavedPlayer(A, 'Mike');
+    expect(p?.methods).toEqual({ venmo: 'm', zelle: 'm@x' });
+    expect(p?.defaultMethod).toBe('zelle');
+  });
+
+  it('synthesizes methods when only a legacy preferredPayment was stored', async () => {
+    await AsyncStorage.setItem(
+      `saved_player_names:${A}`,
+      JSON.stringify([{ id: 'sp_1', name: 'Bob', preferredPayment: { method: 'venmo', handle: '@bob' }, updatedAt: 1 }]),
+    );
+    const p = await getSavedPlayer(A, 'Bob');
+    expect(p?.methods).toEqual({ venmo: '@bob' });
+    expect(p?.defaultMethod).toBe('venmo');
+  });
+
+  it('replaces the whole map on a same-id merge, newest updatedAt wins', () => {
+    const merged = unionMerge(
+      [{ id: 'sp_1', name: 'Mike', methods: { venmo: 'old', zelle: 'z' }, defaultMethod: 'venmo', updatedAt: 1 }],
+      [{ id: 'sp_1', name: 'Mike', methods: { cashapp: 'new' }, defaultMethod: 'cashapp', updatedAt: 9 }],
+    );
+    // Deliberately NOT a per-key union: a per-key merge cannot tell "never had it" from
+    // "deleted it", and resurrects deleted handles. See spec §4.
+    expect(merged[0].methods).toEqual({ cashapp: 'new' });
+    expect(merged[0].defaultMethod).toBe('cashapp');
+  });
+
+  it('updateSavedPlayer replaces the map wholesale', async () => {
+    const res = await createSavedPlayer(A, 'Mike', { methods: { venmo: 'm', zelle: 'z' }, defaultMethod: 'venmo' });
+    const id = (res as { ok: true; id: string }).id;
+    await updateSavedPlayer(A, id, { methods: { cashapp: 'c' }, defaultMethod: 'cashapp' });
+    const p = await getSavedPlayer(A, 'Mike');
+    expect(p?.methods).toEqual({ cashapp: 'c' });
+    expect(p?.defaultMethod).toBe('cashapp');
+  });
+
+  it('a recency-bump patch with no payment keys leaves the map untouched', async () => {
+    const res = await createSavedPlayer(A, 'Mike', { methods: { venmo: 'm' }, defaultMethod: 'venmo' });
+    const id = (res as { ok: true; id: string }).id;
+    await updateSavedPlayer(A, id, {});
+    const p = await getSavedPlayer(A, 'Mike');
+    expect(p?.methods).toEqual({ venmo: 'm' });
+  });
+
+  it('stores a derived legacy preferredPayment for a 2.0.2 reader', async () => {
+    await createSavedPlayer(A, 'Mike', { methods: { venmo: 'm', zelle: 'z' }, defaultMethod: 'zelle' });
+    const raw = JSON.parse((await AsyncStorage.getItem(`saved_player_names:${A}`)) as string);
+    expect(raw[0].preferredPayment).toEqual({ method: 'zelle', handle: 'z' });
+  });
+
+  // R-4: derivation must happen at every serialize boundary, not inside the write functions.
+  // readLocal's legacy-key migration, writeLocal itself, and pushRemote are three separate
+  // JSON.stringify/Firestore-write points; a sync-merge round trip exercises the
+  // readLocal -> parseList -> coerce -> unionMerge -> writeLocal path (savedPlayersService.ts:535-539),
+  // which is NOT one of the three functions that build the entry (createSavedPlayer/
+  // updateSavedPlayer/savePlayer). The fixture supplies methods/defaultMethod and NO
+  // preferredPayment, so derivation must actually run to produce one — a fixture that
+  // supplied preferredPayment instead would pass even with the derivation deleted.
+  it('a sync-merge round trip still leaves a derived preferredPayment in the raw store', async () => {
+    await AsyncStorage.setItem(
+      `saved_player_names:${A}`,
+      JSON.stringify([{ id: 'sp_1', name: 'Mike', methods: { venmo: 'm' }, defaultMethod: 'venmo', updatedAt: 1 }]),
+    );
+    await new Promise<SavedPlayer[]>((resolve, reject) => {
+      loadSavedPlayers(A, resolve).catch(reject);
+    });
+    const raw = JSON.parse((await AsyncStorage.getItem(`saved_player_names:${A}`)) as string);
+    expect(raw.find((p: SavedPlayer) => p.id === 'sp_1').preferredPayment).toEqual({
+      method: 'venmo',
+      handle: 'm',
+    });
   });
 });
