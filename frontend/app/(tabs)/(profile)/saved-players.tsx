@@ -38,10 +38,52 @@ import { resolvePayment, paymentWriteBackPatch } from '@/utils/paymentMethods';
 import { savedCapCounter, savedCapPaywallMessage } from '@/utils/capCopy';
 import { buildSavedPlayersListData, SavedPlayersListItem } from '@/utils/savedPlayersListData';
 
-type PaymentTarget =
+// Exported so the reference-stability test can import the real discriminant type used by
+// usePaymentEditorTarget below (see __tests__/saved-players-payment-editor.test.tsx).
+export type PaymentTarget =
   | { kind: 'edit'; player: SavedPlayer }
   | { kind: 'add' }
   | null;
+
+/**
+ * Builds the payment editor's target object. Exported (and pulled out of the component) so
+ * the reference-stability test can exercise the REAL hook — including its real deps array —
+ * rather than a hand-copied reproduction of it. See
+ * __tests__/saved-players-payment-editor.test.tsx, which renders a probe component that
+ * calls this hook directly and asserts on the reference it returns.
+ *
+ * useMemo keyed on `paymentTarget` ALONE (not addName/addPayment — eslint-disable below)
+ * gives a STABLE reference across unrelated re-renders — most concretely, the user typing
+ * in the add-name field while the 'add' overlay is open, but also e.g. AuthContext's
+ * trial-timer tick. paymentTarget's identity only changes when setPaymentTarget is actually
+ * called (the editor opening/closing), never as a side effect of some other state changing.
+ * PaymentEditorContent's re-seed effect keys on [visible, player] (PaymentEditorModal.tsx),
+ * so a fresh object literal minted on every render would re-fire that effect and wipe
+ * whatever the user is mid-typing into the payment rows.
+ */
+export function usePaymentEditorTarget(
+  paymentTarget: PaymentTarget,
+  addName: string,
+  addPayment: PaymentCarrier | undefined,
+): Player | null {
+  return useMemo(() => {
+    if (!paymentTarget) return null;
+    if (paymentTarget.kind === 'edit') {
+      const p = paymentTarget.player;
+      // p carries methods/defaultMethod directly (preferredPayment is a derived-only field,
+      // always undefined in memory) — pass them straight through so the editor opens seeded
+      // with the player's FULL method set, not just the resolved default.
+      return { id: p.name, name: p.name, methods: p.methods, defaultMethod: p.defaultMethod };
+    }
+    // kind === 'add' — snapshot the add form's payment-so-far at open time.
+    return { id: 'add', name: addName || 'Player', methods: addPayment?.methods, defaultMethod: addPayment?.defaultMethod };
+    // addName/addPayment intentionally omitted: capture at open time only. Widening this
+    // array reintroduces the mid-typing wipe bug described above — the reference-stability
+    // test in __tests__/saved-players-payment-editor.test.tsx imports THIS hook and WILL
+    // fail if you do this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentTarget]);
+}
 
 // SavedPlayer no longer carries preferredPayment in memory (it's derived only at the
 // storage/Firestore serialize boundary — see savedPlayersService.ts) — read the resolved
@@ -267,53 +309,33 @@ export default function SavedPlayersScreen() {
     }
   }, [uid, addName, addPayment, doCreate]);
 
-  // Shared PaymentEditorModal/PaymentEditorContent target — a synthetic carrier-bearing
-  // object (its `player` prop is init-only: PaymentEditorContent's re-seed effect keys on
-  // [visible, player], so a FRESH object literal built on every render — e.g. from
-  // AuthContext's trial-timer re-render, or from the user typing in the add-name field
-  // while the 'add' overlay is open — would re-fire that effect and wipe whatever the user
-  // is mid-typing into the payment rows). useMemo keyed on paymentTarget alone (not on
-  // addName/addPayment — see the eslint-disable below) gives a STABLE reference across
-  // those re-renders: paymentTarget itself only changes identity when setPaymentTarget is
-  // actually called (i.e. when the editor opens/closes), never as a side effect of some
-  // other state changing. The snapshot is captured once, at open time, which is exactly
-  // what a re-seed-on-open editor wants.
-  const paymentPlayer: Player | null = useMemo(() => {
-    if (!paymentTarget) return null;
-    if (paymentTarget.kind === 'edit') {
-      const p = paymentTarget.player;
-      // p carries methods/defaultMethod directly (preferredPayment is a derived-only field,
-      // always undefined in memory) — pass them straight through so the editor opens seeded
-      // with the player's FULL method set, not just the resolved default.
-      return { id: p.name, name: p.name, methods: p.methods, defaultMethod: p.defaultMethod };
-    }
-    // kind === 'add' — snapshot the add form's payment-so-far at open time.
-    return { id: 'add', name: addName || 'Player', methods: addPayment?.methods, defaultMethod: addPayment?.defaultMethod };
-    // addName/addPayment intentionally omitted: capture at open time only. Widening this
-    // array reintroduces the bug __tests__/saved-players-payment-editor.test.tsx's first
-    // describe block mutation-tests against — that test WILL fail if you do this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paymentTarget]);
+  // See usePaymentEditorTarget above the component for the full rationale (reference
+  // stability across unrelated re-renders, e.g. the add-name field, while the overlay is
+  // open) and the test that exercises this exact hook.
+  const paymentPlayer: Player | null = usePaymentEditorTarget(paymentTarget, addName, addPayment);
   const handlePaymentSave = useCallback(
     (payment: PaymentCarrier) => {
       if (!paymentTarget) return;
       if (paymentTarget.kind === 'edit') {
         // updateSavedPlayer's whole-map-replace treats an ABSENT `methods` key as "don't
         // touch payment" (its own recency-bump convention, updateSavedPlayer(uid, sid, {})).
-        // A bare {} (no `methods` key) is what a fully-cleared editor result looks like too —
-        // applyPaymentInvariant only produces it when the target had NO resolvable default to
-        // begin with, which for THIS call site (editor target and write-back target are the
-        // same saved player, by id) means the stored entry had none either — so passing the
-        // bare {} straight through would be a same-session no-op, not a real "restore".
-        // The one case it is NOT a no-op: updateSavedPlayer re-reads the entry FRESH from
-        // storage at save time rather than from the snapshot the editor was seeded with, so a
-        // background sync landing between open and Save could leave a non-empty entry in
-        // storage while the editor still (correctly, from the user's view) saves {}. Wrapping
-        // with paymentWriteBackPatch closes that narrow race by turning the bare {} into an
-        // explicit {methods: {}}, so an intentional clear always wins over a stale restore
-        // (mirrors active.tsx's handleSavePayment write-back, which needs this for a more
-        // common reason: there, the editor target and the write-back target are genuinely
-        // different objects — a live game player vs. its bound saved player).
+        // A bare {} (no `methods` key) is what a fully-cleared editor result looks like too,
+        // but applyPaymentInvariant only produces it when the target had NO resolvable
+        // default to begin with — and the editor's defaultMethod is sticky (setHandle only
+        // auto-assigns a default when none is set yet; the default-dot can move it but never
+        // unset it), so a target seeded with an existing default can never clear back down to
+        // a bare {} in one editing session. That means wrapping with paymentWriteBackPatch is
+        // a NO-OP on every path actually reachable from this screen: whenever payment is {},
+        // this same saved player's own stored entry had no payment either, so there is
+        // nothing to lose either way. It is kept here only for consistency with active.tsx's
+        // handleSavePayment write-back, which needs the wrap for a real reason (there, the
+        // editor's target and the write-back's target are genuinely different objects — a
+        // live game player vs. its separately-looked-up bound saved player — so they CAN
+        // diverge). Note the trade-off this carries over unwrapped: in the narrow case where
+        // a background sync lands a DIFFERENT device's payment for this same id while the
+        // editor sits open and empty, the wrap means Save silently overwrites that incoming
+        // payment with {} even though the user cleared nothing — unwrapped, prev.methods
+        // would have survived. Kept anyway for idiom consistency, not because it is a fix.
         if (uid) updateSavedPlayer(uid, paymentTarget.player.id, paymentWriteBackPatch(payment)).then(() => {
           setPaymentTarget(null);
           reload();
