@@ -18,7 +18,7 @@
  * modules; the wiring is a device-QA item.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Text, View } from '@/components/Themed';
@@ -40,6 +40,7 @@ import SummaryView from '@/components/summary/SummaryView';
 import SummaryHudHeader from '@/components/summary/SummaryHudHeader';
 import SummaryEmptyState from '@/components/summary/SummaryEmptyState';
 import PlayerFilterChips from '@/components/summary/PlayerFilterChips';
+import SharedGameChrome from '@/components/summary/SharedGameChrome';
 
 type LoadState =
   | { status: 'loading' }
@@ -174,15 +175,22 @@ export default function SharedGameScreen() {
     else router.replace('/(tabs)' as any);
   }, [router]);
 
+  // Every branch below renders inside the SAME chrome, so the CASH CAGE bar and
+  // the Done button are in place from the first frame — including a cold
+  // deep-link start that never gets past the spinner.
+  const frame = (content: React.ReactNode) => (
+    <SharedGameChrome onClose={handleClose}>{content}</SharedGameChrome>
+  );
+
   // authLoading first: on first render `params.shareId` can be transiently
   // empty before the router hydrates, and checking `!shareId` first would
   // flash "That link isn't valid" — alarming, wrong copy — on a link someone
   // just tapped, during a window that resolves itself a moment later.
-  if (authLoading) return <Loading onClose={handleClose} />;
-  if (!shareId) return <Notice label="That link isn't valid" icon="link-outline" onClose={handleClose} />;
+  if (authLoading) return frame(<Loading />);
+  if (!shareId) return frame(<Notice label="That link isn't valid" icon="link-outline" />);
   // The auth gate is redirecting; render neutral rather than flashing an error.
-  if (!canView) return <Loading onClose={handleClose} />;
-  if (state.status === 'loading') return <Loading onClose={handleClose} />;
+  if (!canView) return frame(<Loading />);
+  if (state.status === 'loading') return frame(<Loading />);
   if (state.status === 'missing') {
     // Ruling 1: `resource` is null on a nonexistent Firestore doc, so the rules'
     // `resource.data.expiresAt > request.time` read DENIES before existence is
@@ -192,13 +200,13 @@ export default function SharedGameScreen() {
     // the normal end state of every share link ever sent. Copy must read as
     // "this expired", not as a generic failure — the generic message below is
     // reserved for the real transport-error catch.
-    return <Notice label="This shared game has expired" icon="time-outline" onClose={handleClose} />;
+    return frame(<Notice label="This shared game has expired" icon="time-outline" />);
   }
   if (state.status === 'outdated') {
-    return <Notice label="Update Cash Cage to view this game" icon="arrow-up-circle-outline" onClose={handleClose} />;
+    return frame(<Notice label="Update Cash Cage to view this game" icon="arrow-up-circle-outline" />);
   }
   if (state.status === 'error' || !snapshot) {
-    return <Notice label="Couldn't load this game" icon="cloud-offline-outline" onClose={handleClose} />;
+    return frame(<Notice label="Couldn't load this game" icon="cloud-offline-outline" />);
   }
 
   // An ELEMENT, not an inline arrow component — `ListHeaderComponent={() => …}`
@@ -220,6 +228,10 @@ export default function SharedGameScreen() {
         </View>
       </View>
 
+      {/* Guarded on the same list PlayerFilterChips renders from: the chip row
+          returns null for an empty name list, and an unguarded header would then
+          label a row that isn't there. */}
+      {chipNames.length > 0 && <SummaryHudHeader label="FILTER BY PLAYER" />}
       <PlayerFilterChips
         names={chipNames}
         selectedName={selectedName}
@@ -230,98 +242,70 @@ export default function SharedGameScreen() {
     </>
   );
 
+  return frame(
+    <SummaryView
+      data={listData}
+      formatAmount={formatAmount}
+      formatAmountCompact={formatAmountCompact}
+      paymentByName={paymentByName}
+      reduceMotion={reduceMotion}
+      ListHeaderComponent={listHeader}
+    />,
+  );
+}
+
+// The Done row is NOT here — SharedGameChrome owns the only copy, and every
+// caller wraps this in it. That exit matters most on exactly this state:
+// fetchSharedGame -> getDoc has no timeout, and this repo's own
+// sharedGameService docstring documents indefinite-pending as REAL behaviour
+// under persistentLocalCache when offline/flaky, so a tapped link can land here
+// and never resolve on its own. Deliberately not a fetch timeout: that changes
+// behaviour, and any fixed budget short enough to matter would misclassify a
+// merely slow connection as an error. The exit is the fix, not a race.
+//
+// The label is the second half of that: a bare spinner on black tells a viewer
+// who just tapped a link nothing about what is being waited on.
+function Loading() {
   return (
-    <View style={styles.container}>
-      <SummaryView
-        data={listData}
-        formatAmount={formatAmount}
-        formatAmountCompact={formatAmountCompact}
-        paymentByName={paymentByName}
-        reduceMotion={reduceMotion}
-        ListHeaderComponent={listHeader}
-      />
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.doneButton}
-          onPress={handleClose}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Done"
-        >
-          <Text style={styles.doneText}>Done</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.centered}>
+      <ActivityIndicator color="#B072BB" size="large" />
+      <Text style={styles.loadingLabel}>Loading shared game…</Text>
     </View>
   );
 }
 
-// Carries the same Done row as Notice. fetchSharedGame -> getDoc has no
-// timeout, and this repo's own sharedGameService docstring documents
-// indefinite-pending as REAL behaviour under persistentLocalCache when
-// offline/flaky — a tapped link can land here and never resolve on its own.
-// The root Stack is headerShown: false, so without this row a stuck fetch (or
-// a stuck auth gate) traps the viewer on a spinner with no way out, cold-start
-// or otherwise. Deliberately not a fetch timeout: that changes behaviour, and
-// any fixed budget short enough to matter would misclassify a merely slow
-// connection as an error. The exit is the fix, not a race.
-function Loading({ onClose }: { onClose: () => void }) {
+function Notice({ label, icon }: { label: string; icon: string }) {
   return (
-    <View style={styles.container}>
-      <View style={styles.centered}>
-        <ActivityIndicator color="#B072BB" size="large" />
-      </View>
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.doneButton}
-          onPress={onClose}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Done"
-        >
-          <Text style={styles.doneText}>Done</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.centered}>
+      <SummaryEmptyState label={label} icon={icon} />
     </View>
   );
 }
 
-function Notice({ label, icon, onClose }: { label: string; icon: string; onClose: () => void }) {
-  return (
-    <View style={styles.container}>
-      <View style={styles.centered}>
-        <SummaryEmptyState label={label} icon={icon} />
-      </View>
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.doneButton}
-          onPress={onClose}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Done"
-        >
-          <Text style={styles.doneText}>Done</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
+/**
+ * The title block and hero pot match app/(tabs)/(home)/game/summary.tsx VALUE
+ * FOR VALUE. They previously drifted — 28 vs 32 on the title, 40 vs 52 on the
+ * pot, white vs purple — differences small enough to read as a mistake rather
+ * than a signal. The two screens render the same list through the same
+ * SummaryView; the header above it now says so too.
+ *
+ * `sharedAgo` has no counterpart on the host screen, so it keeps its own
+ * treatment. There is no `paddingTop` here any more: SharedGameChrome owns the
+ * top of the screen and reads the real safe-area inset.
+ */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { paddingTop: 60, paddingBottom: 8 },
-  gameTitle: { fontSize: 28, fontWeight: '700', color: '#FFFFFF' },
-  gameDate: { fontSize: 14, color: '#A0A0A0', marginTop: 4 },
-  sharedAgo: { fontSize: 13, color: '#A0A0A0', marginTop: 2 },
-  heroPotSection: { marginTop: 24, marginBottom: 24 },
-  heroPotDisplay: { alignItems: 'center', paddingVertical: 12 },
-  heroPotAmount: { fontSize: 40, fontWeight: '700', color: '#B072BB' },
-  actions: { padding: 20, paddingBottom: 34 },
-  doneButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: '#B072BB',
+  centered: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  doneText: { fontSize: 16, fontWeight: '700', color: '#0A0A0A' },
+  loadingLabel: { fontSize: 14, color: '#A0A0A0', marginTop: 12 },
+  header: { marginBottom: 24, backgroundColor: 'transparent' },
+  gameTitle: { fontSize: 32, fontWeight: 'bold', color: '#B072BB', letterSpacing: 1 },
+  gameDate: { fontSize: 14, opacity: 0.5, color: '#FFFFFF' },
+  sharedAgo: { fontSize: 13, color: '#A0A0A0', marginTop: 2 },
+  heroPotSection: { marginBottom: 32 },
+  heroPotDisplay: { alignItems: 'center', paddingVertical: 20, backgroundColor: 'transparent' },
+  heroPotAmount: { fontSize: 52, fontWeight: 'bold', color: '#B072BB' },
 });
