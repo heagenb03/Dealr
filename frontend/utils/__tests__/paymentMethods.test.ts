@@ -89,9 +89,12 @@ describe('applyPaymentInvariant', () => {
     });
   });
 
-  it('prunes non-default methods whose handle is empty', () => {
+  it('keeps a non-default method whose handle is empty', () => {
+    // Reversed at bug-416: this asserted `{ venmo: 'a' }` and so pinned the drop the editor
+    // was reported for. A key is present because the user added the method; removing one
+    // deletes the key (removeMethod), it does not blank it.
     expect(applyPaymentInvariant({ methods: { venmo: 'a', zelle: '' }, defaultMethod: 'venmo' })).toEqual({
-      methods: { venmo: 'a' },
+      methods: { venmo: 'a', zelle: '' },
       defaultMethod: 'venmo',
     });
   });
@@ -110,8 +113,10 @@ describe('applyPaymentInvariant', () => {
     });
   });
 
-  it('returns a carrier with no keys when nothing is filled', () => {
-    expect(applyPaymentInvariant({ methods: { venmo: '' } })).toEqual({});
+  it('returns a carrier with no keys only when there are no methods at all', () => {
+    // Narrowed at bug-416: `{ venmo: '' }` used to land here and lose the row outright. An
+    // empty map and an absent one are still the two cases with nothing to keep.
+    expect(applyPaymentInvariant({ methods: {} })).toEqual({});
     expect(applyPaymentInvariant({})).toEqual({});
   });
 });
@@ -148,5 +153,51 @@ describe('paymentSignature / samePaymentSet', () => {
 
   it('treats two empty carriers as the same', () => {
     expect(samePaymentSet({}, undefined)).toBe(true);
+  });
+});
+
+/**
+ * bug-416. The prune rule below ("a non-default method survives only with a non-empty
+ * handle") encoded a premise that stopped being true at b14d1b3: in the show-all-seven-rows
+ * editor a key was present whether or not the user wanted the method, so an empty handle was
+ * the only signal that they did not. Add-then-fill makes presence itself the signal — the key
+ * exists because the user tapped Add, and removal deletes the key rather than blanking it.
+ */
+describe('applyPaymentInvariant — presence is the signal (bug-416)', () => {
+  it('keeps a non-default method that has no handle', () => {
+    expect(applyPaymentInvariant({ methods: { venmo: 'a', zelle: '' }, defaultMethod: 'venmo' })).toEqual({
+      methods: { venmo: 'a', zelle: '' },
+      defaultMethod: 'venmo',
+    });
+  });
+
+  it('keeps handle-less cash when another method holds the default', () => {
+    // Cash can NEVER carry a handle (takesHandle: false), so under the old rule it survived
+    // only by holding the default — which it cannot do once a typed row claimed it.
+    expect(applyPaymentInvariant({ methods: { cash: '', venmo: 'a' }, defaultMethod: 'venmo' })).toEqual({
+      methods: { cash: '', venmo: 'a' },
+      defaultMethod: 'venmo',
+    });
+  });
+
+  it('promotes a lone blank method to default rather than discarding it', () => {
+    expect(applyPaymentInvariant({ methods: { venmo: '' } })).toEqual({
+      methods: { venmo: '' },
+      defaultMethod: 'venmo',
+    });
+  });
+
+  it('still prefers a FILLED method over a blank one when no default is set', () => {
+    // Presence is enough to survive, but a typed handle is still the stronger claim on the
+    // default: cash sits ahead of venmo in PAYMENT_METHODS order, and must not take it.
+    expect(applyPaymentInvariant({ methods: { cash: '', venmo: 'a' } })).toEqual({
+      methods: { cash: '', venmo: 'a' },
+      defaultMethod: 'venmo',
+    });
+  });
+
+  it('still returns a carrier with no keys when there are no methods at all', () => {
+    expect(applyPaymentInvariant({ methods: {} })).toEqual({});
+    expect(applyPaymentInvariant({})).toEqual({});
   });
 });

@@ -229,7 +229,12 @@ describe('PaymentEditorContent', () => {
     addMethod(tree, 'zelle');
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
     pressSave(tree);
-    expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+    // The blank venmo row is KEPT (bug-416 — the user added it, so it survives to be filled
+    // in later); this test is about which method holds the default, which is still zelle.
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { venmo: '', zelle: 'a@x.com' },
+      defaultMethod: 'zelle',
+    });
   });
 
   it('saves several methods at once, keeping the chosen default', () => {
@@ -258,10 +263,11 @@ describe('PaymentEditorContent', () => {
     expect(onSave).toHaveBeenCalledWith({ methods: { venmo: '' }, defaultMethod: 'venmo' });
   });
 
-  it('drops a handle-less row when the default moves off it', () => {
-    // The other half of the fall-through rule: moving the default OFF a handle-less row
-    // (rather than clearing the current default's handle) drops that row entirely, since
-    // a non-default row is only saved when it has a handle.
+  it('keeps a handle-less row when the default moves off it', () => {
+    // Renamed and reversed at bug-416. This asserted that moving the default OFF a handle-less
+    // row dropped that row entirely — the rule Heagen hit. Nothing here removes venmo: the user
+    // adds zelle and hands it the default, and losing venmo on the way is the defect, not the
+    // behaviour. What the move MUST do is carry the default, which is still asserted.
     const onSave = jest.fn();
     const tree = renderEditor({
       player: { methods: { venmo: '' }, defaultMethod: 'venmo' },
@@ -271,7 +277,10 @@ describe('PaymentEditorContent', () => {
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
     act(() => { byTestId(tree, 'payment-default-zelle').props.onPress(); });
     pressSave(tree);
-    expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { venmo: '', zelle: 'a@x.com' },
+      defaultMethod: 'zelle',
+    });
   });
 
   it('adding cash claims the default, so a cash-only player saves something', () => {
@@ -288,14 +297,20 @@ describe('PaymentEditorContent', () => {
 
   it('does not let a later cash tap steal the default from a filled row', () => {
     // The claim above is conditional on nothing else holding the default yet — it must never
-    // override a handle the user already entered.
+    // override a handle the user already entered. Cash is still SAVED, it just does not become
+    // the default: this assertion read `{ venmo: 'alice' }` until bug-416, where dropping the
+    // cash the user had just tapped turned out to be the reported bug rather than the point of
+    // this test. Both halves are asserted here so a regression on either one fails.
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
     addMethod(tree, 'venmo');
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('alice'); });
     addMethod(tree, 'cash');
     pressSave(tree);
-    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { cash: '', venmo: 'alice' },
+      defaultMethod: 'venmo',
+    });
   });
 
   it('removing a method drops it from the saved carrier', () => {
@@ -351,7 +366,12 @@ describe('PaymentEditorContent', () => {
     });
     act(() => { byTestId(tree, 'payment-remove-zelle').props.onPress(); });
     pressSave(tree);
-    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
+    // Only zelle was removed, so cash stays (bug-416 — it used to vanish here too, as
+    // collateral of removing an unrelated method). The default still goes to venmo, not cash.
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { cash: '', venmo: 'alice' },
+      defaultMethod: 'venmo',
+    });
   });
 
   it('reopens the picker when the last method is removed', () => {
@@ -385,7 +405,13 @@ describe('PaymentEditorContent', () => {
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('@'); });
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
     pressSave(tree);
-    expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+    // The venmo row itself survives with no handle (bug-416): the user added it and did not
+    // remove it. What must not happen is venmo holding the DEFAULT, which is what would send
+    // a handle-less method to the badge, the share message and the /g/ snapshot.
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { venmo: '', zelle: 'a@x.com' },
+      defaultMethod: 'zelle',
+    });
   });
 
   it('gives the picker a way back once the player has a method', () => {
@@ -437,5 +463,72 @@ describe('PaymentEditorContent', () => {
     const tree = renderEditor({ onSave });
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({});
+  });
+});
+
+/**
+ * Heagen, testing the add-then-fill editor shipped in b14d1b3: "the non-default payments
+ * are sometimes removing themselves after closing and reopening the modal."
+ *
+ * "Sometimes" is the tell. Presence in `handles` is an explicit user act now — a row exists
+ * because the user tapped to add it — but the save path still prunes a non-default method
+ * whose handle is empty, a rule written for the show-all-seven-rows editor where a row's
+ * presence meant nothing. b14d1b3 covered exactly one case of the fallout (adding Cash
+ * claims the default WHEN NONE IS SET) and left the rest, which is why it looks intermittent.
+ */
+describe('PaymentEditorContent — an added method survives the save (bug-416)', () => {
+  it('keeps cash added AFTER another row already holds the default', () => {
+    // The case b14d1b3's default-claiming rule cannot reach: `prev ?? m.key` is a no-op once
+    // venmo holds the default, so cash stays non-default, has no handle by construction
+    // (takesHandle: false), and the prune rule deletes the row the user just tapped.
+    const onSave = jest.fn();
+    const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('alice'); });
+    addMethod(tree, 'cash');
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { cash: '', venmo: 'alice' },
+      defaultMethod: 'venmo',
+    });
+  });
+
+  it('keeps a handle-taking row added and left blank', () => {
+    // Add-then-fill's own intermediate state: the user adds Zelle meaning to type into it and
+    // closes the modal first. The row is gone on reopen, so the add cannot be resumed.
+    const onSave = jest.fn();
+    const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('alice'); });
+    addMethod(tree, 'zelle');
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { venmo: 'alice', zelle: '' },
+      defaultMethod: 'venmo',
+    });
+  });
+
+  it('keeps a lone blank handle-taking row, which claims the default', () => {
+    // Nothing typed means setDefaultMethod never fires (it is gated on the NORMALIZED value),
+    // so this reaches applyPaymentInvariant with no explicit default at all. The whole carrier
+    // used to collapse to {} and the row vanished.
+    const onSave = jest.fn();
+    const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: '' }, defaultMethod: 'venmo' });
+  });
+
+  it('still drops a row the user explicitly removed', () => {
+    // The counterpart the new rule must not break: keeping every PRESENT key is only correct
+    // because removal deletes the key outright (removeMethod), not because it blanks it.
+    const onSave = jest.fn();
+    const tree = renderEditor({
+      player: { methods: { venmo: 'alice', zelle: '' }, defaultMethod: 'venmo' },
+      onSave,
+    });
+    act(() => { byTestId(tree, 'payment-remove-zelle').props.onPress(); });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
   });
 });

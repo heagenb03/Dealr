@@ -502,3 +502,54 @@ describe('account linking', () => {
     await expect(linkGoogleCredential('id-token')).rejects.toMatchObject({ code: 'auth/credential-already-in-use' });
   });
 });
+
+/**
+ * bug-420. The remote half of the game path. applyPaymentInvariant now keeps every method the
+ * user added, handle or not, so a '' handle has to survive BOTH directions here — otherwise a
+ * blank Cash row saves locally, is stripped on the Firestore write, and comes back missing
+ * after the next remote merge: Heagen's exact symptom, one app reload later.
+ */
+describe('game payment fidelity for handle-less methods (bug-420)', () => {
+  beforeEach(() => {
+    (setDoc as jest.Mock).mockClear();
+    (setDoc as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  it('writes an empty-handle method rather than stripping it (stripUndefined keeps "")', async () => {
+    await saveGameToFirestore('uid1', {
+      id: 'g1', name: 'G', date: new Date('2026-07-01T00:00:00Z'), status: 'active',
+      players: [{ id: 'p1', name: 'Alice', methods: { cash: '', venmo: 'v' }, defaultMethod: 'venmo' }],
+      transactions: [], createdAt: new Date('2026-07-01T00:00:00Z'),
+    } as any);
+    const payload = (setDoc as jest.Mock).mock.calls[0][1];
+    expect(payload.players[0].methods).toEqual({ cash: '', venmo: 'v' });
+    // The derived legacy field still tracks the default only, so a 2.0.2 reader is unchanged.
+    expect(payload.players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'v' });
+  });
+
+  it('reads an empty-handle method back through the deserialize whitelist', () => {
+    const game = deserializeFirestoreGame({
+      id: 'g1', name: 'G', date: new Date('2026-07-01T00:00:00Z'), status: 'active',
+      players: [{ id: 'p1', name: 'Alice', methods: { cash: '', venmo: 'v' }, defaultMethod: 'venmo' }],
+      transactions: [], createdAt: new Date('2026-07-01T00:00:00Z'),
+    });
+    expect(game.players[0].methods).toEqual({ cash: '', venmo: 'v' });
+    expect(game.players[0].defaultMethod).toBe('venmo');
+  });
+
+  it('does not let a stale legacy field overwrite a kept blank method', () => {
+    // withSynthesizedMethods must return `rest` untouched whenever methods is present, even
+    // when the map holds only blanks alongside a filled entry.
+    const game = deserializeFirestoreGame({
+      id: 'g1', name: 'G', date: new Date('2026-07-01T00:00:00Z'), status: 'active',
+      players: [{
+        id: 'p1', name: 'Alice',
+        methods: { cash: '', venmo: 'v' }, defaultMethod: 'venmo',
+        preferredPayment: { method: 'zelle', handle: 'stale@x.com' },
+      }],
+      transactions: [], createdAt: new Date('2026-07-01T00:00:00Z'),
+    });
+    expect(game.players[0].methods).toEqual({ cash: '', venmo: 'v' });
+    expect((game.players[0] as any).preferredPayment).toBeUndefined();
+  });
+});

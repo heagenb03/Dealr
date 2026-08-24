@@ -773,3 +773,55 @@ describe('payment carrier persistence (Task 3)', () => {
     });
   });
 });
+
+/**
+ * bug-416 round trip. Heagen asked whether the games/buy-in data-loss bug (bug-412, and the
+ * whitelist class before it) was also eating saved payment methods. It is not: `coerce`
+ * whitelists methods/defaultMethod and the Firestore doc read is a pass-through. The loss was
+ * in the editor's save path instead. These pin the storage half so a future field-whitelist
+ * regression cannot quietly reintroduce the same SYMPTOM through the other layer.
+ */
+describe('a handle-less method survives the storage round trip (bug-416)', () => {
+  it('reads back a non-default method saved with no handle', async () => {
+    const created = await createSavedPlayer(A, 'Alice', {
+      methods: { cash: '', venmo: 'alice' },
+      defaultMethod: 'venmo',
+    });
+    expect(created.ok).toBe(true);
+
+    // Re-read through readLocal -> parseList -> coerce -> withSynthesizedMethods, which is
+    // exactly what the editor is re-seeded from when the modal is reopened.
+    const [reread] = await getSavedPlayers(A);
+    expect(reread.methods).toEqual({ cash: '', venmo: 'alice' });
+    expect(reread.defaultMethod).toBe('venmo');
+  });
+
+  it('keeps a blank method across an updateSavedPlayer patch', async () => {
+    const created = await createSavedPlayer(A, 'Bob', {
+      methods: { venmo: 'bob' },
+      defaultMethod: 'venmo',
+    });
+    const id = (created as { ok: true; id: string }).id;
+
+    // The editor adding a blank Zelle row and saving.
+    await updateSavedPlayer(A, id, {
+      methods: { venmo: 'bob', zelle: '' },
+      defaultMethod: 'venmo',
+    });
+
+    const reread = await getSavedPlayerById(A, id);
+    expect(reread?.methods).toEqual({ venmo: 'bob', zelle: '' });
+    // The derived legacy field still tracks the DEFAULT only, so a 2.0.2 client is unaffected
+    // by the extra blank entry.
+    expect(resolvePayment(reread)).toEqual({ method: 'venmo', handle: 'bob' });
+  });
+
+  it('writes the blank method to Firestore rather than stripping it', async () => {
+    await createSavedPlayer(A, 'Cara', {
+      methods: { cash: '', venmo: 'cara' },
+      defaultMethod: 'venmo',
+    });
+    const [, players] = (saveSavedPlayersToFirestore as jest.Mock).mock.calls.at(-1)!;
+    expect(players[0].methods).toEqual({ cash: '', venmo: 'cara' });
+  });
+});

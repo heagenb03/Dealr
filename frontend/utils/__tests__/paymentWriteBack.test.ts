@@ -75,3 +75,52 @@ describe('paymentWriteBackPatch', () => {
     expect(paymentWriteBackPatch({})).toEqual({ methods: {} });
   });
 });
+
+/**
+ * bug-420 follow-on. `changed` compared the saved and next handles for equality, so filling in
+ * a saved row that was BLANK counted as an overwrite and popped the "Update saved player?"
+ * confirm mid-game — for an edit that loses nothing, contradicting this function's own rule
+ * that silent is for cases where nothing the user previously entered is lost.
+ *
+ * Pre-existing rather than introduced by bug-420: a blank DEFAULT ({venmo:''}) was already
+ * reachable and already misfired. Keeping every present method widened it from the default key
+ * to any key, which is why it turned up in the flow Heagen was testing.
+ */
+describe('filling a saved BLANK handle is not an overwrite (bug-420)', () => {
+  it('is silent when a blank non-default row is filled in', () => {
+    expect(paymentWriteBackAction(
+      { methods: { venmo: 'alice', zelle: '' }, defaultMethod: 'venmo' },
+      { methods: { venmo: 'alice', zelle: 'z@x.com' }, defaultMethod: 'venmo' },
+    )).toBe('silent');
+  });
+
+  it('is silent when the blank DEFAULT is filled in (reachable before bug-420 too)', () => {
+    expect(paymentWriteBackAction(
+      { methods: { venmo: '' }, defaultMethod: 'venmo' },
+      { methods: { venmo: 'alice' }, defaultMethod: 'venmo' },
+    )).toBe('silent');
+  });
+
+  it('still confirms when a REAL saved handle is overwritten', () => {
+    expect(paymentWriteBackAction(
+      { methods: { venmo: 'alice' }, defaultMethod: 'venmo' },
+      { methods: { venmo: 'bob' }, defaultMethod: 'venmo' },
+    )).toBe('confirm');
+  });
+
+  it('still confirms when a REAL saved handle is cleared to blank', () => {
+    // The direction that DOES lose what the user entered — the row survives now, so this is
+    // no longer covered by the `removed` check and rests entirely on `changed`.
+    expect(paymentWriteBackAction(
+      { methods: { venmo: 'alice' }, defaultMethod: 'venmo' },
+      { methods: { venmo: '' }, defaultMethod: 'venmo' },
+    )).toBe('confirm');
+  });
+
+  it('still confirms when filling a blank row also moves the default', () => {
+    expect(paymentWriteBackAction(
+      { methods: { venmo: 'alice', zelle: '' }, defaultMethod: 'venmo' },
+      { methods: { venmo: 'alice', zelle: 'z@x.com' }, defaultMethod: 'zelle' },
+    )).toBe('confirm');
+  });
+});

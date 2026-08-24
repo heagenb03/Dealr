@@ -38,24 +38,36 @@ export function fromLegacyPayment(pref: PreferredPayment | undefined): PaymentCa
 }
 
 /**
- * Normalize a carrier to the spec §1 invariant: the default is always in the map (handle
- * or not), non-default methods are present only with a non-empty handle. Returns a carrier
- * with NO keys when nothing survives, so callers can spread it conditionally.
+ * Normalize a carrier to the spec §1 invariant: every method PRESENT in the map is kept
+ * (handle or not) and the default is always in the map. Returns a carrier with NO keys when
+ * the map is empty, so callers can spread it conditionally.
+ *
+ * Presence is the signal, not the handle (bug-416). This rule used to prune any non-default
+ * method whose handle was empty, which was right for the show-all-seven-rows editor: a key
+ * was present there whether or not the user wanted the method, so an empty handle was the
+ * only evidence they did not. b14d1b3 made the editor add-then-fill and left the save path
+ * alone, at which point the premise was false — a key now exists precisely because the user
+ * tapped Add, and removing a method deletes the key rather than blanking it. Pruning after
+ * that deletes methods the user deliberately added: Cash always (it can never carry a
+ * handle) once any typed row holds the default, and any row added but not yet typed into.
  */
 export function applyPaymentInvariant(c: PaymentCarrier): PaymentCarrier {
   const source = c.methods ?? {};
+  const present = ORDER.filter(k => k in source);
   const filled = ORDER.filter(k => (source[k] ?? '') !== '');
   // An EXPLICIT default is honoured even when it has no handle and no map entry — that is
-  // how Cash, and a label-only Venmo, get saved. Only an ABSENT default falls back to the
-  // first filled method in declaration order.
-  const defaultMethod = c.defaultMethod ?? filled[0];
+  // how Cash, and a label-only Venmo, get saved. An ABSENT default prefers the first FILLED
+  // method: a typed handle is a stronger claim than mere presence, and it is what the share
+  // message and the published /g/ snapshot render (both read only resolvePayment). Only when
+  // nothing is filled does the first present method take it, so a lone blank row still saves.
+  const defaultMethod = c.defaultMethod ?? filled[0] ?? present[0];
   if (!defaultMethod) return {};
 
   const methods: PaymentHandles = {};
   for (const key of ORDER) {
     const raw = source[key];
     if (key === defaultMethod) methods[key] = raw ?? '';
-    else if ((raw ?? '') !== '') methods[key] = raw as string;
+    else if (key in source) methods[key] = raw as string;
   }
   return { methods, defaultMethod };
 }
@@ -148,7 +160,14 @@ export function paymentWriteBackAction(
 
   const nextMethods = next.methods ?? {};
   const removed = savedKeys.some(k => !(k in nextMethods));
-  const changed = savedKeys.some(k => k in nextMethods && savedMethods[k] !== nextMethods[k]);
+  // Only a saved handle that was NON-EMPTY can be overwritten. Filling in a blank saved row
+  // destroys nothing the user entered, so it takes the silent path (bug-420) — the confirm it
+  // used to raise contradicted this function's own rule. The reverse direction, clearing a real
+  // handle down to '', still counts: it is a change from non-empty and rests entirely on this
+  // check now that a blanked row is kept rather than dropped (so `removed` no longer sees it).
+  const changed = savedKeys.some(
+    k => k in nextMethods && (savedMethods[k] ?? '') !== '' && savedMethods[k] !== nextMethods[k],
+  );
   const defaultMoved = resolveDefaultMethod(saved) !== resolveDefaultMethod(next);
 
   return removed || changed || defaultMoved ? 'confirm' : 'silent';

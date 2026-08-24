@@ -225,3 +225,44 @@ describe('StorageService — methods/defaultMethod persistence and legacy dual-w
     expect(loaded.players[0].defaultMethod).toBe('cashapp');
   });
 });
+
+/**
+ * bug-420. Heagen reported the vanishing methods while editing payments BOTH on the Saved
+ * Players tab and mid-game, and game players persist through a different path than the
+ * saved-players pool. The fix (applyPaymentInvariant keeps every PRESENT method, handle or
+ * not) only reaches the user if a '' handle survives this round trip too.
+ */
+describe('StorageService — a handle-less method survives the round trip (bug-420)', () => {
+  it('round-trips a non-default method stored with an empty handle', async () => {
+    const game: any = {
+      id: 'g1', name: 'G', date: new Date(), createdAt: new Date(), status: 'active',
+      players: [{
+        id: 'p1', name: 'Alice',
+        methods: { cash: '', venmo: 'alice-h' },
+        defaultMethod: 'venmo',
+      }],
+      transactions: [],
+    };
+    await StorageService.saveGames([game]);
+    const loaded = (await StorageService.loadGames())[0];
+    expect(loaded.players[0].methods).toEqual({ cash: '', venmo: 'alice-h' });
+    expect(loaded.players[0].defaultMethod).toBe('venmo');
+  });
+
+  it('leaves the derived legacy field tracking the DEFAULT only', async () => {
+    // The extra blank entry must not change what a 2.0.2 reader sees.
+    const game: any = {
+      id: 'g1', name: 'G', date: new Date(), createdAt: new Date(), status: 'active',
+      players: [{
+        id: 'p1', name: 'Alice',
+        methods: { cash: '', venmo: 'alice-h' },
+        defaultMethod: 'venmo',
+      }],
+      transactions: [],
+    };
+    await StorageService.saveGames([game]);
+    const raw = JSON.parse((await AsyncStorage.getItem(GAMES_KEY)) as string);
+    expect(raw[0].players[0].preferredPayment).toEqual({ method: 'venmo', handle: 'alice-h' });
+    expect(raw[0].players[0].methods).toEqual({ cash: '', venmo: 'alice-h' });
+  });
+});

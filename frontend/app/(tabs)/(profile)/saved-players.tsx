@@ -328,8 +328,10 @@ export default function SavedPlayersScreen() {
         // updateSavedPlayer's whole-map-replace treats an ABSENT `methods` key as "don't
         // touch payment" (its own recency-bump convention, updateSavedPlayer(uid, sid, {})).
         // A bare {} (no `methods` key) is what a fully-cleared editor result looks like too,
-        // but applyPaymentInvariant only produces it when the target had NO resolvable
-        // default to begin with — and the editor's defaultMethod is sticky (setHandle only
+        // but applyPaymentInvariant only produces it when the map is EMPTY — i.e. every row
+        // was REMOVED, not merely blanked. (Narrowed at bug-420: it used to also produce {}
+        // for a map of present-but-blank rows, which is the drop that bug was about.)
+        // The editor's defaultMethod is likewise sticky (setHandle only
         // auto-assigns a default when none is set yet; the default-dot can move it but never
         // unset it), so a target seeded with an existing default can never clear back down to
         // a bare {} in one editing session. That means wrapping with paymentWriteBackPatch is
