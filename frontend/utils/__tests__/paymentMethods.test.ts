@@ -180,11 +180,13 @@ describe('applyPaymentInvariant — presence is the signal (bug-416)', () => {
     });
   });
 
-  it('promotes a lone blank method to default rather than discarding it', () => {
-    expect(applyPaymentInvariant({ methods: { venmo: '' } })).toEqual({
-      methods: { venmo: '' },
-      defaultMethod: 'venmo',
-    });
+  it('keeps a lone blank method without letting it claim the default', () => {
+    // Both halves are the point. The row surviving is bug-416. The default staying UNCLAIMED
+    // is bug-421: a fabricated default is indistinguishable downstream from one the user
+    // chose, and the editor reads it back as a choice.
+    const out = applyPaymentInvariant({ methods: { venmo: '' } });
+    expect(out.methods).toEqual({ venmo: '' });
+    expect(out.defaultMethod).toBeUndefined();
   });
 
   it('still prefers a FILLED method over a blank one when no default is set', () => {
@@ -197,6 +199,58 @@ describe('applyPaymentInvariant — presence is the signal (bug-416)', () => {
   });
 
   it('still returns a carrier with no keys when there are no methods at all', () => {
+    expect(applyPaymentInvariant({ methods: {} })).toEqual({});
+    expect(applyPaymentInvariant({})).toEqual({});
+  });
+});
+
+/**
+ * bug-421, the follow-on to bug-416. Keeping every present method made a second premise
+ * false: `?? present[0]` promoted a row the user had typed nothing into to defaultMethod,
+ * and persisted it as an EXPLICIT choice. PaymentEditorContent seeds its own default state
+ * from the saved carrier and only ever auto-assigns while that state is `undefined`, so a
+ * fabricated default is permanent - the next handle the user types can never claim it, and
+ * the card badge, the share message and the /g/ snapshot all name a method with no handle.
+ *
+ * Presence still keeps the row. It just no longer counts as choosing it.
+ */
+describe('applyPaymentInvariant - a blank row does not claim the default (bug-421)', () => {
+  it('keeps a map of only blank rows and leaves the default unclaimed', () => {
+    const out = applyPaymentInvariant({ methods: { venmo: '', zelle: '' } });
+    expect(out.methods).toEqual({ venmo: '', zelle: '' });
+    expect(out.defaultMethod).toBeUndefined();
+  });
+
+  it('OMITS the defaultMethod key rather than setting it to undefined', () => {
+    // toStrictEqual, not toEqual: toEqual treats an undefined-valued key as absent, so it
+    // cannot tell these apart. They persist identically today (stripUndefined drops it on the
+    // Firestore path, JSON.stringify on the AsyncStorage one), which is exactly why the
+    // distinction needs pinning here rather than being left to a future reader to rediscover.
+    expect(applyPaymentInvariant({ methods: { venmo: '' } })).toStrictEqual({
+      methods: { venmo: '' },
+    });
+  });
+
+  it('honours an EXPLICIT handle-less default even when another row is filled', () => {
+    // The case that rules out solving this by preferring filled handles inside
+    // resolveDefaultMethod: the per-row dot is tappable from the second row, so a blank
+    // Venmo IS a choice a user can make, and Cash can never carry a handle at all.
+    expect(
+      applyPaymentInvariant({ methods: { venmo: '', cashapp: 'alice' }, defaultMethod: 'venmo' }),
+    ).toEqual({ methods: { venmo: '', cashapp: 'alice' }, defaultMethod: 'venmo' });
+    expect(
+      applyPaymentInvariant({ methods: { cash: '', venmo: 'alice' }, defaultMethod: 'cash' }),
+    ).toEqual({ methods: { cash: '', venmo: 'alice' }, defaultMethod: 'cash' });
+  });
+
+  it('still gives the default to the first FILLED method when none was chosen', () => {
+    const out = applyPaymentInvariant({ methods: { cash: '', venmo: 'alice' } });
+    expect(out).toEqual({ methods: { cash: '', venmo: 'alice' }, defaultMethod: 'venmo' });
+  });
+
+  it('still returns a carrier with no keys when the map is empty', () => {
+    // The `?? present[0]` removal must not resurrect the collapse bug-416 fixed: an EMPTY
+    // map is the only thing left that produces a bare {}.
     expect(applyPaymentInvariant({ methods: {} })).toEqual({});
     expect(applyPaymentInvariant({})).toEqual({});
   });

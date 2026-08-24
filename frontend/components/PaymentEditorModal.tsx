@@ -13,7 +13,7 @@ import { isScrolledToEnd } from '@/utils/scrollFade';
 import { PaymentCarrier, PaymentHandles, PaymentMethod } from '@/types/game';
 import { PAYMENT_METHODS, PaymentMethodMeta } from '@/constants/PaymentMethods';
 import { normalizeHandle } from '@/utils/paymentLinks';
-import { applyPaymentInvariant, resolveDefaultMethod } from '@/utils/paymentMethods';
+import { applyPaymentInvariant } from '@/utils/paymentMethods';
 import { AppModalCard } from '@/components/AppModal';
 import ModalButton from '@/components/ModalButton';
 import { modalLayoutStyles } from '@/styles/modal';
@@ -46,12 +46,29 @@ interface PaymentEditorContentProps {
 }
 
 /**
- * The default to fall back on when the current one is removed: the first remaining method
- * carrying a real handle, else a remaining handle-less one (only Cash).
+ * The default the user actually CHOSE, or undefined.
  *
- * The second branch is not redundant with the first. applyPaymentInvariant keeps a
- * handle-less method ONLY when it is the default, so a lone surviving Cash row with no
- * default lands in the save as nothing at all.
+ * Deliberately not resolveDefaultMethod: that answers "which method should this carrier
+ * display", and its order-based fallback names one even when nobody picked it. Seeding local
+ * state from a guess makes the guess permanent, because setHandle's auto-default only ever
+ * fires while this state is undefined (bug-421). An explicit default pointing outside the map
+ * is not a choice this editor can represent either — there is no row to mark — so it seeds
+ * as unset and the first filled row takes it at save.
+ */
+function chosenDefault(player: PaymentCarrier | null | undefined): PaymentMethod | undefined {
+  const explicit = player?.defaultMethod;
+  return explicit && explicit in (player?.methods ?? {}) ? explicit : undefined;
+}
+
+/**
+ * The default to fall back on when the current one is removed: the first remaining method
+ * carrying a real handle, else a remaining handle-less one (only Cash). `undefined` when
+ * neither exists — blank handle-taking rows survive the save on their own now and must not
+ * be handed a default they were never given (bug-421).
+ *
+ * The second branch is not redundant with the first, and its reason changed at bug-416.
+ * It is no longer about survival: Cash takes no handle, so removing the previous default is
+ * the only moment a lone Cash row can be made the default at all.
  */
 function fallbackDefault(map: PaymentHandles): PaymentMethod | undefined {
   const filled = PAYMENT_METHODS.find(
@@ -84,7 +101,7 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
 }) => {
   const [handles, setHandles] = useState<PaymentHandles>(() => ({ ...(player?.methods ?? {}) }));
   const [defaultMethod, setDefaultMethod] = useState<PaymentMethod | undefined>(
-    () => resolveDefaultMethod(player ?? undefined),
+    () => chosenDefault(player),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -121,7 +138,7 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
   useEffect(() => {
     if (!visible) return;
     setHandles({ ...(player?.methods ?? {}) });
-    setDefaultMethod(resolveDefaultMethod(player ?? undefined));
+    setDefaultMethod(chosenDefault(player));
     setPickerOpen(false);
   }, [visible, player]);
 
@@ -175,8 +192,10 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
       if (raw === undefined) continue;
       normalized[m.key] = m.takesHandle ? normalizeHandle(m.key, raw) : '';
     }
-    // applyPaymentInvariant is the single place that decides what survives: the default
-    // is always kept (handle or not), every other row only if it has a non-empty handle.
+    // applyPaymentInvariant is the single place that decides what survives: every row the
+    // user added is kept, handle or not, and `defaultMethod` goes out as undefined when they
+    // neither picked one nor typed anything — which is what keeps the seed above honest on
+    // the next open.
     onSave(applyPaymentInvariant({ methods: normalized, defaultMethod }));
   };
 

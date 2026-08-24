@@ -508,15 +508,17 @@ describe('PaymentEditorContent — an added method survives the save (bug-416)',
     });
   });
 
-  it('keeps a lone blank handle-taking row, which claims the default', () => {
+  it('keeps a lone blank handle-taking row without giving it the default', () => {
     // Nothing typed means setDefaultMethod never fires (it is gated on the NORMALIZED value),
-    // so this reaches applyPaymentInvariant with no explicit default at all. The whole carrier
-    // used to collapse to {} and the row vanished.
+    // so this reaches applyPaymentInvariant with no explicit default at all. Two halves, both
+    // load-bearing: the row must survive (it used to collapse the carrier to {} - bug-416),
+    // and it must come back with NO default, or reopening the editor seeds one and the sticky
+    // rule in setHandle can never fire again (bug-421).
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
     addMethod(tree, 'venmo');
     pressSave(tree);
-    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: '' }, defaultMethod: 'venmo' });
+    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: '' } });
   });
 
   it('still drops a row the user explicitly removed', () => {
@@ -530,5 +532,87 @@ describe('PaymentEditorContent — an added method survives the save (bug-416)',
     act(() => { byTestId(tree, 'payment-remove-zelle').props.onPress(); });
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
+  });
+});
+
+/**
+ * bug-421. Heagen's gesture spans two openings of the editor, which is why every
+ * single-session test above passes while the app gets it wrong:
+ *
+ *   1. Add Venmo, type nothing, Save.  -> saved as { venmo: '' }
+ *   2. Reopen, add Cash App, type a handle, Save.
+ *
+ * Step 2's handle is the only thing the user ever typed, so it must hold the default. It did
+ * not: step 1 persisted `defaultMethod: 'venmo'` (applyPaymentInvariant's `?? present[0]`),
+ * the editor seeded that back as a chosen default, and setHandle's auto-assign is gated on
+ * the default being unset. The badge, the share message and the published /g/ snapshot then
+ * all read "Venmo" with no handle.
+ */
+describe('PaymentEditorContent - a blank row saved earlier does not own the default (bug-421)', () => {
+  it('gives the default to the first handle typed after reopening', () => {
+    const onSave = jest.fn();
+    const tree = renderEditor({ player: { methods: { venmo: '' } }, onSave });
+    addMethod(tree, 'cashapp');
+    act(() => { byTestId(tree, 'payment-input-cashapp').props.onChangeText('alice'); });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { venmo: '', cashapp: 'alice' },
+      defaultMethod: 'cashapp',
+    });
+  });
+
+  it('leaves the lone marker hollow when the reopened row has no handle', () => {
+    // Same defect seen on screen. The marker's contract is "hollow while the row would say
+    // nothing, filled once there is a handle" - a fabricated default fills it on reopen for a
+    // row the user never typed into. Asserted through the style because filled and hollow are
+    // the same node.
+    const tree = renderEditor({ player: { methods: { venmo: '' } } });
+    const flat = (n: any) => JSON.stringify(n.props.style);
+    expect(flat(byTestId(tree, 'payment-default-marker-venmo'))).not.toContain('#B072BB');
+  });
+
+  it('seeds the mount-time default from the chosen one, not just the re-open effect', () => {
+    // visible={false} makes the re-seed effect return early, which is what makes this the
+    // ONLY test that reaches the useState initializer. Every other test here mounts visible,
+    // so the effect overwrites the initializer one commit later and a wrong initializer is
+    // invisible to them. The overlay in saved-players.tsx really does mount while closed.
+    const onSave = jest.fn();
+    const tree = renderEditor({ player: { methods: { venmo: '' } }, visible: false, onSave });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: '' } });
+  });
+
+  it('ignores a saved default that names a method the player does not have', () => {
+    // A defaultMethod outside the map is the shape resolveDefaultMethod has a documented
+    // fallback for, and the editor cannot represent it — there is no row to mark. Seeding it
+    // anyway makes handleSave send it to applyPaymentInvariant, which honours an explicit
+    // default by ADDING it to the map: a Venmo row the user never touched appears on save and
+    // takes the default away from the handle they did type.
+    const onSave = jest.fn();
+    const tree = renderEditor({
+      player: { methods: { cashapp: 'alice' }, defaultMethod: 'venmo' },
+      onSave,
+    });
+    expect(byTestId(tree, 'payment-input-venmo')).toBeUndefined();
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { cashapp: 'alice' },
+      defaultMethod: 'cashapp',
+    });
+  });
+
+  it('keeps a blank default the user actually chose, and does not hand it to a filled row', () => {
+    // The opposite direction, which the fix must NOT relax: an explicit defaultMethod on a
+    // handle-less row survives a reopen-and-save untouched even though another row is filled.
+    const onSave = jest.fn();
+    const tree = renderEditor({
+      player: { methods: { venmo: '', cashapp: 'alice' }, defaultMethod: 'venmo' },
+      onSave,
+    });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({
+      methods: { venmo: '', cashapp: 'alice' },
+      defaultMethod: 'venmo',
+    });
   });
 });

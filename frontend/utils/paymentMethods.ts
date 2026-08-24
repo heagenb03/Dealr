@@ -39,8 +39,9 @@ export function fromLegacyPayment(pref: PreferredPayment | undefined): PaymentCa
 
 /**
  * Normalize a carrier to the spec §1 invariant: every method PRESENT in the map is kept
- * (handle or not) and the default is always in the map. Returns a carrier with NO keys when
- * the map is empty, so callers can spread it conditionally.
+ * (handle or not), and a default, when there is one, is always in the map. Returns a carrier
+ * with NO keys when the map is empty, so callers can spread it conditionally. `defaultMethod`
+ * is omitted when the user has neither chosen one nor filled any row (bug-421).
  *
  * Presence is the signal, not the handle (bug-416). This rule used to prune any non-default
  * method whose handle was empty, which was right for the show-all-seven-rows editor: a key
@@ -56,12 +57,16 @@ export function applyPaymentInvariant(c: PaymentCarrier): PaymentCarrier {
   const present = ORDER.filter(k => k in source);
   const filled = ORDER.filter(k => (source[k] ?? '') !== '');
   // An EXPLICIT default is honoured even when it has no handle and no map entry — that is
-  // how Cash, and a label-only Venmo, get saved. An ABSENT default prefers the first FILLED
-  // method: a typed handle is a stronger claim than mere presence, and it is what the share
-  // message and the published /g/ snapshot render (both read only resolvePayment). Only when
-  // nothing is filled does the first present method take it, so a lone blank row still saves.
-  const defaultMethod = c.defaultMethod ?? filled[0] ?? present[0];
-  if (!defaultMethod) return {};
+  // how Cash, and a label-only Venmo, get saved. An ABSENT default falls to the first FILLED
+  // method and STOPS there (bug-421). Presence keeps a row; it does not choose it. Promoting
+  // a row nobody typed into writes a defaultMethod that no later reader can tell apart from
+  // one the user picked — including PaymentEditorContent, which seeds its own default state
+  // from the carrier and auto-assigns only while that state is unset, so the fabricated
+  // choice is permanent and the next handle typed can never take it.
+  const defaultMethod = c.defaultMethod ?? filled[0];
+  // A map with rows but nothing chosen is a real, storable state; only an EMPTY map has
+  // nothing to keep. resolveDefaultMethod still names a method for display in that state.
+  if (!defaultMethod && present.length === 0) return {};
 
   const methods: PaymentHandles = {};
   for (const key of ORDER) {
@@ -69,7 +74,7 @@ export function applyPaymentInvariant(c: PaymentCarrier): PaymentCarrier {
     if (key === defaultMethod) methods[key] = raw ?? '';
     else if (key in source) methods[key] = raw as string;
   }
-  return { methods, defaultMethod };
+  return defaultMethod ? { methods, defaultMethod } : { methods };
 }
 
 /**
