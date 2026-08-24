@@ -21,4 +21,11 @@ describe('PAYMENT_METHODS meta', () => {
     expect(getPaymentMethodMeta('cashapp').handlePlaceholder).toBe('cashtag');
     expect(getPaymentMethodMeta('paypal').handlePlaceholder).toBe('username');
   });
+
+  it('words the two contact-handle placeholders identically', () => {
+    // Zelle and Apple Cash accept the same two things, so two orderings of the same pair
+    // read as a difference between the methods that is not there.
+    expect(getPaymentMethodMeta('zelle').handlePlaceholder).toBe('email or phone');
+    expect(getPaymentMethodMeta('applecash').handlePlaceholder).toBe('email or phone');
+  });
 });

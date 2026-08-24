@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SavedPlayer } from '@/services/savedPlayersService';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, paymentSignature, filledMethods } from '@/utils/paymentMethods';
+import { resolvePayment, paymentSignature } from '@/utils/paymentMethods';
 
 interface SavedPlayerCardProps {
   player: SavedPlayer;
@@ -55,11 +55,10 @@ const SavedPlayerCard: React.FC<SavedPlayerCardProps> = ({
   // player.preferredPayment is always undefined (derived only at the storage serialize
   // boundary — see savedPlayersService.ts) — resolve the badge from methods/defaultMethod.
   const legacy = resolvePayment(player);
-  const extra = legacy ? filledMethods(player).filter(m => m !== legacy.method).length : 0;
   const badge = legacy
     ? `${getPaymentMethodMeta(legacy.method).label}${
         legacy.handle ? ` · ${formatHandleForDisplay(legacy.method, legacy.handle)}` : ''
-      }${extra > 0 ? ` +${extra}` : ''}`
+      }`
     : null;
 
   return (

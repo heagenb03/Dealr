@@ -3,18 +3,15 @@
  * card display sites (PlayerCardActive, PlayerCardCompleted, SavedPlayerCard)
  * in task 8 of the multiple-payment-methods spec:
  *
- * 1. The "+N" payment-method-count badge. Each card shows the resolved DEFAULT
- *    method's label/handle, plus a "+N" suffix counting the FILLED methods
- *    OTHER than the default:
- *      filledMethods(player).filter(m => m !== pref.method).length
- *    This is NOT the same as `filledMethods(player).length - 1` — the two only
- *    agree when the default itself is filled. They diverge whenever the default
- *    is a label-only entry (no handle) with another method filled: filledMethods()
- *    then excludes the default entirely, so its .length already IS the "other
- *    methods" count, and subtracting 1 from it undercounts by one. See
- *    `labelOnlyDefaultWithOtherFilled` below, which pins exactly this case. A
- *    regression that always renders 0 extra methods, or never renders the
- *    suffix at all, would be invisible to every other suite in this repo.
+ * 1. The ABSENCE of a payment-method count. Each card shows the resolved DEFAULT
+ *    method's label and handle and NOTHING about how many other methods exist.
+ *    A "+N" suffix counting the other filled methods shipped in task 8 and was
+ *    removed on request (2026-08-21) as noise. The two fixtures below are the
+ *    shapes that used to render it — a filled default with another filled method,
+ *    and a LABEL-ONLY default with another filled method. Both are kept because
+ *    the two count formulas that shipped (`filter(m => m !== default).length` and
+ *    the wrong count-the-filled-methods-minus-one) disagree only on the second shape, so
+ *    a partial revert that reinstates either one goes red here.
  *
  * 2. The memo comparators (PlayerCardActive/PlayerCardCompleted only —
  *    SavedPlayerCard's was already fixed in task 3) now compare
@@ -41,7 +38,8 @@
  * never returns under jest-expo/node), so it is tested by calling that function
  * directly, in app/(tabs)/(profile)/__tests__/saved-players-payment-editor.test.tsx.
  * Task 8's brief named only the three components above, which is exactly how that
- * renderer shipped without the +N suffix.
+ * renderer shipped WITHOUT the suffix the others had — so a change to what these
+ * badges show has to be made in four places, not three.
  *
  * Swipeable/Reanimated/GestureHandler/Ionicons are inert under jest-expo/node
  * (no web implementation worth rendering) and are mocked to pass-throughs —
@@ -131,32 +129,14 @@ const twoMethodPlayer: Player = {
   defaultMethod: 'venmo',
 };
 
-// Cash-only, default = cash. filledMethods() here is EMPTY (cash never has a handle,
-// so it never satisfies filledMethods' non-empty-handle filter) — the "other methods"
-// filter has nothing to remove, so this shape never exercises the filter's actual work.
-// See singleFilledDefaultPlayer below for the shape where the filter does something.
-const oneMethodPlayer: Player = {
-  id: 'p2',
-  name: 'Bob',
-  methods: { cash: '' },
-  defaultMethod: 'cash',
-};
-
-// Exactly one FILLED method, and it IS the default. filledMethods() returns ['venmo'],
-// so the filter has to actively drop the default out of a non-empty list to reach 0 —
-// the shape oneMethodPlayer above cannot exercise, since its filledMethods() is already
-// empty before the filter runs.
-const singleFilledDefaultPlayer: Player = {
-  id: 'p3',
-  name: 'Cara',
-  methods: { venmo: 'v1' },
-  defaultMethod: 'venmo',
-};
-
-// Label-only default (no handle) with ONE other filled method. filledMethods() excludes
-// the unfilled default and returns only ['zelle'], so filledMethods().length is already 1
-// — the count of OTHER filled methods. `filledMethods().length - 1` would wrongly read this
-// as 0: the formula that only agrees with the real one when the default itself is filled.
+// Label-only default (no handle) with ONE other filled method. This is the shape that
+// separates the two count formulas that shipped: `filter(m => m !== default).length`
+// reads it as 1, the wrong count-the-filled-methods-minus-one reads it as 0. Keeping both
+// fixtures means a partial revert reinstating EITHER formula goes red.
+//
+// The old "no +N" fixtures (cash-only, and a single filled method that IS the default)
+// are gone: with the count removed, "renders no count" is true of every shape, so those
+// two discriminated nothing any more.
 const labelOnlyDefaultWithOtherFilled: Player = {
   id: 'p4',
   name: 'Dee',
@@ -166,111 +146,54 @@ const labelOnlyDefaultWithOtherFilled: Player = {
 
 const noop = () => {};
 
-describe('PlayerCardActive — payment badge +N count', () => {
-  it('shows +1 when the player has one filled method beyond the default', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardActive
-        player={twoMethodPlayer}
-        balance={undefined}
-        onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
-        onRename={noop} onEditPayment={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).toContain('+1');
+describe('PlayerCardActive — payment badge carries no method count', () => {
+  const card = (player: Player) => (
+    <PlayerCardActive
+      player={player}
+      balance={undefined}
+      onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
+      onRename={noop} onEditPayment={noop}
+      reduceMotion={true}
+    />
+  );
+
+  it('shows the default method and handle with nothing counted beside them', async () => {
+    const rendered = texts(await renderWithCurrency(card(twoMethodPlayer))).join('');
+    expect(rendered).toContain('Venmo · @ada-l');
+    expect(rendered).not.toMatch(/\+\d/);
   });
 
-  it('shows +1 when the default is label-only (no handle) and one other method is filled', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardActive
-        player={labelOnlyDefaultWithOtherFilled}
-        balance={undefined}
-        onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
-        onRename={noop} onEditPayment={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).toContain('+1');
-  });
-
-  it('shows no +N suffix when the player has no filled methods at all (cash-only default)', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardActive
-        player={oneMethodPlayer}
-        balance={undefined}
-        onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
-        onRename={noop} onEditPayment={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).not.toMatch(/\+\d/);
-  });
-
-  it('shows no +N suffix when the one filled method is the default itself', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardActive
-        player={singleFilledDefaultPlayer}
-        balance={undefined}
-        onBuyIn={noop} onCashOut={noop} onComplete={noop} onDelete={noop}
-        onRename={noop} onEditPayment={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).not.toMatch(/\+\d/);
+  it('counts nothing when the default is label-only and another method is filled', async () => {
+    const rendered = texts(await renderWithCurrency(card(labelOnlyDefaultWithOtherFilled))).join('');
+    expect(rendered).toContain('Venmo');
+    expect(rendered).not.toMatch(/\+\d/);
   });
 });
 
-describe('PlayerCardCompleted — payment badge +N count', () => {
-  it('shows +1 when the player has one filled method beyond the default', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardCompleted
-        player={twoMethodPlayer}
-        balance={undefined}
-        onReactivate={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).toContain('+1');
+describe('PlayerCardCompleted — payment badge carries no method count', () => {
+  const card = (player: Player) => (
+    <PlayerCardCompleted
+      player={player}
+      balance={undefined}
+      onReactivate={noop} onDelete={noop}
+      reduceMotion={true}
+    />
+  );
+
+  it('shows the default method and handle with nothing counted beside them', async () => {
+    const rendered = texts(await renderWithCurrency(card(twoMethodPlayer))).join('');
+    expect(rendered).toContain('Venmo · @ada-l');
+    expect(rendered).not.toMatch(/\+\d/);
   });
 
-  it('shows +1 when the default is label-only (no handle) and one other method is filled', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardCompleted
-        player={labelOnlyDefaultWithOtherFilled}
-        balance={undefined}
-        onReactivate={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).toContain('+1');
-  });
-
-  it('shows no +N suffix when the player has no filled methods at all (cash-only default)', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardCompleted
-        player={oneMethodPlayer}
-        balance={undefined}
-        onReactivate={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).not.toMatch(/\+\d/);
-  });
-
-  it('shows no +N suffix when the one filled method is the default itself', async () => {
-    const tree = await renderWithCurrency(
-      <PlayerCardCompleted
-        player={singleFilledDefaultPlayer}
-        balance={undefined}
-        onReactivate={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).not.toMatch(/\+\d/);
+  it('counts nothing when the default is label-only and another method is filled', async () => {
+    const rendered = texts(await renderWithCurrency(card(labelOnlyDefaultWithOtherFilled))).join('');
+    expect(rendered).toContain('Venmo');
+    expect(rendered).not.toMatch(/\+\d/);
   });
 });
 
-describe('SavedPlayerCard — payment badge +N count', () => {
+describe('SavedPlayerCard — payment badge carries no method count', () => {
   const twoMethodSaved: SavedPlayer = {
     id: 'sp1',
     name: 'Ada',
@@ -283,61 +206,24 @@ describe('SavedPlayerCard — payment badge +N count', () => {
     methods: labelOnlyDefaultWithOtherFilled.methods,
     defaultMethod: labelOnlyDefaultWithOtherFilled.defaultMethod,
   };
-  const oneMethodSaved: SavedPlayer = {
-    id: 'sp2',
-    name: 'Bob',
-    methods: oneMethodPlayer.methods,
-    defaultMethod: oneMethodPlayer.defaultMethod,
-  };
-  const singleFilledDefaultSaved: SavedPlayer = {
-    id: 'sp3',
-    name: 'Cara',
-    methods: singleFilledDefaultPlayer.methods,
-    defaultMethod: singleFilledDefaultPlayer.defaultMethod,
-  };
+  const card = (player: SavedPlayer) => (
+    <SavedPlayerCard
+      player={player}
+      onRename={noop} onEditPayment={noop} onDelete={noop}
+      reduceMotion={true}
+    />
+  );
 
-  it('shows +1 when the player has one filled method beyond the default', () => {
-    const tree = render(
-      <SavedPlayerCard
-        player={twoMethodSaved}
-        onRename={noop} onEditPayment={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).toContain('+1');
+  it('shows the default method and handle with nothing counted beside them', () => {
+    const rendered = texts(render(card(twoMethodSaved))).join('');
+    expect(rendered).toContain('Venmo · @ada-l');
+    expect(rendered).not.toMatch(/\+\d/);
   });
 
-  it('shows +1 when the default is label-only (no handle) and one other method is filled', () => {
-    const tree = render(
-      <SavedPlayerCard
-        player={labelOnlyDefaultSaved}
-        onRename={noop} onEditPayment={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).toContain('+1');
-  });
-
-  it('shows no +N suffix when the player has no filled methods at all (cash-only default)', () => {
-    const tree = render(
-      <SavedPlayerCard
-        player={oneMethodSaved}
-        onRename={noop} onEditPayment={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).not.toMatch(/\+\d/);
-  });
-
-  it('shows no +N suffix when the one filled method is the default itself', () => {
-    const tree = render(
-      <SavedPlayerCard
-        player={singleFilledDefaultSaved}
-        onRename={noop} onEditPayment={noop} onDelete={noop}
-        reduceMotion={true}
-      />
-    );
-    expect(texts(tree).join('')).not.toMatch(/\+\d/);
+  it('counts nothing when the default is label-only and another method is filled', () => {
+    const rendered = texts(render(card(labelOnlyDefaultSaved))).join('');
+    expect(rendered).toContain('Venmo');
+    expect(rendered).not.toMatch(/\+\d/);
   });
 });
 

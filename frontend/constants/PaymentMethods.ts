@@ -18,7 +18,7 @@ export const PAYMENT_METHODS: PaymentMethodMeta[] = [
   { key: 'cashapp',   label: 'Cash App',   deepLinkable: true,  takesHandle: true,  affix: '$',          handlePlaceholder: 'cashtag' },
   { key: 'paypal',    label: 'PayPal',     deepLinkable: true,  takesHandle: true,  affix: 'paypal.me/', handlePlaceholder: 'username' },
   { key: 'zelle',     label: 'Zelle',      deepLinkable: false, takesHandle: true,  affix: '',           handlePlaceholder: 'email or phone' },
-  { key: 'applecash', label: 'Apple Cash', deepLinkable: false, takesHandle: true,  affix: '',           handlePlaceholder: 'phone or email' },
+  { key: 'applecash', label: 'Apple Cash', deepLinkable: false, takesHandle: true,  affix: '',           handlePlaceholder: 'email or phone' },
   { key: 'other',     label: 'Other',      deepLinkable: false, takesHandle: true,  affix: '',           handlePlaceholder: 'note' },
 ];
 

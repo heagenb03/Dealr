@@ -44,12 +44,23 @@ import TestRenderer, { act, ReactTestRenderer } from 'react-test-renderer';
 // unconditionally in a mount-time useLayoutEffect. See PaymentEditorModal.test.tsx.
 (global as any).document = { activeElement: null };
 
+// PaymentEditorContent's add/remove controls are icon-led, and under jest-expo/node the real
+// Ionicons resolves a font through an asset registry the preset does not provide — the throw
+// takes down the whole worker, not just the test. Same stub as PaymentEditorModal.test.tsx.
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
-  default: { View: require('react-native').View },
+  default: {
+    View: require('react-native').View,
+    // PaymentEditorContent's body is a Reanimated.ScrollView (it drives the bottom fade
+    // from an animated scroll handler). Without this the body renders as undefined.
+    ScrollView: require('react-native').ScrollView,
+  },
   useAnimatedKeyboard: () => ({ height: { value: 0 } }),
   useAnimatedStyle: () => ({}),
+  useAnimatedScrollHandler: () => () => {},
   useSharedValue: (initial: number) => ({ value: initial }),
+  withTiming: (v: number) => v,
   runOnJS: (fn: any) => fn,
 }));
 jest.mock('react-native-gesture-handler', () => {
@@ -193,11 +204,16 @@ describe('saved-players usePaymentEditorTarget (R-23 reference stability)', () =
     act(() => { tree = TestRenderer.create(<AddFlowProbe />); });
 
     press(tree, 'open-editor');
+    // The Add flow starts with no methods, so the editor opens on its picker and the Venmo
+    // row does not exist until it is added. That makes the row itself part of what a
+    // re-seed would wipe, not just the text in it — both are asserted below.
+    press(tree, 'payment-add-venmo');
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('mid-typed'); });
 
     // The state change that would re-render the parent while the overlay stays open.
     press(tree, 'type-name');
 
+    expect(byTestId(tree, 'payment-input-venmo')).toBeTruthy();
     expect(byTestId(tree, 'payment-input-venmo').props.value).toBe('mid-typed');
   });
 });
@@ -223,34 +239,35 @@ describe('saved-players edit-flow write-back (carry-forward: clear vs. don’t-t
  * `badgeText` is saved-players.tsx's SELECT-MODE row badge — a FOURTH payment-badge renderer
  * alongside the three components covered by components/__tests__/paymentBadgeCount.test.tsx
  * (PlayerCardActive, PlayerCardCompleted, SavedPlayerCard). Task 8's brief named only those
- * three, so this one shipped without the `+N` suffix: the exact same rows showed the count in
- * normal mode (via SavedPlayerCard) and lost it the moment the user tapped Select.
+ * three, so this one shipped WITHOUT the `+N` suffix the others had: the exact same rows
+ * showed a count in normal mode and lost it the moment the user tapped Select. The count is
+ * now gone from all four (removed on request 2026-08-21 as noise), so these assert the two
+ * shapes that used to produce it and pin that the badge is now just method and handle.
  *
  * These assert the string directly rather than through a render: <SavedPlayersScreen>'s
  * top-level FlatList never returns under jest-expo/node, so the only way to reach this
- * function is to call it. The `+N` count is "filled methods OTHER than the default", NOT
- * `filledMethods().length - 1` — see paymentBadgeCount.test.tsx's header for why the two
- * formulas diverge on a label-only default, and the label-only case below.
+ * function is to call it.
  */
 describe('saved-players select-mode badge (badgeText) — matches SavedPlayerCard', () => {
   const saved = (methods: SavedPlayer['methods'], defaultMethod: SavedPlayer['defaultMethod']): SavedPlayer =>
     ({ id: 'sp1', name: 'Ada', methods, defaultMethod });
 
-  it('appends +N for filled methods beyond the default', () => {
-    expect(badgeText(saved({ venmo: 'ada-l', zelle: 'ada@x.com' }, 'venmo'))).toBe('Venmo · @ada-l +1');
+  it('counts nothing when other methods are filled beyond the default', () => {
+    expect(badgeText(saved({ venmo: 'ada-l', zelle: 'ada@x.com' }, 'venmo'))).toBe('Venmo · @ada-l');
   });
 
-  it('appends +N when the default is label-only and another method is filled', () => {
-    // filledMethods() excludes the unfilled default, so its length is ALREADY the
-    // "other methods" count — `length - 1` would wrongly render no suffix here.
-    expect(badgeText(saved({ venmo: '', zelle: 'dee@x.com' }, 'venmo'))).toBe('Venmo +1');
+  it('counts nothing when the default is label-only and another method is filled', () => {
+    // The shape the two count formulas disagreed on — `filter(m => m !== default).length`
+    // rendered '+1' here and count-the-filled-methods-minus-one rendered nothing. Pinning the bare
+    // label means reinstating EITHER formula goes red.
+    expect(badgeText(saved({ venmo: '', zelle: 'dee@x.com' }, 'venmo'))).toBe('Venmo');
   });
 
-  it('appends no suffix when the only filled method IS the default', () => {
+  it('renders method and handle when the only filled method IS the default', () => {
     expect(badgeText(saved({ venmo: 'v1' }, 'venmo'))).toBe('Venmo · @v1');
   });
 
-  it('appends no suffix for a cash-only default (no filled methods at all)', () => {
+  it('renders the bare label for a cash-only default (no handle to show)', () => {
     expect(badgeText(saved({ cash: '' }, 'cash'))).toBe('Cash');
   });
 

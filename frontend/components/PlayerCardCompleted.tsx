@@ -10,7 +10,7 @@ import { getNetBalanceColor, netBalanceDisplay } from '@/utils/formatUtils';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, filledMethods, paymentSignature } from '@/utils/paymentMethods';
+import { resolvePayment, paymentSignature } from '@/utils/paymentMethods';
 
 interface PlayerCardCompletedProps {
   player: Player;
@@ -118,13 +118,11 @@ const PlayerCardCompleted: React.FC<PlayerCardCompletedProps> = ({
             {(() => {
               const pref = resolvePayment(player);
               if (!pref) return null;
-              const extra = filledMethods(player).filter(m => m !== pref.method).length;
               return (
                 <View style={styles.paymentBadge}>
                   <Text style={styles.paymentBadgeText} numberOfLines={1}>
                     {getPaymentMethodMeta(pref.method).label}
                     {pref.handle ? ` · ${formatHandleForDisplay(pref.method, pref.handle)}` : ''}
-                    {extra > 0 ? ` +${extra}` : ''}
                   </Text>
                 </View>
               );

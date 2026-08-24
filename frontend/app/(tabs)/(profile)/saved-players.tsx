@@ -34,7 +34,7 @@ import {
 import { PaymentCarrier, Player } from '@/types/game';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, filledMethods, paymentWriteBackPatch } from '@/utils/paymentMethods';
+import { resolvePayment, paymentWriteBackPatch } from '@/utils/paymentMethods';
 import { savedCapCounter, savedCapPaywallMessage } from '@/utils/capCopy';
 import { buildSavedPlayersListData, SavedPlayersListItem } from '@/utils/savedPlayersListData';
 
@@ -90,11 +90,9 @@ export function usePaymentEditorTarget(
 // default through resolvePayment instead of the field directly.
 //
 // Select mode's rows are the ONLY consumer of this (normal mode renders SavedPlayerCard).
-// It must produce the same string SavedPlayerCard does, `+N` included, or the count
-// vanishes the moment the user taps Select on the very same list. The `+N` count is
-// "filled methods OTHER than the default" — deliberately not `filledMethods().length - 1`,
-// which is wrong whenever the default is a label-only entry (see
-// components/__tests__/paymentBadgeCount.test.tsx).
+// It must produce the same string SavedPlayerCard does, or the badge changes the moment the
+// user taps Select on the very same list — which is how the `+N` method count that once
+// lived in the other three renderers came to be missing from this one.
 // Exported for __tests__/saved-players-payment-editor.test.tsx. <SavedPlayersScreen> itself
 // cannot be rendered in a test (its top-level FlatList never returns under jest-expo/node),
 // so this string builder is unreachable through the component and has to be tested directly.
@@ -103,9 +101,7 @@ export function badgeText(p: SavedPlayer): string | null {
   if (!legacy) return null;
   const { method, handle } = legacy;
   const label = getPaymentMethodMeta(method).label;
-  const extra = filledMethods(p).filter(m => m !== method).length;
-  const base = handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
-  return extra > 0 ? `${base} +${extra}` : base;
+  return handle ? `${label} · ${formatHandleForDisplay(method, handle)}` : label;
 }
 
 const  BULK_PAYWALL_MESSAGE = 'Upgrade to Pro to bulk-manage your saved players.';

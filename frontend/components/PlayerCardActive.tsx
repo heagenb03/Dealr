@@ -9,7 +9,7 @@ import { Player, PlayerBalance } from '@/types/game';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getPaymentMethodMeta } from '@/constants/PaymentMethods';
 import { formatHandleForDisplay } from '@/utils/paymentLinks';
-import { resolvePayment, filledMethods, paymentSignature } from '@/utils/paymentMethods';
+import { resolvePayment, paymentSignature } from '@/utils/paymentMethods';
 
 interface PlayerCardActiveProps {
   player: Player;
@@ -127,12 +127,10 @@ const PlayerCardActive: React.FC<PlayerCardActiveProps> = ({
               {(() => {
                 const pref = resolvePayment(player);
                 if (!pref) return <Text style={styles.paymentBadgeAdd}>+ Payment</Text>;
-                const extra = filledMethods(player).filter(m => m !== pref.method).length;
                 return (
                   <Text style={styles.paymentBadgeText} numberOfLines={1}>
                     {getPaymentMethodMeta(pref.method).label}
                     {pref.handle ? ` · ${formatHandleForDisplay(pref.method, pref.handle)}` : ''}
-                    {extra > 0 ? ` +${extra}` : ''}
                   </Text>
                 );
               })()}

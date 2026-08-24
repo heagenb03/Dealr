@@ -1,7 +1,11 @@
 /**
- * PaymentEditorContent is fill-many: one row per PAYMENT_METHODS entry, each with its
- * own handle input, plus a per-row control that marks one row the default. Save collapses
+ * PaymentEditorContent is add-then-fill: the editor opens showing ONLY the methods the player
+ * already has, each with a full-width handle input, and a picker adds more. Save collapses
  * that local state through applyPaymentInvariant into a single PaymentCarrier.
+ *
+ * The row set IS `handles`' key set — a key present means "this player has this method", which
+ * is exactly what handleSave already iterated (it skips `undefined` entries), so the save path
+ * is unchanged from the show-all-seven-rows design this replaced.
  *
  * @testing-library/react-native is NOT a dependency of this project (frontend/package.json
  * devDependencies: @types/jest, @types/react, baseline-browser-mapping, jest, jest-expo,
@@ -40,12 +44,24 @@ import TestRenderer, { act, ReactTestRenderer } from 'react-test-renderer';
 
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
-  default: { View: require('react-native').View },
+  default: {
+    View: require('react-native').View,
+    // PaymentEditorContent's body is a Reanimated.ScrollView (it drives the bottom fade
+    // from an animated scroll handler). Without this the body renders as undefined.
+    ScrollView: require('react-native').ScrollView,
+  },
   useAnimatedKeyboard: () => ({ height: { value: 0 } }),
   useAnimatedStyle: () => ({}),
+  useAnimatedScrollHandler: () => () => {},
   useSharedValue: (initial: number) => ({ value: initial }),
+  withTiming: (v: number) => v,
   runOnJS: (fn: any) => fn,
 }));
+// The add/remove controls are icon-led. Under jest-expo/node the real Ionicons resolves a
+// font through the asset registry, which the preset does not provide — rendering one throws
+// `Module "1" is missing from the asset registry`. Same stub as SummaryView.test.tsx:37; the
+// testIDs this file queries sit on the surrounding TouchableOpacity, not on the icon.
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 jest.mock('react-native-gesture-handler', () => {
   const build = () => {
     const g: Record<string, any> = {};
@@ -77,10 +93,22 @@ function renderEditor(props: Partial<React.ComponentProps<typeof PaymentEditorCo
   return tree;
 }
 
-/** The single row testID, or undefined if that row is not rendered (e.g. cash's input). */
+/** The single node with this testID, or undefined when it is not rendered. */
 function byTestId(tree: ReactTestRenderer, testID: string) {
   const found = tree.root.findAllByProps({ testID });
   return found[0];
+}
+
+/**
+ * Add a method the way a user does. The picker stands open on its own only while no method
+ * has been added yet (that is the empty state); every later add needs the toggle first, so
+ * this presses it when the chip is not already on screen.
+ */
+function addMethod(tree: ReactTestRenderer, key: string) {
+  if (!byTestId(tree, 'payment-add-' + key)) {
+    act(() => { byTestId(tree, 'payment-add-toggle').props.onPress(); });
+  }
+  act(() => { byTestId(tree, 'payment-add-' + key).props.onPress(); });
 }
 
 /** Save is the confirm-variant ModalButton — fired via its onPress prop (see file header). */
@@ -90,10 +118,34 @@ function pressSave(tree: ReactTestRenderer) {
 }
 
 describe('PaymentEditorContent', () => {
-  it('renders one handle input per handle-taking method', () => {
+  it('renders no method rows for a player who has none', () => {
     const tree = renderEditor();
+    expect(byTestId(tree, 'payment-input-venmo')).toBeUndefined();
+    expect(byTestId(tree, 'payment-input-zelle')).toBeUndefined();
+  });
+
+  it('opens the picker unprompted only while the player has no method', () => {
+    // The empty state has nothing else on it, so an add control the user still has to find
+    // would be the whole screen. Once a row exists the picker gets out of the way.
+    const tree = renderEditor();
+    expect(byTestId(tree, 'payment-add-venmo')).toBeTruthy();
+    addMethod(tree, 'venmo');
+    expect(byTestId(tree, 'payment-add-zelle')).toBeUndefined();
+    expect(byTestId(tree, 'payment-add-toggle')).toBeTruthy();
+  });
+
+  it('offers only the methods not already added', () => {
+    const tree = renderEditor({ player: { methods: { venmo: 'alice' }, defaultMethod: 'venmo' } });
+    act(() => { byTestId(tree, 'payment-add-toggle').props.onPress(); });
+    expect(byTestId(tree, 'payment-add-venmo')).toBeUndefined();
+    expect(byTestId(tree, 'payment-add-zelle')).toBeTruthy();
+  });
+
+  it('renders an input for an added method, and none for handle-less cash', () => {
+    const tree = renderEditor();
+    addMethod(tree, 'venmo');
+    addMethod(tree, 'cash');
     expect(byTestId(tree, 'payment-input-venmo')).toBeTruthy();
-    expect(byTestId(tree, 'payment-input-zelle')).toBeTruthy();
     expect(byTestId(tree, 'payment-input-cash')).toBeUndefined();
   });
 
@@ -105,9 +157,21 @@ describe('PaymentEditorContent', () => {
     expect(byTestId(tree, 'payment-input-zelle').props.value).toBe('a@x.com');
   });
 
+  it('hides the default control while only one method is added', () => {
+    // With one row there is nothing to choose between, so the dot would be a control that
+    // cannot change anything. It appears as soon as a second row does.
+    const tree = renderEditor();
+    addMethod(tree, 'venmo');
+    expect(byTestId(tree, 'payment-default-venmo')).toBeUndefined();
+    addMethod(tree, 'zelle');
+    expect(byTestId(tree, 'payment-default-venmo')).toBeTruthy();
+    expect(byTestId(tree, 'payment-default-zelle')).toBeTruthy();
+  });
+
   it('saves only filled rows, and makes the first filled row the default', () => {
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('alice'); });
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
@@ -122,6 +186,8 @@ describe('PaymentEditorContent', () => {
     // instead from declaration order would give 'venmo'.
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    addMethod(tree, 'zelle');
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('z'); });
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('v'); });
     pressSave(tree);
@@ -131,9 +197,28 @@ describe('PaymentEditorContent', () => {
     });
   });
 
+  it('does not let ADD ORDER claim the default before anything is typed', () => {
+    // Adding a handle-taking method is now a deliberate tap, which makes it tempting to treat
+    // that tap as the default-claiming act. It must not be, for the same reason as the
+    // affix-only case below: a row the user added and then left blank saves no handle, so
+    // honouring it as the default sends a handle-less method to the card badge, the share
+    // message and the published /g/ snapshot while the handle they DID enter sits elsewhere.
+    // Venmo is added FIRST and Zelle second, so add order and declaration order agree on
+    // 'venmo' — only leaving the default unclaimed until a real handle is typed gives 'zelle'.
+    const onSave = jest.fn();
+    const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    addMethod(tree, 'zelle');
+    act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+  });
+
   it('saves several methods at once, keeping the chosen default', () => {
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    addMethod(tree, 'zelle');
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('alice'); });
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
     act(() => { byTestId(tree, 'payment-default-zelle').props.onPress(); });
@@ -164,23 +249,103 @@ describe('PaymentEditorContent', () => {
       player: { methods: { venmo: '' }, defaultMethod: 'venmo' },
       onSave,
     });
+    addMethod(tree, 'zelle');
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
     act(() => { byTestId(tree, 'payment-default-zelle').props.onPress(); });
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
   });
 
-  it('saves cash as a handle-less default', () => {
+  it('adding cash claims the default, so a cash-only player saves something', () => {
+    // Cash takes no handle, so adding it is the entire statement the user can make about it
+    // and there is no keystroke left to claim the default with. applyPaymentInvariant keeps a
+    // handle-less method ONLY when it is the default, so without this rule the tap produces
+    // {} and Cash silently vanishes on save.
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
-    act(() => { byTestId(tree, 'payment-default-cash').props.onPress(); });
+    addMethod(tree, 'cash');
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({ methods: { cash: '' }, defaultMethod: 'cash' });
+  });
+
+  it('does not let a later cash tap steal the default from a filled row', () => {
+    // The claim above is conditional on nothing else holding the default yet — it must never
+    // override a handle the user already entered.
+    const onSave = jest.fn();
+    const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('alice'); });
+    addMethod(tree, 'cash');
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
+  });
+
+  it('removing a method drops it from the saved carrier', () => {
+    const onSave = jest.fn();
+    const tree = renderEditor({
+      player: { methods: { venmo: 'alice', zelle: 'a@x.com' }, defaultMethod: 'venmo' },
+      onSave,
+    });
+    act(() => { byTestId(tree, 'payment-remove-zelle').props.onPress(); });
+    expect(byTestId(tree, 'payment-input-zelle')).toBeUndefined();
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
+  });
+
+  it('hands the default to the first remaining filled row when the default is removed', () => {
+    // Leaving defaultMethod pointed at a key that is no longer in the map falls through to
+    // applyPaymentInvariant's filled[0] at save time, but the editor would show no dot filled
+    // in the meantime. Reassigning on removal keeps state and UI saying the same thing.
+    const onSave = jest.fn();
+    const tree = renderEditor({
+      player: { methods: { venmo: 'alice', zelle: 'a@x.com' }, defaultMethod: 'venmo' },
+      onSave,
+    });
+    act(() => { byTestId(tree, 'payment-remove-venmo').props.onPress(); });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+  });
+
+  it('hands the default to handle-less cash when no remaining row is filled', () => {
+    // Same reassignment, through the branch a filled-row search cannot reach: Cash never has
+    // a handle, so "first remaining filled row" finds nothing and the rule has to fall through
+    // to it, or the surviving Cash row is dropped by the invariant and the save is empty.
+    const onSave = jest.fn();
+    const tree = renderEditor({ onSave });
+    addMethod(tree, 'cash');
+    addMethod(tree, 'venmo');
+    act(() => { byTestId(tree, 'payment-default-venmo').props.onPress(); });
+    act(() => { byTestId(tree, 'payment-remove-venmo').props.onPress(); });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { cash: '' }, defaultMethod: 'cash' });
+  });
+
+  it('prefers a filled row over a handle-less one that precedes it in declaration order', () => {
+    // The two cases above cannot separate fallbackDefault's two branches: each has only one
+    // candidate left, so a rule that searched handle-less rows FIRST would return the same
+    // answer. Cash sits AHEAD of Venmo in PAYMENT_METHODS, so this is the case where the two
+    // orderings disagree — 'cash' here would mean the surviving Venmo handle stops being what
+    // the card badge, the share message and the /g/ snapshot show.
+    const onSave = jest.fn();
+    const tree = renderEditor({
+      player: { methods: { cash: '', venmo: 'alice', zelle: 'z@x.com' }, defaultMethod: 'zelle' },
+      onSave,
+    });
+    act(() => { byTestId(tree, 'payment-remove-zelle').props.onPress(); });
+    pressSave(tree);
+    expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
+  });
+
+  it('reopens the picker when the last method is removed', () => {
+    const tree = renderEditor({ player: { methods: { venmo: 'alice' }, defaultMethod: 'venmo' } });
+    act(() => { byTestId(tree, 'payment-remove-venmo').props.onPress(); });
+    expect(byTestId(tree, 'payment-add-zelle')).toBeTruthy();
   });
 
   it('strips a typed affix so the handle is stored bare', () => {
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('@alice'); });
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({ methods: { venmo: 'alice' }, defaultMethod: 'venmo' });
@@ -197,10 +362,25 @@ describe('PaymentEditorContent', () => {
     // published /g/ snapshot {"method":"venmo"}.
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
+    addMethod(tree, 'venmo');
+    addMethod(tree, 'zelle');
     act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('@'); });
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+  });
+
+  it('renders a bottom scroll fade that never intercepts touches', () => {
+    // What this can and cannot check: the fade's opacity comes from useAnimatedStyle, which
+    // is mocked to {} here, so whether it actually tracks scroll position is NOT observable —
+    // that arithmetic is pinned in utils/__tests__/scrollFade.test.ts instead. What IS worth
+    // pinning here is that the overlay exists at all, and that it is transparent to touch: it
+    // sits over the bottom 30pt of the list, which is exactly where a row's input lands when
+    // the list is scrolled to the end.
+    const tree = renderEditor();
+    const fade = byTestId(tree, 'payment-scroll-fade');
+    expect(fade).toBeTruthy();
+    expect(fade.props.pointerEvents).toBe('none');
   });
 
   it('saves an empty carrier when nothing is filled', () => {

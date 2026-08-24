@@ -5,7 +5,6 @@ import {
   applyPaymentInvariant,
   paymentSignature,
   samePaymentSet,
-  filledMethods,
 } from '@/utils/paymentMethods';
 
 describe('resolveDefaultMethod', () => {
@@ -149,15 +148,5 @@ describe('paymentSignature / samePaymentSet', () => {
 
   it('treats two empty carriers as the same', () => {
     expect(samePaymentSet({}, undefined)).toBe(true);
-  });
-});
-
-describe('filledMethods', () => {
-  it('lists methods with non-empty handles in PAYMENT_METHODS order', () => {
-    expect(filledMethods({ methods: { zelle: 'z', venmo: 'v', cash: '' } })).toEqual(['venmo', 'zelle']);
-  });
-
-  it('returns an empty array for an empty carrier', () => {
-    expect(filledMethods(undefined)).toEqual([]);
   });
 });

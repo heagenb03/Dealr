@@ -77,12 +77,6 @@ export function samePaymentSet(a: PaymentCarrier | undefined, b: PaymentCarrier 
   return paymentSignature(a) === paymentSignature(b);
 }
 
-/** Methods with a non-empty handle, in PAYMENT_METHODS declaration order. */
-export function filledMethods(c: PaymentCarrier | undefined): PaymentMethod[] {
-  const methods = c?.methods ?? {};
-  return ORDER.filter(k => (methods[k] ?? '') !== '');
-}
-
 /**
  * Attach the derived legacy `preferredPayment` to every player on the way OUT to storage.
  *
