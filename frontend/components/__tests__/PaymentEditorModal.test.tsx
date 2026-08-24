@@ -101,8 +101,8 @@ function byTestId(tree: ReactTestRenderer, testID: string) {
 
 /**
  * Add a method the way a user does. The picker stands open on its own only while no method
- * has been added yet (that is the empty state); every later add needs the toggle first, so
- * this presses it when the chip is not already on screen.
+ * has been added yet (that is the empty state); every later add needs the "Add method" row
+ * first, so this presses it when the method's picker row is not already on screen.
  */
 function addMethod(tree: ReactTestRenderer, key: string) {
   if (!byTestId(tree, 'payment-add-' + key)) {
@@ -157,15 +157,33 @@ describe('PaymentEditorContent', () => {
     expect(byTestId(tree, 'payment-input-zelle').props.value).toBe('a@x.com');
   });
 
-  it('hides the default control while only one method is added', () => {
-    // With one row there is nothing to choose between, so the dot would be a control that
-    // cannot change anything. It appears as soon as a second row does.
+  it('draws the dot from the first method but only makes it tappable from the second', () => {
+    // With one row there is nothing to choose between, so a tappable dot would be a control
+    // that cannot change anything — and tapping it WOULD change something it must not: it
+    // would claim the default for a blank handle-taking row, saving a handle-less Venmo.
+    // The dot is still DRAWN, as an inert marker, so adding a second method turns the marker
+    // into a control without sliding every label 26pt to the right at the same time.
     const tree = renderEditor();
     addMethod(tree, 'venmo');
     expect(byTestId(tree, 'payment-default-venmo')).toBeUndefined();
+    expect(byTestId(tree, 'payment-default-marker-venmo')).toBeTruthy();
     addMethod(tree, 'zelle');
     expect(byTestId(tree, 'payment-default-venmo')).toBeTruthy();
     expect(byTestId(tree, 'payment-default-zelle')).toBeTruthy();
+    expect(byTestId(tree, 'payment-default-marker-venmo')).toBeUndefined();
+  });
+
+  it('marks the lone method as default only once it carries a handle', () => {
+    // What the inert marker is FOR: hollow while the row would save nothing, filled once the
+    // auto-default has something real to attach to. Asserted through the style rather than a
+    // testID because filled and hollow are the same node — an assertion on the node alone
+    // would pass in both states and prove nothing.
+    const tree = renderEditor();
+    addMethod(tree, 'venmo');
+    const flat = (n: any) => JSON.stringify(n.props.style);
+    expect(flat(byTestId(tree, 'payment-default-marker-venmo'))).not.toContain('#B072BB');
+    act(() => { byTestId(tree, 'payment-input-venmo').props.onChangeText('alice'); });
+    expect(flat(byTestId(tree, 'payment-default-marker-venmo'))).toContain('#B072BB');
   });
 
   it('saves only filled rows, and makes the first filled row the default', () => {
@@ -368,6 +386,37 @@ describe('PaymentEditorContent', () => {
     act(() => { byTestId(tree, 'payment-input-zelle').props.onChangeText('a@x.com'); });
     pressSave(tree);
     expect(onSave).toHaveBeenCalledWith({ methods: { zelle: 'a@x.com' }, defaultMethod: 'zelle' });
+  });
+
+  it('gives the picker a way back once the player has a method', () => {
+    // The old exit was a "− Done adding" line at the BOTTOM of the scrolling list, which read
+    // as a caption rather than a control. It is now a Done in the picker's own header row,
+    // beside the "Add a method" label, where a header control belongs.
+    const tree = renderEditor({ player: { methods: { venmo: 'alice' }, defaultMethod: 'venmo' } });
+    act(() => { byTestId(tree, 'payment-add-toggle').props.onPress(); });
+    expect(byTestId(tree, 'payment-picker-done')).toBeTruthy();
+    act(() => { byTestId(tree, 'payment-picker-done').props.onPress(); });
+    expect(byTestId(tree, 'payment-add-zelle')).toBeUndefined();
+    expect(byTestId(tree, 'payment-input-venmo')).toBeTruthy();
+  });
+
+  it('offers no way out of the picker while the player has no method', () => {
+    // The empty state IS the picker: there is no list behind it to go back to, so a Done
+    // would leave a card with nothing on it but the control that dismissed everything.
+    const tree = renderEditor();
+    expect(byTestId(tree, 'payment-add-venmo')).toBeTruthy();
+    expect(byTestId(tree, 'payment-picker-done')).toBeUndefined();
+  });
+
+  it('swaps the list for the picker instead of stacking one under the other', () => {
+    // One viewport, two modes — which is what lets the card have a fixed maximum height at
+    // all. Stacked, the cap would push the method rows out of view the moment the picker
+    // opened, and the pinned Add method row would sit above a list it no longer applied to.
+    const tree = renderEditor({ player: { methods: { venmo: 'alice' }, defaultMethod: 'venmo' } });
+    act(() => { byTestId(tree, 'payment-add-toggle').props.onPress(); });
+    expect(byTestId(tree, 'payment-input-venmo')).toBeUndefined();
+    expect(byTestId(tree, 'payment-add-toggle')).toBeUndefined();
+    expect(byTestId(tree, 'payment-add-zelle')).toBeTruthy();
   });
 
   it('renders a bottom scroll fade that never intercepts touches', () => {

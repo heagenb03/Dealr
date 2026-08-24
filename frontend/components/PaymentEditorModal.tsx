@@ -132,8 +132,9 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
   // Forced open on the empty state: with no rows there is nothing else on screen, so an add
   // control the user still has to find would be the entire modal.
   const showPicker = available.length > 0 && (pickerOpen || added.length === 0);
-  // One row is the default by having no competition; a dot that cannot change anything is
-  // just a control to misread.
+  // Gates whether the dot is INTERACTIVE, not whether it is drawn — the column is always
+  // drawn (see the row below). One row is the default by having no competition, so a
+  // tappable dot there would be a control that cannot change anything.
   const showDefaultControl = added.length > 1;
 
   const addMethod = (m: PaymentMethodMeta) => {
@@ -190,10 +191,24 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
       // height-capped card — the same unbounded-ScrollView shape as the HelpSheet bug.
       scrollBody={false}
       header={
-        showDefaultControl ? (
-          <Text style={styles.subtitle}>
-            Tap a dot to choose which one shows on the player&apos;s card.
-          </Text>
+        showPicker ? (
+          // Only once there is a list to go back to. On the empty state the picker IS the
+          // modal, so a Done would dismiss everything and leave a card with one control on it.
+          added.length > 0 ? (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Add a method</Text>
+              <TouchableOpacity
+                testID="payment-picker-done"
+                onPress={() => setPickerOpen(false)}
+                activeOpacity={0.7}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Done adding methods"
+              >
+                <Text style={styles.sectionAction}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null
         ) : null
       }
       footer={
@@ -231,11 +246,36 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
         onLayout={e => { viewportH.value = e.nativeEvent.layout.height; }}
         onContentSizeChange={(_w: number, h: number) => { contentH.value = h; }}
       >
-        {added.map((m) => {
+        {/* One viewport, two modes. The picker REPLACES the method list rather than
+            stacking below it: stacked, the height cap would push the rows the user came
+            here to edit out of view the moment the picker opened, and the pinned "Add
+            method" row would sit above a list it no longer applied to. */}
+        {showPicker ? available.map((m, i) => (
+          <TouchableOpacity
+            key={m.key}
+            testID={`payment-add-${m.key}`}
+            onPress={() => addMethod(m)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${m.label}`}
+            style={[styles.pickerRow, i > 0 && styles.pickerRowDivided]}
+          >
+            <Text style={styles.pickerLabel}>{m.label}</Text>
+            <Ionicons name="add" size={18} color="#B072BB" />
+          </TouchableOpacity>
+        )) : added.map((m) => {
           const isDefault = defaultMethod === m.key;
           return (
             <View key={m.key} style={styles.methodRow}>
               <View style={styles.methodHeader}>
+                {/* The dot column is present from the FIRST method so nothing shifts
+                    sideways when a second arrives — adding one used to slide every label
+                    right 26pt at the same moment an instruction line appeared above the
+                    list, which under the height cap reads as the modal glitching.
+                    With one row it is a marker, not a control: hollow until a handle is
+                    typed, filled once there is one. Deliberately NOT tappable there —
+                    tapping would claim the default for a blank handle-taking row, which
+                    is exactly the handle-less-Venmo save the affix-only rule prevents. */}
                 {showDefaultControl ? (
                   <TouchableOpacity
                     testID={`payment-default-${m.key}`}
@@ -246,13 +286,16 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
                     accessibilityState={{ selected: isDefault }}
                     style={[styles.defaultDot, isDefault && styles.defaultDotOn]}
                   />
-                ) : null}
+                ) : (
+                  <View
+                    testID={`payment-default-marker-${m.key}`}
+                    style={[styles.defaultDot, isDefault && styles.defaultDotOn]}
+                  />
+                )}
                 <Text style={[styles.methodLabel, isDefault && styles.methodLabelDefault]}>
                   {m.label}
                 </Text>
-                {showDefaultControl && isDefault ? (
-                  <Text style={styles.defaultTag}>Default</Text>
-                ) : null}
+                {isDefault ? <Text style={styles.defaultTag}>Default</Text> : null}
                 <View style={styles.headerSpacer} />
                 <TouchableOpacity
                   testID={`payment-remove-${m.key}`}
@@ -287,42 +330,6 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
             </View>
           );
         })}
-
-        {added.length === 0 ? (
-          <Text style={styles.emptyHint}>Add the ways this player gets paid.</Text>
-        ) : null}
-
-        {available.length > 0 && added.length > 0 ? (
-          <TouchableOpacity
-            testID="payment-add-toggle"
-            onPress={() => setPickerOpen(o => !o)}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showPicker }}
-            style={styles.addToggle}
-          >
-            <Ionicons name={showPicker ? 'remove' : 'add'} size={16} color="#B072BB" />
-            <Text style={styles.addToggleText}>{showPicker ? 'Done adding' : 'Add method'}</Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {showPicker ? (
-          <View style={styles.pickerRow}>
-            {available.map((m) => (
-              <TouchableOpacity
-                key={m.key}
-                testID={`payment-add-${m.key}`}
-                onPress={() => addMethod(m)}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel={`Add ${m.label}`}
-                style={styles.chip}
-              >
-                <Text style={styles.chipText}>{m.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
       </Reanimated.ScrollView>
 
       {/* 5 stacked 6pt bands in the card colour at stepped opacity, most opaque at the
@@ -343,6 +350,23 @@ export const PaymentEditorContent: React.FC<PaymentEditorContentProps> = ({
         <View style={[styles.fadeBand, { opacity: 1 }]} />
       </Reanimated.View>
       </View>
+
+      {/* Pinned OUTSIDE the scroll view, directly above the Cancel/Save footer. Inside it,
+          this was a line the user had to scroll to the bottom of the list to reach, and it
+          read as a caption rather than a control. It never renders in picker mode — the
+          picker's own header carries Done — so its label is fixed and nothing here toggles. */}
+      {!showPicker && available.length > 0 ? (
+        <TouchableOpacity
+          testID="payment-add-toggle"
+          onPress={() => setPickerOpen(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          style={styles.addRow}
+        >
+          <Ionicons name="add" size={16} color="#B072BB" />
+          <Text style={styles.addRowText}>Add method</Text>
+        </TouchableOpacity>
+      ) : null}
     </AppModalCard>
   );
 };
@@ -361,17 +385,17 @@ const styles = StyleSheet.create({
   card: {
     padding: 20,
   },
-  subtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center',
-    marginBottom: 14,
-  },
   rowsViewport: {
     width: '100%',
     flexShrink: 1,
     minHeight: 0,
+    // The cap that stops the card growing with the list. A handle-bearing row is ~83pt
+    // (18pt header + 6pt gap + a ~45pt input + 14pt margin), so three of them plus the
+    // 4pt content padding is ~253 and fits exactly: three methods do not scroll, a fourth
+    // does. It is a HEIGHT, not a row count — a Cash row has no input and is ~38pt, so a
+    // cash-heavy list shows more than three. In picker mode the same cap holds ~5.5 of
+    // the 46pt method rows.
+    maxHeight: 258,
   },
   rows: {
     flexShrink: 1,
@@ -461,43 +485,57 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 6,
     borderBottomRightRadius: 6,
   },
-  emptyHint: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center',
-    marginBottom: 14,
-  },
-  addToggle: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingVertical: 6,
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  addToggleText: {
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.5)',
+  },
+  sectionAction: {
     fontSize: 14,
     fontWeight: '600',
     color: '#B072BB',
   },
+  // Full-width rows with a hairline divider, matching CurrencyPickerModal and
+  // TolerancePickerModal — the app's only other pickers, and the idiom the outlined
+  // chip grid this replaced was the sole departure from. No paddingHorizontal: the
+  // card's own 20pt padding supplies it, so the divider spans the content width the
+  // way those sheets' 20pt-inset dividers span theirs.
   pickerRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 6,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
   },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#49264F',
-    backgroundColor: '#0A0A0A',
+  pickerRowDivided: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(176,114,187,0.1)',
   },
-  chipText: {
-    fontSize: 13,
+  pickerLabel: {
+    fontSize: 15,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.85)',
+    color: '#FFFFFF',
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  addRowText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#B072BB',
   },
   buttons: {
     marginTop: 20,
