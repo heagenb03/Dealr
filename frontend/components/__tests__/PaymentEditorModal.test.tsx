@@ -341,8 +341,16 @@ describe('PaymentEditorContent', () => {
 
   it('hands the default to handle-less cash when no remaining row is filled', () => {
     // Same reassignment, through the branch a filled-row search cannot reach: Cash never has
-    // a handle, so "first remaining filled row" finds nothing and the rule has to fall through
-    // to it, or the surviving Cash row is dropped by the invariant and the save is empty.
+    // a handle, so "first remaining filled row" finds nothing.
+    //
+    // This is the ONE place presence still chooses, and deliberately so — read it against
+    // bug-421, which stopped applyPaymentInvariant promoting a handle-less row. The rules
+    // differ because the moments differ: a blank Venmo row is waiting for a handle that may
+    // still arrive, so promoting it pre-empts the user. Cash takes no handle at all, so no
+    // later keystroke is coming to claim anything, and removing the previous default is the
+    // only moment a lone Cash row can become the default. (The second clause here used to
+    // read "or the surviving Cash row is dropped by the invariant and the save is empty" —
+    // false since bug-420: every present row survives now, default or not.)
     const onSave = jest.fn();
     const tree = renderEditor({ onSave });
     addMethod(tree, 'cash');
