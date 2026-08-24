@@ -10,7 +10,9 @@ const ACTIVE_GAME_ID_KEY = '@cashcage:activeGameId';
 const PENDING_MUTATIONS_KEY = '@cashcage:pendingMutations';
 
 /**
- * Game ids with an unconfirmed local write (saves) or delete (deletes).
+ * Game ids with an unconfirmed local write (saves) or delete (deletes), plus
+ * SHARE ids — not game ids — with an unconfirmed /sharedGames delete
+ * (sharedDeletes).
  *
  * uid stamps the owner. GameContext swallows a failed clearAll() on user switch, and
  * these markers drive a Firestore PUSH — without the stamp, a swallowed failure would
@@ -20,6 +22,7 @@ export interface PendingMutations {
   uid: string | null;
   saves: string[];
   deletes: string[];
+  sharedDeletes: string[];
 }
 
 export class StorageService {
@@ -95,7 +98,7 @@ export class StorageService {
   static async loadPendingMutations(): Promise<PendingMutations> {
     try {
       const jsonValue = await AsyncStorage.getItem(PENDING_MUTATIONS_KEY);
-      if (!jsonValue) return { uid: null, saves: [], deletes: [] };
+      if (!jsonValue) return { uid: null, saves: [], deletes: [], sharedDeletes: [] };
 
       const parsed = JSON.parse(jsonValue);
       const ids = (v: any): string[] => (Array.isArray(v) ? v.filter(id => typeof id === 'string') : []);
@@ -103,10 +106,13 @@ export class StorageService {
         uid: typeof parsed?.uid === 'string' ? parsed.uid : null,
         saves: ids(parsed?.saves),
         deletes: ids(parsed?.deletes),
+        // Absent on marker files written before this key existed — ids() returns []
+        // for it, so a device already in the field hydrates without throwing.
+        sharedDeletes: ids(parsed?.sharedDeletes),
       };
     } catch (error) {
       console.error('Error loading pending mutations:', error);
-      return { uid: null, saves: [], deletes: [] };
+      return { uid: null, saves: [], deletes: [], sharedDeletes: [] };
     }
   }
 

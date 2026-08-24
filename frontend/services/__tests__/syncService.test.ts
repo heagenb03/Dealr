@@ -201,7 +201,7 @@ describe('pending-mutations registry protects local edits (Limitation 1)', () =>
     // StorageService.clearAll() on the same path. Clearing memory ALONE is process death,
     // which deliberately keeps its markers; see the restart block at the end of this file.
     SyncService.clearPendingMutations();
-    await StorageService.savePendingMutations({ uid: null, saves: [], deletes: [] });
+    await StorageService.savePendingMutations({ uid: null, saves: [], deletes: [], sharedDeletes: [] });
 
     let resolveFetch!: (games: Game[]) => void;
     (fetchGamesFromFirestore as jest.Mock).mockReturnValue(new Promise<Game[]>(res => { resolveFetch = res; }));
@@ -692,8 +692,8 @@ describe('deleteGame — the share document dies with the game', () => {
     // happens earlier in deleteGame either way and the test awaits + flushes
     // regardless of which shape deleteGame uses internally.
     //
-    // That distinction matters: offline, deleteDoc enters Firestore's persisted
-    // mutation queue and never settles (see syncService.ts's deleteGame
+    // That distinction matters: offline, deleteDoc under memoryLocalCache never
+    // settles — it neither resolves nor rejects (see syncService.ts's deleteGame
     // docstring). If deleteGame awaited deleteSharedGame — even inside a
     // try/catch — an offline share delete would hang deleteGame forever, and
     // with it GameContext.deleteGame and the delete-confirm UI. Making the mock
@@ -831,7 +831,7 @@ describe('process restart drops protection for an unpushed edit (the reported 2.
     expect(pushed.transactions.map(t => t.id)).toEqual(['t1', 't2']);
 
     // And the ack cleared the marker, so nothing stays protected.
-    expect(await StorageService.loadPendingMutations()).toEqual({ uid: UID, saves: [], deletes: [] });
+    expect(await StorageService.loadPendingMutations()).toEqual({ uid: UID, saves: [], deletes: [], sharedDeletes: [] });
   });
 
   it('lets a newer remote win on the launch after the re-push acked (no permanent lock)', async () => {
@@ -880,7 +880,7 @@ describe('process restart drops protection for an unpushed edit (the reported 2.
 
     expect(saveGameToFirestore).toHaveBeenCalledTimes(1);
     // Still marked, so the edit is still protected across both loads.
-    expect(await StorageService.loadPendingMutations()).toEqual({ uid: UID, saves: ['game1'], deletes: [] });
+    expect(await StorageService.loadPendingMutations()).toEqual({ uid: UID, saves: ['game1'], deletes: [], sharedDeletes: [] });
     expect((await StorageService.loadGames())[0].transactions.map(t => t.id)).toEqual(['t1', 't2']);
   });
 
@@ -890,7 +890,7 @@ describe('process restart drops protection for an unpushed edit (the reported 2.
     // outbox is a PUSH path, so hydrating these would write user1's game into user2's
     // Firestore collection.
     await StorageService.saveGames([withTx([tx('t1', 20), tx('t2', 20)], T1)]);
-    await StorageService.savePendingMutations({ uid: UID, saves: ['game1'], deletes: [] });
+    await StorageService.savePendingMutations({ uid: UID, saves: ['game1'], deletes: [], sharedDeletes: [] });
 
     (fetchGamesFromFirestore as jest.Mock).mockResolvedValue([]);
     await SyncService.loadGames('a-different-user', () => {});
@@ -900,7 +900,7 @@ describe('process restart drops protection for an unpushed edit (the reported 2.
     expect(deleteGameFromFirestore).not.toHaveBeenCalled();
     // Dropped and restamped, so they cannot be picked up on a later launch either.
     expect(await StorageService.loadPendingMutations()).toEqual({
-      uid: 'a-different-user', saves: [], deletes: [],
+      uid: 'a-different-user', saves: [], deletes: [], sharedDeletes: [],
     });
   });
 
@@ -959,5 +959,164 @@ describe('process restart drops protection for an unpushed edit (the reported 2.
     await flush();
     expect(spy).toHaveBeenCalledTimes(2);
     spy.mockRestore();
+  });
+});
+
+describe('bug-418: the share link dies with the game even when its delete died with the process', () => {
+  // The reported failure: delete a SHARED game, kill the app before the
+  // /sharedGames delete acks, and the link keeps serving player names, amounts,
+  // settlements and payment handles. The owner believes they revoked it.
+  //
+  // The bug-412 outbox covered /users/{uid}/games only. deleteSharedGame was left
+  // as a bare fire-and-forget call, so nothing on the device remembered the
+  // shareId once the local game row was gone — and under memoryLocalCache an
+  // offline deleteDoc hangs rather than rejects, so it survives exactly as long
+  // as the JS context iOS is about to reclaim.
+  const SHARE = 'aB3dEfGh1JkLmN0pQrSt';
+  const T1 = new Date('2026-07-01T00:00:00Z');
+
+  const shared = () =>
+    ({ ...makeGame([{ id: 'A', name: 'Alice' }]), shareId: SHARE, syncedAt: T1 }) as Game;
+
+  it('re-pushes a share delete that never acked before the app was reclaimed (the bug)', async () => {
+    await StorageService.saveGames([shared()]);
+
+    // Both deletes hang — what an offline deleteDoc actually does here.
+    (deleteGameFromFirestore as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    (deleteSharedGame as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+    await SyncService.deleteGame(UID, 'game1', SHARE);
+    await flush();
+
+    SyncService.clearPendingMutations();   // process death — durable markers survive
+    (deleteGameFromFirestore as jest.Mock).mockReset();
+    (deleteGameFromFirestore as jest.Mock).mockResolvedValue(undefined);
+    (deleteSharedGame as jest.Mock).mockReset();
+    (deleteSharedGame as jest.Mock).mockResolvedValue(undefined);   // network is back
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    expect(deleteSharedGame).toHaveBeenCalledWith(SHARE);
+    expect(await StorageService.loadPendingMutations()).toEqual({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [],
+    });
+  });
+
+  it('still retries the share delete on a launch where the GAME delete has already acked', async () => {
+    // The two halves clear independently: the game delete can ack on launch 2 while
+    // the share delete hangs again. That leaves deletes: [] with sharedDeletes still
+    // set — and an outbox gated only on the gameId set would return early here and
+    // strand the share document permanently, which is the whole bug.
+    await StorageService.savePendingMutations({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [SHARE],
+    });
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    expect(deleteSharedGame).toHaveBeenCalledWith(SHARE);
+    expect(deleteGameFromFirestore).not.toHaveBeenCalled();
+    expect(await StorageService.loadPendingMutations()).toEqual({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [],
+    });
+  });
+
+  it('leaves no marker when the share delete acks, so later launches push nothing', async () => {
+    // The control for the two above. Without it a fix could mark and never clear,
+    // re-deleting the same shareId on every launch forever.
+    await StorageService.saveGames([shared()]);
+    await SyncService.deleteGame(UID, 'game1', SHARE);
+    await flush();
+
+    expect(await StorageService.loadPendingMutations()).toEqual({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [],
+    });
+
+    SyncService.clearPendingMutations();   // process death, nothing left to restore
+    (deleteSharedGame as jest.Mock).mockClear();
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    expect(deleteSharedGame).not.toHaveBeenCalled();
+  });
+
+  it('pushes a hydrated share delete once even when loadGames runs again on reconnect', async () => {
+    await StorageService.savePendingMutations({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [SHARE],
+    });
+    // Still stuck, so the marker is not cleared between the two loads — the only
+    // thing stopping a second push is the hydration drain, not the ack.
+    (deleteSharedGame as jest.Mock).mockReturnValue(new Promise<void>(() => {}));
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+    await SyncService.loadGames(UID, () => {});   // NetworkContext reconnect re-sync
+    await flush();
+
+    expect(deleteSharedGame).toHaveBeenCalledTimes(1);
+    expect(await StorageService.loadPendingMutations()).toEqual({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [SHARE],
+    });
+  });
+
+  it('leaves no share marker when the LOCAL delete write fails', async () => {
+    // Same rule as the save/delete halves: a failed local write must not leave a
+    // durable marker for a deletion that never happened locally. Here the stakes
+    // run the OTHER way — the game and its link both still exist, so a stranded
+    // marker makes the next launch revoke a share link the user never revoked.
+    await StorageService.saveGames([shared()]);
+    const saveSpy = jest.spyOn(StorageService, 'saveGames').mockRejectedValueOnce(new Error('disk full'));
+    await expect(SyncService.deleteGame(UID, 'game1', SHARE)).rejects.toThrow('disk full');
+    saveSpy.mockRestore();
+
+    expect(deleteSharedGame).not.toHaveBeenCalled();
+
+    // Asserting the marker file right here would prove nothing: the write that
+    // failed is the same one that would have persisted the marker, so nothing
+    // reached disk either way. It is the NEXT successful write that flushes the
+    // in-memory set out — that is where a stranded marker becomes durable.
+    await SyncService.saveGame(UID, shared());
+    await flush();
+
+    expect(await StorageService.loadPendingMutations()).toEqual({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [],
+    });
+
+    SyncService.clearPendingMutations();   // process death
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+    expect(deleteSharedGame).not.toHaveBeenCalled();
+    expect(await StorageService.loadGames()).toHaveLength(1);   // the game is still here
+  });
+
+  it('discards a share-delete marker left behind by another account', async () => {
+    // firestore.rules only lets the owner delete, so pushing another account's
+    // shareId would be denied on every launch forever.
+    await StorageService.savePendingMutations({
+      uid: UID, saves: [], deletes: [], sharedDeletes: [SHARE],
+    });
+
+    await SyncService.loadGames('a-different-user', () => {});
+    await flush();
+
+    expect(deleteSharedGame).not.toHaveBeenCalled();
+    expect(await StorageService.loadPendingMutations()).toEqual({
+      uid: 'a-different-user', saves: [], deletes: [], sharedDeletes: [],
+    });
+  });
+
+  it('hydrates a marker file written before sharedDeletes existed', async () => {
+    // Devices already in the field carry {uid, saves, deletes} with no third key.
+    // It must hydrate as an empty list, not throw and not lose the other halves.
+    await AsyncStorage.setItem(
+      '@cashcage:pendingMutations',
+      JSON.stringify({ uid: UID, saves: [], deletes: ['game1'] }),
+    );
+
+    await SyncService.loadGames(UID, () => {});
+    await flush();
+
+    expect(deleteGameFromFirestore).toHaveBeenCalledWith(UID, 'game1');
+    expect(deleteSharedGame).not.toHaveBeenCalled();
   });
 });

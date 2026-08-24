@@ -208,8 +208,10 @@ service cloud.firestore {
                     && validSnapshot(request.resource.data)
                     && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
 
-      // No UI calls delete today. Shipped anyway: it costs nothing and the
-      // tests assert it.
+      // The owner's own revoke path: GameContext.deleteGame reads the game's
+      // shareId and passes it to SyncService.deleteGame, which deletes this
+      // document — and re-sends that delete from its outbox on the next launch
+      // if the first attempt died with the process.
       allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
     }
   }

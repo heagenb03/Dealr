@@ -42,6 +42,18 @@ import { deleteSharedGame } from '@/services/sharedGameService';
 const pendingSaves = new Map<string, number>();
 const pendingDeletes = new Map<string, number>();
 
+// Share documents (/sharedGames/{shareId}) whose delete has not been acknowledged.
+// shareIds, NOT gameIds, and a plain Set rather than a ref-counted Map: a game is
+// deleted once, and this half guards nothing in the merge — no merge path reads
+// /sharedGames.
+//
+// It exists purely for the OUTBOX below. The original markers covered
+// /users/{uid}/games only, so once the local game row was gone the shareId was
+// unrecoverable: a share delete that died with the process was never retried and
+// the link kept serving player names, amounts, settlements and payment handles
+// after the owner believed that deleting the game had revoked it.
+const pendingSharedDeletes = new Set<string>();
+
 // Both maps die with the process, and iOS reclaiming a suspended app is enough to kill
 // it — no force-quit needed. An unconfirmed write that loses its protection is then
 // destroyed by the very next merge, because mergeGames ranks the local copy by a
@@ -60,6 +72,15 @@ const pendingDeletes = new Map<string, number>();
 // will settle on its own, and pushing it again would ack twice and release protection
 // while a later edit is still pending.
 const hydratedIds = new Set<string>();
+
+// Share ids restored from the durable store. Kept in their own set, not folded into
+// hydratedIds: that one holds gameIds, and flushOutbox sorts it by membership in
+// pendingSaves / pendingDeletes — a shareId would match neither and be dropped from
+// both lists. Draining it is NOT load-bearing the way the hydratedIds drain is: a
+// shared delete carries no ref count to ack away, and deleteDoc on an absent
+// document resolves cleanly. It just stops a reconnect re-sync firing a second
+// delete while the first is still in flight.
+const hydratedShareIds = new Set<string>();
 
 // The uid the durable markers belong to. Stamped on every persist and checked on
 // hydrate: GameContext swallows a failed StorageService.clearAll() on user switch, and
@@ -108,6 +129,7 @@ async function persistPending(): Promise<void> {
       uid: markerUid,
       saves: Array.from(pendingSaves.keys()),
       deletes: Array.from(pendingDeletes.keys()),
+      sharedDeletes: Array.from(pendingSharedDeletes),
     });
   } catch (err) {
     console.warn('SyncService: failed to persist pending-mutation markers', err);
@@ -123,7 +145,7 @@ async function hydratePending(uid: string): Promise<void> {
   const stored = await StorageService.loadPendingMutations();
   if (stored.uid !== uid) {
     // Another account's markers (or a pre-stamp file). Never push these — drop them.
-    if (stored.saves.length > 0 || stored.deletes.length > 0) {
+    if (stored.saves.length > 0 || stored.deletes.length > 0 || stored.sharedDeletes.length > 0) {
       console.warn('SyncService: discarding pending-mutation markers owned by another user');
     }
     markerUid = uid;
@@ -143,12 +165,29 @@ async function hydratePending(uid: string): Promise<void> {
     pendingDeletes.set(id, 1);
     hydratedIds.add(id);
   }
+  for (const shareId of stored.sharedDeletes) {
+    if (pendingSharedDeletes.has(shareId)) continue;
+    pendingSharedDeletes.add(shareId);
+    hydratedShareIds.add(shareId);
+  }
 }
 
 /** Release one reference and update the durable store, serialised against hydration. */
 function releasePending(map: Map<string, number>, id: string): Promise<void> {
   return withStorageLock(async () => {
     unmarkPending(map, id);
+    await persistPending();
+  });
+}
+
+/**
+ * Clear one share-delete marker, serialised against hydration exactly as above.
+ * Not releasePending(): that one does ref-count arithmetic, and this half has no
+ * ref count — one game, one share document, one delete.
+ */
+function releaseSharedDelete(shareId: string): Promise<void> {
+  return withStorageLock(async () => {
+    pendingSharedDeletes.delete(shareId);
     await persistPending();
   });
 }
@@ -166,11 +205,19 @@ function releasePending(map: Map<string, number>, id: string): Promise<void> {
  *
  * Each id is pushed at most once per hydration — hydratedIds is drained up front, so a
  * reconnect-triggered loadGames cannot double-push and ack away live protection.
+ *
+ * The share-delete half is gated on its OWN set. Reading only hydratedIds here would
+ * make this fix die one launch after the failure it exists to fix: the game delete acks
+ * on that launch and clears its marker while the share delete hangs again, leaving
+ * deletes: [] with sharedDeletes still set — and the next launch would return early and
+ * strand the share document for good.
  */
 async function flushOutbox(uid: string): Promise<void> {
-  if (hydratedIds.size === 0) return;
+  if (hydratedIds.size === 0 && hydratedShareIds.size === 0) return;
   const ids = Array.from(hydratedIds);
   hydratedIds.clear();
+  const shareIds = Array.from(hydratedShareIds);
+  hydratedShareIds.clear();
 
   // A pending delete supersedes a pending save for the same id, exactly as the supersede
   // lines in saveGame/deleteGame below do.
@@ -186,6 +233,19 @@ async function flushOutbox(uid: string): Promise<void> {
           return;
         }
         console.warn('SyncService: outbox delete failed', err);
+      },
+    );
+  }
+
+  for (const shareId of shareIds) {
+    deleteSharedGame(shareId).then(
+      () => releaseSharedDelete(shareId),
+      err => {
+        if (isFirestoreOfflineError(err)) {
+          console.debug('SyncService: outbox share delete deferred — device offline');
+          return;
+        }
+        console.warn('SyncService: outbox share delete failed', err);
       },
     );
   }
@@ -334,27 +394,37 @@ export class SyncService {
    * When the game was shared, its /sharedGames document is deleted too — the
    * link dies with the game, because there is no separate "Stop sharing"
    * control. This is only SKIPPED when signed out (`if (uid && shareId)`
-   * below) — offline-with-a-uid does NOT skip it: deleteSharedGame's
-   * deleteDoc enters Firestore's persisted mutation queue exactly like the
-   * game delete above it, and lands on reconnect. The isFirestoreOfflineError
-   * branch in the catch below is kept for symmetry with the neighbouring
-   * deleteGameFromFirestore block, but it is near-dead in practice for the
-   * same reason: an offline deleteDoc hangs rather than rejects, so it rarely
-   * gets the chance to fire.
+   * below): with no Firestore identity the owner-only delete rule could not
+   * pass anyway.
    *
-   * The one genuine leak path is NOT "offline" alone, it's offline-THEN-
-   * sign-out: firebaseService.ts's firebaseSignOut() calls `signOut(auth)`
-   * with no terminate()/clearIndexedDbPersistence(), so a queued delete for
-   * the signed-out uid is stranded in that user's mutation queue — it either
-   * fails auth on flush or stalls until that uid signs back in. Either way
-   * the share document outlives the game, and the native TTL policy is the
-   * only backstop.
+   * Offline it is not skipped, but it does not land either. firebaseService
+   * configures memoryLocalCache, so there is NO persisted mutation queue to
+   * enter: an offline deleteDoc neither resolves nor rejects, it hangs for
+   * exactly as long as the JS context lives, and iOS reclaiming a suspended
+   * app ends that with no force-quit. Which is why the shareId goes into
+   * pendingSharedDeletes and onto disk BEFORE the call below — the marker, not
+   * the promise, is what survives to be re-sent by flushOutbox on the next
+   * launch. The isFirestoreOfflineError branch in the catch below is kept for
+   * symmetry with the neighbouring deleteGameFromFirestore block, but it is
+   * near-dead in practice for the same reason: a call that hangs rarely gets
+   * the chance to reject.
+   *
+   * Residual leak, deliberately not covered: offline-THEN-sign-out. GameContext
+   * calls StorageService.clearAll() on a user switch, which drops the marker
+   * file — it has to, because these markers drive a PUSH and must never follow
+   * a user into the next account. A share delete still pending at sign-out is
+   * therefore lost. firestore.rules bounds the damage: `allow get` fails once
+   * expiresAt passes, so the link goes dark within 30 days of the last publish
+   * whether or not the TTL sweeper ever removes the document.
    */
   static async deleteGame(uid: string | null, gameId: string, shareId?: string): Promise<void> {
     if (uid) {
       markerUid = uid;
       markPending(pendingDeletes, gameId);
       pendingSaves.delete(gameId);   // a delete fully supersedes any pending save for this id
+      // Marked BEFORE the local write so the persistPending() inside the lock below
+      // carries it to disk in the same pass as the game marker.
+      if (shareId) pendingSharedDeletes.add(shareId);
     }
 
     try {
@@ -365,7 +435,11 @@ export class SyncService {
         if (uid) await persistPending();
       });
     } catch (err) {
-      if (uid) unmarkPending(pendingDeletes, gameId);
+      // The local delete never happened, so leave no durable marker for it.
+      if (uid) {
+        unmarkPending(pendingDeletes, gameId);
+        if (shareId) pendingSharedDeletes.delete(shareId);
+      }
       throw err;
     }
 
@@ -382,16 +456,19 @@ export class SyncService {
     }
 
     if (uid && shareId) {
-      // Deliberately NOT ref-counted in pendingDeletes: that map guards the
-      // local-vs-remote merge for /users/{uid}/games documents, and no merge
-      // path ever reads /sharedGames.
-      deleteSharedGame(shareId).catch(err => {
-        if (isFirestoreOfflineError(err)) {
-          console.debug('SyncService: skipping shared-game delete — device offline');
-          return;
-        }
-        console.warn('SyncService: shared-game delete failed', err);
-      });
+      // Tracked in pendingSharedDeletes, not pendingDeletes: that map guards the
+      // local-vs-remote merge for /users/{uid}/games documents and is ref-counted,
+      // and no merge path ever reads /sharedGames. The share marker needs neither —
+      // what it needs is to reach the outbox.
+      deleteSharedGame(shareId)
+        .then(() => releaseSharedDelete(shareId))
+        .catch(err => {
+          if (isFirestoreOfflineError(err)) {
+            console.debug('SyncService: skipping shared-game delete — device offline');
+            return;
+          }
+          console.warn('SyncService: shared-game delete failed', err);
+        });
     }
   }
 
@@ -407,7 +484,9 @@ export class SyncService {
   static clearPendingMutations(): void {
     pendingSaves.clear();
     pendingDeletes.clear();
+    pendingSharedDeletes.clear();
     hydratedIds.clear();
+    hydratedShareIds.clear();
     markerUid = null;
     hydratedForUid = null;
   }
